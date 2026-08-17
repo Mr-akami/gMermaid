@@ -1,10 +1,24 @@
 import type { ClassId, RelationId } from "./ids";
-import type { ClassIR, ClassMember, ClassMethod, ClassNode, ClassRelation, RelationType } from "./classdiagram";
+import type { ClassDirection, ClassIR, ClassMember, ClassMethod, ClassNode, ClassRelation, RelationType } from "./classdiagram";
+import { omitUndefined } from "./omitUndefined";
 
 // Mermaid identifies classes by NAME, so names double as the exchange
 // identity: they must be mermaid-safe and unique. Internal ClassId stays
 // stable across renames; codegen maps id → name on export.
 export const CLASS_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+// Member names share the identifier grammar: colons, whitespace, brackets
+// or newlines would be re-tokenized as type/params on the next
+// codegen → parse round trip (attributes silently becoming methods etc.).
+export const MEMBER_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const validAttribute = (m: ClassMember): boolean =>
+  MEMBER_NAME_RE.test(m.name) && (m.type === undefined || !/[\r\n]/.test(m.type));
+const validMethod = (m: ClassMethod): boolean => validAttribute(m) && !/[)\r\n]/.test(m.params);
+
+const sameAttribute = (a: ClassMember, b: ClassMember): boolean =>
+  a.name === b.name && a.type === b.type && a.visibility === b.visibility;
+const sameMethod = (a: ClassMethod, b: ClassMethod): boolean => sameAttribute(a, b) && a.params === b.params;
 
 export type ClassAction =
   | { type: "addClass"; node: ClassNode }
@@ -12,6 +26,7 @@ export type ClassAction =
   | { type: "renameClass"; id: ClassId; name: string }
   | { type: "setStereotype"; id: ClassId; stereotype?: string }
   | { type: "setMembers"; id: ClassId; attributes: readonly ClassMember[]; methods: readonly ClassMethod[] }
+  | { type: "setDirection"; direction: ClassDirection }
   | { type: "addRelation"; relation: ClassRelation }
   | { type: "removeRelation"; id: RelationId }
   | {
@@ -30,20 +45,10 @@ export function applyClassAction(ir: ClassIR, action: ClassAction): ClassIR {
     case "addClass": {
       if (ir.classes.some((c) => c.id === action.node.id || c.name === action.node.name)) return ir;
       if (!CLASS_NAME_RE.test(action.node.name)) return ir;
-      const n = action.node;
-      const stereotype = norm(n.stereotype);
+      if (!action.node.attributes.every(validAttribute) || !action.node.methods.every(validMethod)) return ir;
       return {
         ...ir,
-        classes: [
-          ...ir.classes,
-          {
-            id: n.id,
-            name: n.name,
-            attributes: n.attributes,
-            methods: n.methods,
-            ...(stereotype !== undefined ? { stereotype } : {}),
-          },
-        ],
+        classes: [...ir.classes, omitUndefined({ ...action.node, stereotype: norm(action.node.stereotype) })],
       };
     }
 
@@ -67,21 +72,26 @@ export function applyClassAction(ir: ClassIR, action: ClassAction): ClassIR {
     case "setStereotype": {
       const c = ir.classes.find((x) => x.id === action.id);
       if (!c) return ir;
-      const stereotype = action.stereotype === "" ? undefined : action.stereotype;
+      const stereotype = norm(action.stereotype);
       if (stereotype === c.stereotype) return ir;
       return {
         ...ir,
-        classes: ir.classes.map((x) =>
-          x.id === action.id
-            ? { id: x.id, name: x.name, attributes: x.attributes, methods: x.methods, ...(stereotype !== undefined ? { stereotype } : {}) }
-            : x,
-        ),
+        classes: ir.classes.map((x) => (x.id === action.id ? omitUndefined({ ...x, stereotype }) : x)),
       };
     }
 
     case "setMembers": {
       const c = ir.classes.find((x) => x.id === action.id);
       if (!c) return ir;
+      if (!action.attributes.every(validAttribute) || !action.methods.every(validMethod)) return ir;
+      if (
+        c.attributes.length === action.attributes.length &&
+        c.methods.length === action.methods.length &&
+        c.attributes.every((a, i) => sameAttribute(a, action.attributes[i]!)) &&
+        c.methods.every((m, i) => sameMethod(m, action.methods[i]!))
+      ) {
+        return ir;
+      }
       return {
         ...ir,
         classes: ir.classes.map((x) =>
@@ -90,28 +100,26 @@ export function applyClassAction(ir: ClassIR, action: ClassAction): ClassIR {
       };
     }
 
+    case "setDirection":
+      return ir.direction === action.direction ? ir : { ...ir, direction: action.direction };
+
     case "addRelation": {
       const r = action.relation;
       if (ir.relations.some((x) => x.id === r.id)) return ir;
       const known = (id: ClassId) => ir.classes.some((c) => c.id === id);
       if (!known(r.from) || !known(r.to)) return ir;
-      if (r.from === r.to) return ir;
-      const label = norm(r.label);
-      const fromCardinality = norm(r.fromCardinality);
-      const toCardinality = norm(r.toCardinality);
+      // self-relations (from === to) are allowed; layout draws them as a
+      // rectangular detour on the node's right side
       return {
         ...ir,
         relations: [
           ...ir.relations,
-          {
-            id: r.id,
-            from: r.from,
-            to: r.to,
-            type: r.type,
-            ...(label !== undefined ? { label } : {}),
-            ...(fromCardinality !== undefined ? { fromCardinality } : {}),
-            ...(toCardinality !== undefined ? { toCardinality } : {}),
-          },
+          omitUndefined({
+            ...r,
+            label: norm(r.label),
+            fromCardinality: norm(r.fromCardinality),
+            toCardinality: norm(r.toCardinality),
+          }),
         ],
       };
     }
@@ -134,17 +142,7 @@ export function applyClassAction(ir: ClassIR, action: ClassAction): ClassIR {
       return {
         ...ir,
         relations: ir.relations.map((x) =>
-          x.id === action.id
-            ? {
-                id: x.id,
-                from: x.from,
-                to: x.to,
-                type,
-                ...(label !== undefined ? { label } : {}),
-                ...(fromCardinality !== undefined ? { fromCardinality } : {}),
-                ...(toCardinality !== undefined ? { toCardinality } : {}),
-              }
-            : x,
+          x.id === action.id ? omitUndefined({ ...x, type, label, fromCardinality, toCardinality }) : x,
         ),
       };
     }

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror, { ExternalChange } from "@uiw/react-codemirror";
 import type { ViewUpdate } from "@codemirror/view";
 import type { ParseError, ParseResult } from "@gmermaid/mermaid-parser";
@@ -10,6 +10,11 @@ export interface CodePaneProps<T> {
   readonly onCommit: (ir: T) => void;
   readonly onEditStart: () => void;
   readonly onEditEnd: () => void;
+  /** Recovered (unparseable) text to open as a broken draft, e.g. stored
+   * data that stopped parsing after a grammar change (S1-3). */
+  readonly initialDraft?: string | undefined;
+  /** Reports whether the visible draft can be represented by the canonical IR. */
+  readonly onValidityChange?: ((valid: boolean) => void) | undefined;
 }
 
 // While focused the pane always shows its own draft (never reformatted
@@ -23,11 +28,36 @@ interface Draft {
   readonly base: string;
 }
 
-export function CodePane<T>({ code, parse, onCommit, onEditStart, onEditEnd }: CodePaneProps<T>) {
-  const [draft, setDraft] = useState<Draft | null>(null);
+export function CodePane<T>({
+  code,
+  parse,
+  onCommit,
+  onEditStart,
+  onEditEnd,
+  initialDraft,
+  onValidityChange,
+}: CodePaneProps<T>) {
+  const [draft, setDraft] = useState<Draft | null>(() =>
+    initialDraft !== undefined ? { text: initialDraft, base: code } : null,
+  );
   const [focused, setFocused] = useState(false);
-  const [errors, setErrors] = useState<readonly ParseError[]>([]);
+  const [errors, setErrors] = useState<readonly ParseError[]>(() => {
+    if (initialDraft === undefined) return [];
+    const r = parse(initialDraft);
+    return r.ok ? [] : r.errors;
+  });
   const active = draft !== null && (focused || draft.base === code) ? draft : null;
+  // The focused-draft display bypasses the base check (no reformatting under
+  // the cursor), so an IR change that arrives WITHOUT stealing focus (e.g. a
+  // keyboard shortcut or future collaborative edit) would leave a stale
+  // draft silently shadowing the newer diagram. Surface it and let the user
+  // choose instead of losing either side.
+  const staleWhileFocused = focused && draft !== null && draft.base !== code;
+
+  const valid = errors.length === 0 && !staleWhileFocused;
+  const validityRef = useRef(onValidityChange);
+  validityRef.current = onValidityChange;
+  useEffect(() => validityRef.current?.(valid), [valid]);
 
   // latest-ref: keeps handleChange referentially stable so the CodeMirror
   // wrapper doesn't reconfigure its extensions on every parent render
@@ -51,8 +81,32 @@ export function CodePane<T>({ code, parse, onCommit, onEditStart, onEditEnd }: C
     }
   }, []);
 
+  function discardDraft() {
+    setDraft(null);
+    setErrors([]);
+  }
+
+  function overwriteWithDraft() {
+    if (draft === null) return;
+    setDraft({ text: draft.text, base: code });
+    const result = parse(draft.text);
+    if (result.ok) {
+      setErrors([]);
+      onCommit(result.ir);
+    } else {
+      setErrors(result.errors);
+    }
+  }
+
   return (
     <div className="code-pane">
+      {staleWhileFocused && (
+        <div className="code-banner">
+          図が変更されました。
+          <button onClick={discardDraft}>破棄</button>
+          <button onClick={overwriteWithDraft}>このコードで上書き</button>
+        </div>
+      )}
       <CodeMirror
         value={active?.text ?? code}
         height="100%"

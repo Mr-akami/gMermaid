@@ -14,13 +14,14 @@ import {
 import { layoutClassDiagram } from "@gmermaid/layout";
 import { classToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseClassDiagram, parseMemberLine } from "@gmermaid/mermaid-parser";
-import { ClassView } from "@gmermaid/renderer";
+import { ClassView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ClassPropertyWindow, type ClassSelection } from "./ClassPropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): ClassIR {
   let ir = emptyClassDiagram();
@@ -65,15 +66,24 @@ function parseMembers(text: string): { attributes: ClassMember[]; methods: Class
   return { attributes, methods };
 }
 
-const STORAGE_KEY = "gmermaid:class";
+const STORAGE_KEY = "gmermaid:doc:class";
 
-export interface EditorProps {
+export interface EditorProps extends EditorRuntimeProps {
   readonly loadRequest?: { readonly seq: number; readonly code: string | null } | undefined;
 }
 
-export function ClassEditor({ loadRequest }: EditorProps) {
-  const h = useDiagramHistory(() => loadInitial(STORAGE_KEY, parseClassDiagram, initialIR), applyClassAction);
+export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onCodeChange, onValidityChange }: EditorProps) {
+  // recoveredText: stored data that stopped parsing, poured into the code
+  // pane as a broken draft for manual repair (S1-3)
+  const [initial] = useState(() => {
+    if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseClassDiagram, initialIR);
+    const parsed = parseClassDiagram(initialCode);
+    return parsed.ok ? { ir: parsed.ir } : { ir: initialIR(), recoveredText: initialCode };
+  });
+  const h = useDiagramHistory(() => initial.ir, applyClassAction);
   const [view, setView] = useState<ViewState>({});
+  // pan/zoom is ViewState (ADR 0001), held apart from the selection
+  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // drag-to-connect rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   // member text drafts are view-transient; the IR only sees parsed members.
@@ -91,7 +101,11 @@ export function ClassEditor({ loadRequest }: EditorProps) {
 
   const layout = useMemo(() => layoutClassDiagram(ir, measurer), [ir]);
   const code = useMemo(() => classToMermaid(ir), [ir]);
-  useAutosave(STORAGE_KEY, code);
+  // autosave pauses while the code pane shows a broken/stale draft, so a
+  // recovered draft is never clobbered by the sample it fell back to
+  const [codeValid, setCodeValid] = useState(initial.recoveredText === undefined);
+  useAutosave(STORAGE_KEY, code, mode === "standalone" && codeValid);
+  useEffect(() => onCodeChange?.(code), [code, onCodeChange]);
 
   useEffect(() => {
     if (!loadRequest) return;
@@ -147,6 +161,7 @@ export function ClassEditor({ loadRequest }: EditorProps) {
     if (typeof m === "string") return `methods: ${m}`;
     return undefined;
   }, [draftFor]);
+  useEffect(() => onValidityChange?.(codeValid && membersError === undefined), [codeValid, membersError, onValidityChange]);
 
   function handleMembersChange(id: ClassId, attrs: string, methods: string) {
     const a = parseMembers(attrs);
@@ -187,8 +202,9 @@ export function ClassEditor({ loadRequest }: EditorProps) {
   function handleConnectDrop(fromId: string, x: number, y: number) {
     setConnectLine(undefined);
     const from = ir.classes.find((c) => c.id === fromId);
+    // dropping on the source class itself creates a self-relation
     const target = layout.classes.find(
-      (c) => c.id !== fromId && x >= c.rect.x && x <= c.rect.x + c.rect.w && y >= c.rect.y && y <= c.rect.y + c.rect.h,
+      (c) => x >= c.rect.x && x <= c.rect.x + c.rect.w && y >= c.rect.y && y <= c.rect.y + c.rect.h,
     );
     if (!from || !target) return;
     const relId = newId("relation");
@@ -211,8 +227,8 @@ export function ClassEditor({ loadRequest }: EditorProps) {
   return (
     <>
       <div className="toolbar">
-        <button onClick={openFile}>Open…</button>
-        <button onClick={() => saveMmd(code, "class.mmd")}>Save…</button>
+        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
+        {mode === "standalone" && <button onClick={() => saveMmd(code, "class.mmd")}>Save…</button>}
         <button onClick={addClass}>+ Class</button>
         <button
           disabled={selectedClass === undefined}
@@ -222,6 +238,15 @@ export function ClassEditor({ loadRequest }: EditorProps) {
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
+        <select
+          value={ir.direction ?? "TB"}
+          onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<ClassIR["direction"]> })}
+        >
+          <option value="TB">Top→Bottom</option>
+          <option value="LR">Left→Right</option>
+          <option value="BT">Bottom→Top</option>
+          <option value="RL">Right→Left</option>
+        </select>
         {view.relateFrom !== undefined && <span className="hint">click a target class…</span>}
       </div>
       <div className="canvas">
@@ -229,6 +254,8 @@ export function ClassEditor({ loadRequest }: EditorProps) {
           <ClassView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
+            viewport={viewport}
+            onViewportChange={setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={() => {
               setMemberDraft(null);
@@ -290,6 +317,8 @@ export function ClassEditor({ loadRequest }: EditorProps) {
         }}
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
+        initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
+        onValidityChange={setCodeValid}
       />
     </>
   );

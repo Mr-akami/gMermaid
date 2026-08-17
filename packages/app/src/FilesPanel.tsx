@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { deleteStoredEntry, listStoredEntries, type StoredEntry } from "./persistence";
 
 export interface FilesPanelProps {
@@ -14,6 +14,15 @@ function fmtTime(t: number | null): string {
 /** File-manager view over everything gMermaid keeps in localStorage. */
 export function FilesPanel({ onLoad, onDeleted, onClose }: FilesPanelProps) {
   const [entries, setEntries] = useState<StoredEntry[]>(() => listStoredEntries());
+
+  // other tabs' saves land here via the storage event, so an open panel
+  // stays current (the editors themselves intentionally do NOT adopt other
+  // tabs' autosaves — see the tab-sync note in persistence.ts)
+  useEffect(() => {
+    const refresh = () => setEntries(listStoredEntries());
+    window.addEventListener("storage", refresh);
+    return () => window.removeEventListener("storage", refresh);
+  }, []);
 
   function handleDelete(entry: StoredEntry) {
     if (!confirm(`Delete "${entry.key}"?`)) return;

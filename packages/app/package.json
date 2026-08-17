@@ -3,6 +3,10 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "exports": {
+    "./review": "./src/review.ts",
+    "./style.css": "./src/style.css"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

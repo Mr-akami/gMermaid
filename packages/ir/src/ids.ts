@@ -12,6 +12,8 @@ export type BranchId = Id<"branch">;
 export type NoteId = Id<"note">;
 export type ClassId = Id<"class">;
 export type RelationId = Id<"relation">;
+export type StateId = Id<"state">;
+export type TransitionId = Id<"transition">;
 
 export type AnyId =
   | NodeId
@@ -22,7 +24,9 @@ export type AnyId =
   | BranchId
   | NoteId
   | ClassId
-  | RelationId;
+  | RelationId
+  | StateId
+  | TransitionId;
 
 /**
  * Collision-proof id generation. Parser-imported diagrams carry their own

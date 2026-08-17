@@ -142,4 +142,102 @@ describe("parseSequence", () => {
     expect(back.ir).toEqual(ir);
     expect(sequenceToMermaid(back.ir)).toBe(code);
   });
+
+  it("round-trips the extended arrow set, break/critical fragments and autonumber", () => {
+    const code = `sequenceDiagram
+  autonumber 10 2
+  participant a
+  participant b
+  a-xb: cross
+  a--xb: dotted cross
+  a--)b: dotted async
+  a<<->>b: both ways
+  a<<-->>b: both ways dotted
+  break timeout
+    a->>b: abort
+  end
+  critical lock db
+    a->>b: write
+  option deadlock
+    a->>b: rollback
+  end
+`;
+    const result = parseSequence(code);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.autonumber).toEqual({ start: 10, step: 2 });
+    expect(result.ir.events.slice(0, 5).map((e) => (e.kind === "message" ? e.arrow : e.kind))).toEqual([
+      "cross",
+      "dottedCross",
+      "dottedAsync",
+      "bidirectional",
+      "dottedBidirectional",
+    ]);
+    const frags = result.ir.events.filter((e) => e.kind === "fragment");
+    expect(frags.map((f) => f.fragmentKind)).toEqual(["break", "critical"]);
+    expect(frags[1]!.branches.map((b) => b.condition)).toEqual(["lock db", "deadlock"]);
+    const regen = sequenceToMermaid(result.ir);
+    const back = parseSequence(regen);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(result.ir);
+    expect(sequenceToMermaid(back.ir)).toBe(regen);
+  });
+
+  it("decomposes `loop (min,max) exit` into structured bounds (B-2, import only)", () => {
+    const code = `sequenceDiagram
+  participant a
+  loop (0,3) until accepted
+    a->>a: retry
+  end
+  loop just a condition
+    a->>a: spin
+  end
+`;
+    const result = parseSequence(code);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [l1, l2] = result.ir.events;
+    if (l1?.kind !== "fragment" || l2?.kind !== "fragment") throw new Error("expected fragments");
+    expect(l1.branches[0]).toMatchObject({ condition: "until accepted", loopBounds: { min: "0", max: "3" } });
+    expect(l2.branches[0]!.condition).toBe("just a condition");
+    expect("loopBounds" in l2.branches[0]!).toBe(false);
+    // codegen reassembles the exact text form → the round trip is closed
+    expect(sequenceToMermaid(result.ir)).toBe(code);
+  });
+
+  it("keeps parenthesized exit text lossless once bounds are structural (B-2)", () => {
+    // A user typing `(1,2) foo` into the Exit field must not have it eaten
+    // by Min/Max: the IR keeps it verbatim; only the parser decomposes.
+    const ir: SequenceIR = {
+      kind: "sequence",
+      lifelines: [{ id: "a" as LifelineId, name: "a", isActor: false }],
+      events: [
+        {
+          kind: "fragment",
+          id: "fragment-1" as FragmentId,
+          fragmentKind: "loop",
+          branches: [
+            {
+              id: "branch-1" as BranchId,
+              condition: "(1,2) foo",
+              loopBounds: { min: "4", max: "9" },
+              events: [
+                { kind: "message", id: "message-1" as MessageId, from: "a" as LifelineId, to: "a" as LifelineId, label: "x", arrow: "solid" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const code = sequenceToMermaid(ir);
+    expect(code).toContain("loop (4,9) (1,2) foo");
+    // re-import decomposes only the LEADING bounds; the exit keeps the rest
+    const back = parseSequence(code);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    const frag = back.ir.events[0]!;
+    if (frag.kind !== "fragment") throw new Error("expected fragment");
+    expect(frag.branches[0]).toMatchObject({ condition: "(1,2) foo", loopBounds: { min: "4", max: "9" } });
+  });
 });

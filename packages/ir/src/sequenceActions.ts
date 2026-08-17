@@ -1,8 +1,10 @@
 import type { BranchId, FragmentId, LifelineId, MessageId, NoteId } from "./ids";
 import type {
+  Autonumber,
   Fragment,
   FragmentKind,
   Lifeline,
+  LoopBounds,
   Message,
   MessageArrowType,
   Note,
@@ -10,6 +12,7 @@ import type {
   SequenceEvent,
   SequenceIR,
 } from "./sequence";
+import { omitUndefined } from "./omitUndefined";
 import { findEventPosition, findSequenceBranch, findSequenceEvent, getContainerEvents } from "./sequenceQuery";
 
 // Same contract as flowchart actions: intent-carrying, immutable,
@@ -32,15 +35,19 @@ export type SequenceAction =
   | { type: "updateNote"; id: NoteId; text?: string; position?: NotePosition }
   | { type: "removeEvent"; id: MessageId | FragmentId | NoteId }
   | { type: "updateFragment"; id: FragmentId; fragmentKind?: FragmentKind }
-  | { type: "updateBranch"; id: BranchId; condition: string }
+  // loopBounds: undefined = keep, null = clear
+  | { type: "updateBranch"; id: BranchId; condition?: string; loopBounds?: LoopBounds | null }
   | { type: "addBranch"; fragmentId: FragmentId; branchId: BranchId; condition: string }
   | { type: "moveEventTo"; id: MessageId | FragmentId | NoteId; container: EventContainer; index: number }
+  // null = numbering off
+  | { type: "setAutonumber"; autonumber: Autonumber | null }
   | {
       type: "wrapInFragment";
       fragmentId: FragmentId;
       branchId: BranchId;
       fragmentKind: FragmentKind;
       condition: string;
+      loopBounds?: LoopBounds;
       eventIds: readonly (MessageId | FragmentId | NoteId)[];
     };
 
@@ -85,8 +92,8 @@ function mapEvents(
 }
 
 /** True if any message or note (at any nesting depth) references this
- * lifeline. Exported so the UI can disable "delete lifeline" instead of it
- * silently no-opping. */
+ * lifeline. Exported so the UI can warn that deleting the lifeline will
+ * cascade to its messages and notes. */
 export function messagesTouching(events: Events, lifeline: LifelineId): boolean {
   return events.some((e) => {
     if (e.kind === "message") return e.from === lifeline || e.to === lifeline;
@@ -94,6 +101,9 @@ export function messagesTouching(events: Events, lifeline: LifelineId): boolean 
     return e.branches.some((b) => messagesTouching(b.events, lifeline));
   });
 }
+
+const sameBounds = (a: LoopBounds | undefined, b: LoopBounds | undefined) =>
+  a === b || (a !== undefined && b !== undefined && a.min === b.min && a.max === b.max);
 
 export function applySequenceAction(ir: SequenceIR, action: SequenceAction): SequenceIR {
   switch (action.type) {
@@ -116,8 +126,15 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
 
     case "removeLifeline": {
       if (!ir.lifelines.some((l) => l.id === action.id)) return ir;
-      if (messagesTouching(ir.events, action.id)) return ir; // remove its messages first
-      return { ...ir, lifelines: ir.lifelines.filter((l) => l.id !== action.id) };
+      // cascade: messages and notes referencing the lifeline go with it —
+      // dangling endpoints would break layout and codegen. Fragments emptied
+      // by this stay (empty fragments are deliberate scaffolding, L4).
+      const events = mapEvents(ir.events, (e) => {
+        if (e.kind === "message") return e.from === action.id || e.to === action.id ? null : e;
+        if (e.kind === "note") return e.lifelines.includes(action.id) ? null : e;
+        return e;
+      });
+      return { ...ir, lifelines: ir.lifelines.filter((l) => l.id !== action.id), events };
     }
 
     case "moveLifeline": {
@@ -204,11 +221,13 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
     case "updateBranch": {
       const next = mapEvents(ir.events, (e) => {
         if (e.kind !== "fragment") return e;
-        const branches = e.branches.map((b) =>
-          b.id === action.id && b.condition !== action.condition
-            ? { ...b, condition: action.condition }
-            : b,
-        );
+        const branches = e.branches.map((b) => {
+          if (b.id !== action.id) return b;
+          const condition = action.condition ?? b.condition;
+          const loopBounds = action.loopBounds === undefined ? b.loopBounds : (action.loopBounds ?? undefined);
+          if (condition === b.condition && sameBounds(loopBounds, b.loopBounds)) return b;
+          return omitUndefined({ ...b, condition, loopBounds });
+        });
         return branches.some((b, i) => b !== e.branches[i]) ? { ...e, branches } : e;
       });
       return next === ir.events ? ir : { ...ir, events: next };
@@ -238,6 +257,18 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
       };
       findTarget(ir.events);
       if (!moved) return ir;
+
+      // A note anchors to its DIRECT preceding message (layout rule), so the
+      // anchor pair travels as one unit: moving the message alone would leave
+      // the note behind, silently re-anchored to whatever message slides into
+      // the gap. Dragging the NOTE itself still detaches it.
+      let attachedNote: Note | undefined;
+      const pos = findEventPosition(ir, action.id);
+      if (moved.kind === "message" && pos) {
+        const siblings = getContainerEvents(ir, pos.container);
+        const next = siblings[pos.index + 1];
+        if (next?.kind === "note") attachedNote = next;
+      }
       // a fragment must not be moved into itself or a descendant
       if (moved.kind === "fragment" && action.container.kind === "branch") {
         const branchId = action.container.branchId;
@@ -261,10 +292,23 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         if (!exists) return ir;
       }
 
-      const removed = mapEvents(ir.events, (e) => (e.id === action.id ? null : e));
+      // action.index is expressed in "after the moved event is removed"
+      // coordinates (see the action doc). Also removing the attached note
+      // shifts same-container insertion points past it by one more.
+      let index = action.index;
+      if (attachedNote !== undefined && pos) {
+        const sameContainer =
+          pos.container.kind === "root"
+            ? action.container.kind === "root"
+            : action.container.kind === "branch" && action.container.branchId === pos.container.branchId;
+        if (sameContainer && action.index > pos.index) index -= 1;
+      }
+
+      const carried: SequenceEvent[] = attachedNote !== undefined ? [moved, attachedNote] : [moved];
+      const removed = mapEvents(ir.events, (e) => (e.id === action.id || e.id === attachedNote?.id ? null : e));
       const insert = (events: Events): Events => {
-        const i = Math.max(0, Math.min(action.index, events.length));
-        return [...events.slice(0, i), moved!, ...events.slice(i)];
+        const i = Math.max(0, Math.min(index, events.length));
+        return [...events.slice(0, i), ...carried, ...events.slice(i)];
       };
       if (action.container.kind === "root") {
         return { ...ir, events: insert(removed) };
@@ -278,6 +322,15 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         };
       });
       return { ...ir, events: placed };
+    }
+
+    case "setAutonumber": {
+      const next = action.autonumber ?? undefined;
+      const cur = ir.autonumber;
+      if (next === cur || (next !== undefined && cur !== undefined && next.start === cur.start && next.step === cur.step)) {
+        return ir;
+      }
+      return omitUndefined({ ...ir, autonumber: next });
     }
 
     case "wrapInFragment": {
@@ -302,7 +355,7 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         kind: "fragment",
         id: action.fragmentId,
         fragmentKind: action.fragmentKind,
-        branches: [{ id: action.branchId, condition: action.condition, events: run }],
+        branches: [omitUndefined({ id: action.branchId, condition: action.condition, loopBounds: action.loopBounds, events: run })],
       };
       const replaced = [...list.slice(0, idx), fragment, ...list.slice(i)];
       if (pos.container.kind === "root") return { ...ir, events: replaced };

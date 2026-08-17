@@ -1,4 +1,4 @@
-import type { MessageArrowType, SequenceEvent, SequenceIR } from "@gmermaid/ir";
+import type { Branch, MessageArrowType, SequenceEvent, SequenceIR } from "@gmermaid/ir";
 
 const ARROW_TOKEN: Record<MessageArrowType, string> = {
   solid: "->>",
@@ -6,6 +6,11 @@ const ARROW_TOKEN: Record<MessageArrowType, string> = {
   solidOpen: "->",
   dottedOpen: "-->",
   async: "-)",
+  dottedAsync: "--)",
+  cross: "-x",
+  dottedCross: "--x",
+  bidirectional: "<<->>",
+  dottedBidirectional: "<<-->>",
 };
 
 function escapeText(text: string): string {
@@ -15,6 +20,12 @@ function escapeText(text: string): string {
     .replaceAll("<", "#lt;")
     .replaceAll(">", "#gt;")
     .replaceAll(/\r?\n/g, "<br/>");
+}
+
+/** Text form of a branch header: loop bounds are stored structurally and
+ * only assembled here — `(min,max) exit` — never inside the IR. */
+function branchSpec(b: Branch): string {
+  return b.loopBounds !== undefined ? `(${b.loopBounds.min},${b.loopBounds.max}) ${b.condition}`.trim() : b.condition;
 }
 
 function emitEvents(events: readonly SequenceEvent[], indent: string, lines: string[]): void {
@@ -30,11 +41,11 @@ function emitEvents(events: readonly SequenceEvent[], indent: string, lines: str
     }
     const [first, ...rest] = e.branches;
     if (!first) continue;
-    lines.push(`${indent}${e.fragmentKind} ${escapeText(first.condition)}`.trimEnd());
+    lines.push(`${indent}${e.fragmentKind} ${escapeText(branchSpec(first))}`.trimEnd());
     emitEvents(first.events, indent + "  ", lines);
     for (const branch of rest) {
-      const kw = e.fragmentKind === "par" ? "and" : "else";
-      lines.push(`${indent}${kw} ${escapeText(branch.condition)}`.trimEnd());
+      const kw = e.fragmentKind === "par" ? "and" : e.fragmentKind === "critical" ? "option" : "else";
+      lines.push(`${indent}${kw} ${escapeText(branchSpec(branch))}`.trimEnd());
       emitEvents(branch.events, indent + "  ", lines);
     }
     lines.push(`${indent}end`);
@@ -43,6 +54,10 @@ function emitEvents(events: readonly SequenceEvent[], indent: string, lines: str
 
 export function sequenceToMermaid(ir: SequenceIR): string {
   const lines = ["sequenceDiagram"];
+  if (ir.autonumber !== undefined) {
+    const { start, step } = ir.autonumber;
+    lines.push(start === 1 && step === 1 ? "  autonumber" : `  autonumber ${start} ${step}`);
+  }
   for (const l of ir.lifelines) {
     const kw = l.isActor ? "actor" : "participant";
     // an empty `as` clause is unparseable — fall back to the bare id

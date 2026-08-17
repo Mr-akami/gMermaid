@@ -6,6 +6,7 @@ import type {
   FragmentKind,
   Lifeline,
   LifelineId,
+  LoopBounds,
   Message,
   MessageArrowType,
   MessageId,
@@ -18,16 +19,30 @@ import { unescapeLabel, type ParseError, type ParseResult } from "./common";
 
 const ID = "[A-Za-z0-9_-]+";
 
-// longest-first so "-->>" wins over "-->" and "->"
+// longest-first so "-->>" wins over "-->" and "->" (earliest match in the
+// line wins; ties fall back to this list order via the stable sort)
 const ARROWS: readonly { token: string; arrow: MessageArrowType }[] = [
+  { token: "<<-->>", arrow: "dottedBidirectional" },
+  { token: "<<->>", arrow: "bidirectional" },
   { token: "-->>", arrow: "dotted" },
   { token: "->>", arrow: "solid" },
   { token: "-->", arrow: "dottedOpen" },
   { token: "->", arrow: "solidOpen" },
+  { token: "--)", arrow: "dottedAsync" },
   { token: "-)", arrow: "async" },
+  { token: "--x", arrow: "dottedCross" },
+  { token: "-x", arrow: "cross" },
 ];
 
-const FRAGMENT_KINDS: readonly FragmentKind[] = ["alt", "opt", "loop", "par"];
+const FRAGMENT_KINDS: readonly FragmentKind[] = ["alt", "opt", "loop", "par", "break", "critical"];
+
+/** `(min,max) exit` → structured bounds + exit text. A bare `(,)` prefix
+ * with both fields empty is left alone — codegen never emits it. */
+function splitLoopSpec(raw: string): { condition: string; loopBounds?: LoopBounds } {
+  const m = raw.match(/^\((\d*)\s*,\s*(\d*)\)\s*(.*)$/);
+  if (!m || (m[1] === "" && m[2] === "")) return { condition: raw };
+  return { condition: m[3]!, loopBounds: { min: m[1]!, max: m[2]! } };
+}
 
 export function parseSequence(code: string): ParseResult<SequenceIR> {
   const errors: ParseError[] = [];
@@ -57,7 +72,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
   const root: SequenceEvent[] = [];
   interface OpenFragment {
     kind: FragmentKind;
-    branches: { id: BranchId; condition: string; events: SequenceEvent[] }[];
+    branches: { id: BranchId; condition: string; loopBounds?: LoopBounds; events: SequenceEvent[] }[];
     id: FragmentId;
     parent: SequenceEvent[];
     openedAt: number;
@@ -69,6 +84,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
   };
 
   let headerSeen = false;
+  let autonumber: { start: number; step: number } | undefined;
 
   for (let i = 0; i < lines.length; i++) {
     const lineNo = i + 1;
@@ -81,6 +97,12 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
         return { ok: false, errors };
       }
       headerSeen = true;
+      continue;
+    }
+
+    const auto = line.match(/^autonumber(?:\s+(\d+)(?:\s+(\d+))?)?$/);
+    if (auto) {
+      autonumber = { start: auto[1] !== undefined ? Number(auto[1]) : 1, step: auto[2] !== undefined ? Number(auto[2]) : 1 };
       continue;
     }
 
@@ -109,15 +131,21 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
 
     const frag = line.match(new RegExp(`^(${FRAGMENT_KINDS.join("|")})(?:\\s+(.*))?$`));
     if (frag) {
+      const kind = frag[1] as FragmentKind;
+      const raw = frag[2] !== undefined ? unescapeLabel(frag[2]) : "";
+      // The ONLY place the ambiguous `(min,max) exit` text form is decomposed
+      // (B-2): everywhere else loop bounds live structurally on the branch.
+      const spec = kind === "loop" ? splitLoopSpec(raw) : { condition: raw };
       fragSeq += 1;
       branchSeq += 1;
       stack.push({
-        kind: frag[1] as FragmentKind,
+        kind,
         id: `fragment-${fragSeq}` as FragmentId,
         branches: [
           {
             id: `branch-${branchSeq}` as BranchId,
-            condition: frag[2] !== undefined ? unescapeLabel(frag[2]) : "",
+            condition: spec.condition,
+            ...(spec.loopBounds !== undefined ? { loopBounds: spec.loopBounds } : {}),
             events: [],
           },
         ],
@@ -127,7 +155,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
       continue;
     }
 
-    const alt = line.match(/^(else|and)(?:\s+(.*))?$/);
+    const alt = line.match(/^(else|and|option)(?:\s+(.*))?$/);
     if (alt) {
       const top = stack[stack.length - 1];
       if (!top) {
@@ -197,5 +225,8 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
   }
   if (errors.length > 0) return { ok: false, errors };
 
-  return { ok: true, ir: { kind: "sequence", lifelines, events: root } };
+  return {
+    ok: true,
+    ir: { kind: "sequence", lifelines, events: root, ...(autonumber !== undefined ? { autonumber } : {}) },
+  };
 }

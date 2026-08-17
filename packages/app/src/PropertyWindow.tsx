@@ -52,6 +52,15 @@ export function PropertyWindow(props: PropertyWindowProps) {
               <option value="stadium">Stadium</option>
               <option value="diamond">Diamond</option>
               <option value="circle">Circle</option>
+              <option value="doubleCircle">Double circle</option>
+              <option value="subroutine">Subroutine</option>
+              <option value="cylinder">Cylinder</option>
+              <option value="hexagon">Hexagon</option>
+              <option value="asymmetric">Asymmetric</option>
+              <option value="parallelogram">Parallelogram</option>
+              <option value="parallelogramAlt">Parallelogram (alt)</option>
+              <option value="trapezoid">Trapezoid</option>
+              <option value="trapezoidAlt">Trapezoid (alt)</option>
             </select>
           </label>
         </>
@@ -77,6 +86,7 @@ export function PropertyWindow(props: PropertyWindowProps) {
               <option value="open">Open (no head)</option>
               <option value="dotted">Dotted</option>
               <option value="thick">Thick</option>
+              <option value="invisible">Invisible (layout only)</option>
             </select>
           </label>
         </>

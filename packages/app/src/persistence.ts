@@ -82,27 +82,41 @@ export function readStoredCode(raw: string): { code: string; updatedAt: number |
  * If the stored code no longer parses (grammar changed between versions),
  * it is MOVED to a `:broken-<timestamp>` key first — otherwise the very
  * first autosave would overwrite it with the sample and destroy the data.
- * Broken entries stay visible in the Files panel for manual recovery. */
-export function loadInitial<T>(storageKey: string, parse: (code: string) => ParseResult<T>, sample: () => T): T {
+ * The broken text is also returned as `recoveredText` so the editor can pour
+ * it into the CodePane draft with errors shown, letting the user repair it
+ * in place; the `:broken` entry stays in the Files panel as a backstop. */
+export function loadInitial<T>(
+  storageKey: string,
+  parse: (code: string) => ParseResult<T>,
+  sample: () => T,
+): { ir: T; recoveredText?: string } {
   try {
+    migrateLegacyEntries();
     const stored = localStorage.getItem(storageKey);
     if (stored !== null) {
-      const result = parse(readStoredCode(stored).code);
-      if (result.ok) return result.ir;
+      const { code } = readStoredCode(stored);
+      const result = parse(code);
+      if (result.ok) return { ir: result.ir };
       localStorage.setItem(`${storageKey}:broken-${Date.now()}`, stored);
       localStorage.removeItem(storageKey);
+      return { ir: sample(), recoveredText: code };
     }
   } catch {
     // storage unavailable (private mode etc.) — just start from the sample
   }
-  return sample();
+  return { ir: sample() };
 }
 
 /** Mirror the canonical code to localStorage whenever the IR changes.
  * Debounced: localStorage writes are synchronous and per-keystroke saves
- * would stall the main thread on large diagrams. */
-export function useAutosave(storageKey: string, code: string): void {
+ * would stall the main thread on large diagrams.
+ * KNOWN LIMITATION (tab sync): two tabs editing the same diagram kind share
+ * one autosave key, last-write-wins — the editor does NOT watch `storage`
+ * events, so it never adopts another tab's save mid-session (doing so would
+ * clobber the local history). The Files panel does live-refresh its list. */
+export function useAutosave(storageKey: string, code: string, enabled = true): void {
   useEffect(() => {
+    if (!enabled) return;
     const t = setTimeout(() => {
       try {
         localStorage.setItem(storageKey, JSON.stringify({ code, updatedAt: Date.now() } satisfies StoredValue));
@@ -111,7 +125,7 @@ export function useAutosave(storageKey: string, code: string): void {
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [storageKey, code]);
+  }, [storageKey, code, enabled]);
 }
 
 export function formatParseErrors(errors: readonly { line: number; message: string }[]): string {
@@ -119,10 +133,35 @@ export function formatParseErrors(errors: readonly { line: number; message: stri
 }
 
 export const STORAGE_PREFIX = "gmermaid:";
+/** Diagram documents live under their own namespace so future non-document
+ * keys (settings etc.) never show up as diagrams in the Files panel. */
+export const DOC_PREFIX = `${STORAGE_PREFIX}doc:`;
+
+/** One-shot rename of pre-namespace keys (`gmermaid:flowchart` →
+ * `gmermaid:doc:flowchart`, including their `:broken-*` siblings). Safe to
+ * call repeatedly; an existing doc key is never overwritten. */
+export function migrateLegacyEntries(): void {
+  try {
+    const legacy: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key !== null && key.startsWith(STORAGE_PREFIX) && !key.startsWith(DOC_PREFIX)) legacy.push(key);
+    }
+    for (const key of legacy) {
+      const value = localStorage.getItem(key);
+      if (value === null) continue;
+      const target = `${DOC_PREFIX}${key.slice(STORAGE_PREFIX.length)}`;
+      if (localStorage.getItem(target) === null) localStorage.setItem(target, value);
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // storage unavailable
+  }
+}
 
 export interface StoredEntry {
   readonly key: string;
-  readonly kind: "flowchart" | "sequence" | "class" | "unknown";
+  readonly kind: "flowchart" | "sequence" | "class" | "state" | "unknown";
   readonly updatedAt: number | null;
   readonly bytes: number;
   readonly code: string;
@@ -133,16 +172,18 @@ function detectKind(code: string): StoredEntry["kind"] {
   if (head.startsWith("flowchart") || head.startsWith("graph")) return "flowchart";
   if (head.startsWith("sequenceDiagram")) return "sequence";
   if (head.startsWith("classDiagram")) return "class";
+  if (head.startsWith("stateDiagram")) return "state";
   return "unknown";
 }
 
-/** Every gMermaid entry currently in localStorage, newest first. */
+/** Every gMermaid diagram document currently in localStorage, newest first. */
 export function listStoredEntries(): StoredEntry[] {
   const entries: StoredEntry[] = [];
   try {
+    migrateLegacyEntries();
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key === null || !key.startsWith(STORAGE_PREFIX)) continue;
+      if (key === null || !key.startsWith(DOC_PREFIX)) continue;
       const raw = localStorage.getItem(key);
       if (raw === null) continue;
       const { code, updatedAt } = readStoredCode(raw);

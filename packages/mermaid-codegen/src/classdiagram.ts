@@ -7,10 +7,13 @@ const REL_TOKEN: Record<RelationType, string> = {
   association: "-->",
   dependency: "..>",
   realization: "..|>",
+  linkSolid: "--",
+  linkDashed: "..",
 };
 
 export function classToMermaid(ir: ClassIR): string {
   const lines = ["classDiagram"];
+  if (ir.direction !== undefined) lines.push(`  direction ${ir.direction}`);
   const nameOf = new Map(ir.classes.map((c) => [c.id, c.name]));
 
   for (const c of ir.classes) {

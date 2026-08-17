@@ -1,5 +1,5 @@
-import { useRef, type PointerEvent } from "react";
 import type { FragmentFrame, MessageRow, SequenceLayout } from "@gmermaid/layout";
+import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 // Fragment frames draw UNDER the messages with a transparent fill; only
 // their border and label tab are clickable (pointer-events on the stroke),
@@ -11,6 +11,9 @@ export interface SequenceViewState {
 export interface SequenceViewProps {
   readonly layout: SequenceLayout;
   readonly viewState: SequenceViewState;
+  /** Pan/zoom; undefined = default (identity, padding offset). */
+  readonly viewport?: Viewport | undefined;
+  readonly onViewportChange?: ((v: Viewport) => void) | undefined;
   readonly onElementClick?: (id: string) => void;
   readonly onBackgroundClick?: () => void;
   /** Live y (diagram space) while dragging a message row. */
@@ -39,23 +42,13 @@ export interface SequenceViewProps {
   readonly onGestureCancel?: () => void;
 }
 
-const DRAG_THRESHOLD = 5;
-
-interface PointerState {
-  /** Set when the press started on a draggable element. */
-  dragKind: "message" | "fragment-bottom" | "divider" | "lifeline" | "spine" | null;
-  /** Element under the initial press, for click-on-release. */
-  targetId: string | null;
-  startX: number;
-  startY: number;
-  active: boolean;
-}
-
 const PADDING = 10;
 
 export function SequenceView({
   layout,
   viewState,
+  viewport,
+  onViewportChange,
   onElementClick,
   onBackgroundClick,
   onMessageDrag,
@@ -73,87 +66,42 @@ export function SequenceView({
   connectLine,
   onGestureCancel,
 }: SequenceViewProps) {
-  // pointer bookkeeping only — all meaning lives in the emitted intents.
-  // Clicks are resolved on pointerup from the ORIGINAL press target: pointer
-  // capture retargets the browser's native click to the svg root, which
-  // would otherwise turn every message click into a background click.
-  const pointer = useRef<PointerState | null>(null);
-
-  function diagramPoint(e: PointerEvent<SVGSVGElement>): { x: number; y: number } {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return { x: e.clientX - rect.left - PADDING, y: e.clientY - rect.top - PADDING };
-  }
-
-  const KNOWN_DRAG_KINDS = ["message", "fragment-bottom", "divider", "lifeline", "spine"] as const;
-
-  function handlePointerDown(e: PointerEvent<SVGSVGElement>) {
-    if (e.button !== 0 || !e.isPrimary) return; // left/primary pointer only
-    const target = e.target as Element;
-    const rawKind = target.closest("[data-drag]")?.getAttribute("data-drag") ?? null;
-    const targetId = target.closest("[data-element-id]")?.getAttribute("data-element-id") ?? null;
-    const { x, y } = diagramPoint(e);
-    pointer.current = {
-      dragKind: (KNOWN_DRAG_KINDS as readonly string[]).includes(rawKind ?? "")
-        ? (rawKind as PointerState["dragKind"])
-        : null,
-      targetId,
-      startX: x,
-      startY: y,
-      active: false,
-    };
-    // always capture, so pointerup reaches us even outside the svg —
-    // otherwise stale state produces a phantom click later
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function handlePointerMove(e: PointerEvent<SVGSVGElement>) {
-    const p = pointer.current;
-    if (!p) return;
-    const { x, y } = diagramPoint(e);
-    if (!p.active && Math.abs(y - p.startY) < DRAG_THRESHOLD && Math.abs(x - p.startX) < DRAG_THRESHOLD) return;
-    p.active = true; // moved past threshold: this press can no longer be a click
-    if (p.targetId === null) return;
-    if (p.dragKind === "message") onMessageDrag?.(p.targetId, y);
-    else if (p.dragKind === "divider") onDividerDrag?.(p.targetId, y);
-    else if (p.dragKind === "lifeline") onLifelineDrag?.(p.targetId, x);
-    else if (p.dragKind === "spine") onSpineDrag?.(p.targetId, x, y);
-    else if (p.dragKind === "fragment-bottom") onFragmentBottomDrag?.(p.targetId, y);
-  }
-
-  function handlePointerUp(e: PointerEvent<SVGSVGElement>) {
-    const p = pointer.current;
-    pointer.current = null;
-    if (!p) return;
-    if (p.active) {
-      if (p.dragKind === null || p.targetId === null) return; // a swipe, not a click or drop
-      const { x, y } = diagramPoint(e);
-      if (p.dragKind === "message") onMessageDrop?.(p.targetId, y);
-      else if (p.dragKind === "divider") onDividerDrop?.(p.targetId, y);
-      else if (p.dragKind === "lifeline") onLifelineDrop?.(p.targetId, x);
-      else if (p.dragKind === "spine") onSpineDrop?.(p.targetId, x, y);
-      else if (p.dragKind === "fragment-bottom") onFragmentBottomDrop?.(p.targetId, y);
-      return;
-    }
-    // no drag happened: this press was a click
-    if (p.targetId !== null) onElementClick?.(p.targetId);
-    else onBackgroundClick?.();
-  }
-
-  function handlePointerCancel() {
-    pointer.current = null;
-    onGestureCancel?.();
-  }
+  // pointer bookkeeping lives in the shared hook — all meaning stays in the
+  // emitted intents; this component only routes them per drag kind.
+  const g = usePointerGestures({
+    padding: PADDING,
+    viewport,
+    onViewportChange,
+    dragKinds: ["message", "fragment-bottom", "divider", "lifeline", "spine"],
+    onElementClick,
+    onBackgroundClick,
+    onDrag: (kind, id, x, y) => {
+      if (kind === "message") onMessageDrag?.(id, y);
+      else if (kind === "divider") onDividerDrag?.(id, y);
+      else if (kind === "lifeline") onLifelineDrag?.(id, x);
+      else if (kind === "spine") onSpineDrag?.(id, x, y);
+      else if (kind === "fragment-bottom") onFragmentBottomDrag?.(id, y);
+    },
+    onDrop: (kind, id, x, y) => {
+      if (kind === "message") onMessageDrop?.(id, y);
+      else if (kind === "divider") onDividerDrop?.(id, y);
+      else if (kind === "lifeline") onLifelineDrop?.(id, x);
+      else if (kind === "spine") onSpineDrop?.(id, x, y);
+      else if (kind === "fragment-bottom") onFragmentBottomDrop?.(id, y);
+    },
+    onGestureCancel,
+  });
 
   return (
     <svg
-      width={layout.size.w + PADDING * 2}
-      height={layout.size.h + PADDING * 2}
-      viewBox={`${-PADDING} ${-PADDING} ${layout.size.w + PADDING * 2} ${layout.size.h + PADDING * 2}`}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
-      style={{ touchAction: "none" }}
+      width="100%"
+      height="100%"
+      ref={g.ref}
+      onPointerDown={g.onPointerDown}
+      onPointerMove={g.onPointerMove}
+      onPointerUp={g.onPointerUp}
+      onPointerCancel={g.onPointerCancel}
+      style={g.style}
     >
       <defs>
         <marker id="gm-seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -162,8 +110,12 @@ export function SequenceView({
         <marker id="gm-seq-open" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="var(--gm-stroke, #333)" strokeWidth="1.5" />
         </marker>
+        <marker id="gm-seq-cross" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+          <path d="M 1 1 L 9 9 M 9 1 L 1 9" fill="none" stroke="var(--gm-stroke, #333)" strokeWidth="1.5" />
+        </marker>
       </defs>
 
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
       {/* lifeline spines + heads */}
       {layout.lifelines.map((l) => (
         <g key={l.id} data-element-id={l.id} style={{ cursor: "pointer" }}>
@@ -235,6 +187,7 @@ export function SequenceView({
           style={{ pointerEvents: "none" }}
         />
       )}
+      </g>
     </svg>
   );
 }
@@ -307,19 +260,29 @@ function FragmentView({ f, selected, selectedId }: { f: FragmentFrame; selected:
   );
 }
 
+const DASHED_ARROWS = new Set(["dotted", "dottedOpen", "dottedAsync", "dottedCross", "dottedBidirectional"]);
+const OPEN_ARROWS = new Set(["solidOpen", "dottedOpen", "async", "dottedAsync"]);
+
 function MessageView({ m, selected }: { m: MessageRow; selected: boolean }) {
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
-  const dash = m.arrow === "dotted" || m.arrow === "dottedOpen" ? "5 4" : undefined;
-  const marker = m.arrow === "solidOpen" || m.arrow === "dottedOpen" || m.arrow === "async" ? "url(#gm-seq-open)" : "url(#gm-seq-arrow)";
+  const dash = DASHED_ARROWS.has(m.arrow) ? "5 4" : undefined;
+  const marker =
+    m.arrow === "cross" || m.arrow === "dottedCross"
+      ? "url(#gm-seq-cross)"
+      : OPEN_ARROWS.has(m.arrow)
+        ? "url(#gm-seq-open)"
+        : "url(#gm-seq-arrow)";
+  const bidir = m.arrow === "bidirectional" || m.arrow === "dottedBidirectional";
   const isSelf = m.fromX === m.toX;
   const d = isSelf
     ? `M ${m.fromX} ${m.y} h 36 v 18 h -36`
     : `M ${m.fromX} ${m.y} L ${m.toX} ${m.y}`;
+  const label = m.seq !== undefined ? `${m.seq}: ${m.label}` : m.label;
   return (
     <g data-element-id={m.id} data-drag="message" style={{ cursor: "pointer" }}>
       <path d={d} fill="none" stroke="transparent" strokeWidth={12} />
-      <path d={d} fill="none" stroke={stroke} strokeWidth={selected ? 2.2 : 1.4} strokeDasharray={dash} markerEnd={marker} />
-      {m.label !== "" && (
+      <path d={d} fill="none" stroke={stroke} strokeWidth={selected ? 2.2 : 1.4} strokeDasharray={dash} markerEnd={marker} markerStart={bidir ? marker : undefined} />
+      {label !== "" && (
         <text
           x={isSelf ? m.fromX + 44 : m.labelPos.x}
           y={isSelf ? m.y + 9 : m.labelPos.y}
@@ -329,7 +292,7 @@ function MessageView({ m, selected }: { m: MessageRow; selected: boolean }) {
           fill="var(--gm-text, #111)"
           style={{ paintOrder: "stroke", stroke: "var(--gm-bg, #fff)", strokeWidth: 4, userSelect: "none" }}
         >
-          {m.label}
+          {label}
         </text>
       )}
     </g>

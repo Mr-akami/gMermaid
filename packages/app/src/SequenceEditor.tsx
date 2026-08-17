@@ -15,13 +15,14 @@ import {
 import { layoutSequence, type DropSlot, type SequenceLayout } from "@gmermaid/layout";
 import { sequenceToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseSequence } from "@gmermaid/mermaid-parser";
-import { SequenceView } from "@gmermaid/renderer";
+import { SequenceView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SequencePropertyWindow, type SequenceSelection } from "./SequencePropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import type { EditorRuntimeProps } from "./editorRuntime";
 
 // A composite sample showing alt / opt / loop nesting and a note.
 function initialIR(): SequenceIR {
@@ -66,15 +67,24 @@ function rowYMap(layout: SequenceLayout): Map<string, number> {
   return m;
 }
 
-const STORAGE_KEY = "gmermaid:sequence";
+const STORAGE_KEY = "gmermaid:doc:sequence";
 
-export interface EditorProps {
+export interface EditorProps extends EditorRuntimeProps {
   readonly loadRequest?: { readonly seq: number; readonly code: string | null } | undefined;
 }
 
-export function SequenceEditor({ loadRequest }: EditorProps) {
-  const h = useDiagramHistory(() => loadInitial(STORAGE_KEY, parseSequence, initialIR), applySequenceAction);
+export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", onCodeChange, onValidityChange }: EditorProps) {
+  // recoveredText: stored data that stopped parsing, poured into the code
+  // pane as a broken draft for manual repair (S1-3)
+  const [initial] = useState(() => {
+    if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseSequence, initialIR);
+    const parsed = parseSequence(initialCode);
+    return parsed.ok ? { ir: parsed.ir } : { ir: initialIR(), recoveredText: initialCode };
+  });
+  const h = useDiagramHistory(() => initial.ir, applySequenceAction);
   const [view, setView] = useState<ViewState>({});
+  // pan/zoom is ViewState (ADR 0001), held apart from the selection
+  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // drag feedback is view-transient (ADR 0001): the IR changes once, on drop
   const [dropY, setDropY] = useState<number | undefined>(undefined);
   const [dropX, setDropX] = useState<number | undefined>(undefined);
@@ -84,7 +94,11 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
 
   const layout = useMemo(() => layoutSequence(ir, measurer), [ir]);
   const code = useMemo(() => sequenceToMermaid(ir), [ir]);
-  useAutosave(STORAGE_KEY, code);
+  // autosave pauses while the code pane shows a broken/stale draft, so a
+  // recovered draft is never clobbered by the sample it fell back to
+  const [codeValid, setCodeValid] = useState(initial.recoveredText === undefined);
+  useAutosave(STORAGE_KEY, code, mode === "standalone" && codeValid);
+  useEffect(() => onCodeChange?.(code), [code, onCodeChange]);
 
   useEffect(() => {
     if (!loadRequest) return;
@@ -239,13 +253,13 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
 
   function wrapSelected(kind: "alt" | "opt" | "loop" | "par") {
     if (selection?.kind !== "message") return;
-    const defaultCondition = kind === "loop" ? "(1,3) until done" : kind === "par" ? "" : "condition";
     h.dispatch({
       type: "wrapInFragment",
       fragmentId: newId("fragment"),
       branchId: newId("branch"),
       fragmentKind: kind,
-      condition: defaultCondition,
+      condition: kind === "loop" ? "until done" : kind === "par" ? "" : "condition",
+      ...(kind === "loop" ? { loopBounds: { min: "1", max: "3" } } : {}),
       eventIds: [selection.message.id],
     });
   }
@@ -326,8 +340,8 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
   return (
     <>
       <div className="toolbar">
-        <button onClick={openFile}>Open…</button>
-        <button onClick={() => saveMmd(code, "sequence.mmd")}>Save…</button>
+        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
+        {mode === "standalone" && <button onClick={() => saveMmd(code, "sequence.mmd")}>Save…</button>}
         <button onClick={addLifeline}>+ Lifeline</button>
         <button
           disabled={selectedLifeline === undefined}
@@ -339,6 +353,14 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
         <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("opt")}>opt</button>
         <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("loop")}>loop</button>
         <button onClick={addNote}>+ Note</button>
+        <label className="hint" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <input
+            type="checkbox"
+            checked={ir.autonumber !== undefined}
+            onChange={(e) => h.dispatch({ type: "setAutonumber", autonumber: e.target.checked ? { start: 1, step: 1 } : null })}
+          />
+          autonumber
+        </label>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
         {view.messageFrom !== undefined && <span className="hint">click a target lifeline…</span>}
@@ -348,6 +370,8 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
           <SequenceView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
+            viewport={viewport}
+            onViewportChange={setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={() => setView({})}
             onMessageDrag={(_, y) => setDropY(nearestSlot(y)?.y)}
@@ -395,6 +419,14 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
               const first = selection.fragment.branches[0];
               if (first) h.dispatch({ type: "updateBranch", id: first.id, condition }, `branch:${first.id}:cond`);
             }}
+            onChangeLoopBounds={(min, max) => {
+              if (selection.kind !== "fragment") return;
+              const first = selection.fragment.branches[0];
+              if (!first) return;
+              // both fields blank = no bounds at all (bare `loop exit`)
+              const loopBounds = min === "" && max === "" ? null : { min, max };
+              h.dispatch({ type: "updateBranch", id: first.id, loopBounds }, `branch:${first.id}:bounds`);
+            }}
             onChangeNoteText={(text) =>
               selection.kind === "note" && h.dispatch({ type: "updateNote", id: selection.note.id, text }, `note:${selection.note.id}:text`)
             }
@@ -416,9 +448,9 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
               if (selection.kind === "note") h.dispatch({ type: "removeEvent", id: selection.note.id });
               setView({});
             }}
-            deleteDisabledReason={
+            deleteWarning={
               selection.kind === "lifeline" && messagesTouching(ir.events, selection.lifeline.id)
-                ? "Remove its messages first"
+                ? "also deletes its messages and notes"
                 : undefined
             }
             onEditStart={() => {}}
@@ -432,6 +464,11 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
         onCommit={(next) => h.pushIR(next, "code-pane")}
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
+        initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
+        onValidityChange={(valid) => {
+          setCodeValid(valid);
+          onValidityChange?.(valid);
+        }}
       />
     </>
   );

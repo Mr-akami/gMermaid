@@ -6,7 +6,17 @@ export interface Lifeline {
   readonly isActor: boolean;
 }
 
-export type MessageArrowType = "solid" | "dotted" | "solidOpen" | "dottedOpen" | "async";
+export type MessageArrowType =
+  | "solid"
+  | "dotted"
+  | "solidOpen"
+  | "dottedOpen"
+  | "async"
+  | "dottedAsync"
+  | "cross"
+  | "dottedCross"
+  | "bidirectional"
+  | "dottedBidirectional";
 
 export interface Message {
   readonly kind: "message";
@@ -17,7 +27,7 @@ export interface Message {
   readonly arrow: MessageArrowType;
 }
 
-export type FragmentKind = "alt" | "opt" | "loop" | "par";
+export type FragmentKind = "alt" | "opt" | "loop" | "par" | "break" | "critical";
 
 /**
  * A combined fragment owns its events structurally: membership is defined by
@@ -31,9 +41,20 @@ export interface Fragment {
   readonly branches: readonly Branch[];
 }
 
+/** Loop iteration bounds, held structurally so compose/decompose of the
+ * mermaid text form `(min,max) exit` stays reversible. Kept as strings:
+ * they are display text, and "" means the field is blank in the form. */
+export interface LoopBounds {
+  readonly min: string;
+  readonly max: string;
+}
+
 export interface Branch {
   readonly id: BranchId;
+  /** Exit/guard text only — never carries the `(min,max)` prefix; codegen
+   * assembles it, and the one ambiguous decomposition lives in the parser. */
   readonly condition: string;
+  readonly loopBounds?: LoopBounds;
   readonly events: readonly SequenceEvent[];
 }
 
@@ -52,10 +73,17 @@ export interface Note {
 
 export type SequenceEvent = Message | Fragment | Note;
 
+/** `autonumber [start [step]]` — message numbering, assigned by layout. */
+export interface Autonumber {
+  readonly start: number;
+  readonly step: number;
+}
+
 export interface SequenceIR {
   readonly kind: "sequence";
   readonly lifelines: readonly Lifeline[];
   readonly events: readonly SequenceEvent[];
+  readonly autonumber?: Autonumber;
 }
 
 export function emptySequence(): SequenceIR {

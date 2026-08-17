@@ -16,13 +16,23 @@ import { unescapeLabel, unquote, type ParseError, type ParseResult } from "./com
 const ID = "[A-Za-z0-9_-]+";
 const ID_RE = new RegExp(`^${ID}$`);
 
-// shape brackets, longest-first so `((` wins over `(`
+// shape brackets, longest-open-first so `(((` wins over `((` wins over `(`;
+// same-open pairs (`[/…/]` vs `[/…\]`) are told apart by their closer
 const SHAPES: readonly { open: string; close: string; shape: FlowchartNodeShape }[] = [
+  { open: "(((", close: ")))", shape: "doubleCircle" },
   { open: "((", close: "))", shape: "circle" },
   { open: "([", close: "])", shape: "stadium" },
+  { open: "[[", close: "]]", shape: "subroutine" },
+  { open: "[(", close: ")]", shape: "cylinder" },
+  { open: "[/", close: "\\]", shape: "trapezoid" },
+  { open: "[/", close: "/]", shape: "parallelogram" },
+  { open: "[\\", close: "/]", shape: "trapezoidAlt" },
+  { open: "[\\", close: "\\]", shape: "parallelogramAlt" },
+  { open: "{{", close: "}}", shape: "hexagon" },
   { open: "[", close: "]", shape: "rect" },
   { open: "(", close: ")", shape: "rounded" },
   { open: "{", close: "}", shape: "diamond" },
+  { open: ">", close: "]", shape: "asymmetric" },
 ];
 
 const ARROWS: readonly { token: string; arrow: FlowchartArrowType }[] = [
@@ -30,6 +40,15 @@ const ARROWS: readonly { token: string; arrow: FlowchartArrowType }[] = [
   { token: "==>", arrow: "thick" },
   { token: "-->", arrow: "arrow" },
   { token: "---", arrow: "open" },
+  { token: "~~~", arrow: "invisible" },
+];
+
+// `A-- text -->B` inline labels normalize to the pipe form before tokenizing
+const INLINE_LABELS: readonly { re: RegExp; token: string }[] = [
+  { re: /-\.\s+(.+?)\s+\.->/g, token: "-.->" },
+  { re: /==\s+(.+?)\s+==>/g, token: "==>" },
+  { re: /--\s+(.+?)\s+-->/g, token: "-->" },
+  { re: /--\s+(.+?)\s+---/g, token: "---" },
 ];
 
 interface NodeRef {
@@ -47,12 +66,73 @@ function parseNodeTerm(term: string): NodeRef | null {
   const rest = m[2]!.trim();
   if (rest === "") return { id };
   for (const s of SHAPES) {
-    if (rest.startsWith(s.open) && rest.endsWith(s.close)) {
+    if (rest.startsWith(s.open) && rest.endsWith(s.close) && rest.length >= s.open.length + s.close.length) {
       const inner = rest.slice(s.open.length, rest.length - s.close.length);
       return { id, label: unescapeLabel(unquote(inner)), shape: s.shape };
     }
   }
   return null;
+}
+
+/** Split `A & B["x & y"]` on top-level `&` only (never inside brackets/quotes). */
+function splitTerms(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let inQuote = false;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (c === '"') inQuote = !inQuote;
+    else if (!inQuote && "([{".includes(c)) depth += 1;
+    else if (!inQuote && ")]}".includes(c)) depth -= 1;
+    else if (!inQuote && depth === 0 && c === "&") {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+interface Link {
+  readonly arrow: FlowchartArrowType;
+  readonly label?: string;
+}
+
+/** Tokenize one line into node groups joined by links: supports chaining
+ * (`A-->B-->C`) and `&` fan-out (`A & B --> C`). Returns null when the line
+ * holds no arrow at all. */
+function parseEdgeLine(line: string): { groups: NodeRef[][]; links: Link[] } | string | null {
+  let text = line;
+  for (const { re, token } of INLINE_LABELS) text = text.replaceAll(re, (_, label: string) => `${token}|${label}|`);
+
+  const groups: NodeRef[][] = [];
+  const links: Link[] = [];
+  let rest = text;
+  for (;;) {
+    const hit = ARROWS.map((a) => ({ a, idx: rest.indexOf(a.token) }))
+      .filter((x) => x.idx > 0)
+      .toSorted((x, y) => x.idx - y.idx)[0];
+    if (!hit) break;
+    const left = rest.slice(0, hit.idx);
+    rest = rest.slice(hit.idx + hit.a.token.length).trim();
+    let label: string | undefined;
+    if (rest.startsWith("|")) {
+      const end = rest.indexOf("|", 1);
+      if (end < 0) return "unterminated edge label `|...|`";
+      label = unescapeLabel(unquote(rest.slice(1, end)));
+      rest = rest.slice(end + 1).trim();
+    }
+    const terms = splitTerms(left).map(parseNodeTerm);
+    if (terms.some((t) => t === null)) return "cannot parse edge endpoints";
+    groups.push(terms as NodeRef[]);
+    links.push({ arrow: hit.a.arrow, ...(label !== undefined ? { label } : {}) });
+  }
+  if (links.length === 0) return null;
+  const terms = splitTerms(rest).map(parseNodeTerm);
+  if (rest.trim() === "" || terms.some((t) => t === null)) return "cannot parse edge endpoints";
+  groups.push(terms as NodeRef[]);
+  return { groups, links };
 }
 
 export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
@@ -97,45 +177,43 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       continue;
     }
 
-    // edge line: <term> <arrow>[|label|] <term>
-    const arrowHit = ARROWS.map((a) => ({ a, idx: line.indexOf(a.token) }))
-      .filter((x) => x.idx > 0)
-      .toSorted((x, y) => x.idx - y.idx)[0];
-
-    if (arrowHit) {
-      const { a, idx } = arrowHit;
-      const left = line.slice(0, idx);
-      let rest = line.slice(idx + a.token.length).trim();
-      let label: string | undefined;
-      if (rest.startsWith("|")) {
-        const end = rest.indexOf("|", 1);
-        if (end < 0) {
-          errors.push({ line: lineNo, message: "unterminated edge label `|...|`" });
-          continue;
+    // edge line: <terms> <arrow>[|label|] <terms> [<arrow> <terms> …]
+    const parsed = parseEdgeLine(line);
+    if (typeof parsed === "string") {
+      errors.push({ line: lineNo, message: parsed });
+      continue;
+    }
+    if (parsed) {
+      let bad = false;
+      for (let g = 0; g < parsed.links.length && !bad; g++) {
+        for (const from of parsed.groups[g]!) {
+          for (const to of parsed.groups[g + 1]!) {
+            if (from.id === to.id) {
+              errors.push({ line: lineNo, message: "self-loops are not supported" });
+              bad = true;
+              break;
+            }
+          }
+          if (bad) break;
         }
-        label = unescapeLabel(unquote(rest.slice(1, end)));
-        rest = rest.slice(end + 1).trim();
       }
-      const from = parseNodeTerm(left);
-      const to = parseNodeTerm(rest);
-      if (!from || !to) {
-        errors.push({ line: lineNo, message: "cannot parse edge endpoints" });
-        continue;
+      if (bad) continue;
+      for (const group of parsed.groups) for (const ref of group) declare(ref);
+      for (let g = 0; g < parsed.links.length; g++) {
+        const link = parsed.links[g]!;
+        for (const from of parsed.groups[g]!) {
+          for (const to of parsed.groups[g + 1]!) {
+            edgeSeq += 1;
+            edges.push({
+              id: `edge-${edgeSeq}` as EdgeId,
+              from: from.id as NodeId,
+              to: to.id as NodeId,
+              arrow: link.arrow,
+              ...(link.label !== undefined ? { label: link.label } : {}),
+            });
+          }
+        }
       }
-      if (from.id === to.id) {
-        errors.push({ line: lineNo, message: "self-loops are not supported" });
-        continue;
-      }
-      declare(from);
-      declare(to);
-      edgeSeq += 1;
-      edges.push({
-        id: `edge-${edgeSeq}` as EdgeId,
-        from: from.id as NodeId,
-        to: to.id as NodeId,
-        arrow: a.arrow,
-        ...(label !== undefined ? { label } : {}),
-      });
       continue;
     }
 

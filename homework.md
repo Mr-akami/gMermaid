@@ -2,6 +2,20 @@
 
 レビュー・実装の過程で意図的に先送りした項目。着手時は `docs/adr/0001-unidirectional-sync-pipeline.md` と `CONTEXT.md` の規約に従うこと。
 
+> **2026-08-17: 全項目対応済み。** 実装メモ:
+> - pan/zoom: `usePointerGestures`(renderer)が viewport を transform で適用。背景ドラッグ=パン、ホイール=カーソル中心ズーム。viewport は各エディタの ViewState(選択とは別 state、選択リセットでカメラが飛ばない)。
+> - 自己関連: `addRelation` 許可 + layout がノード右側へ矩形迂回パスを合成(本数×オフセット、size.w に張り出し・ラベル込み)。自クラスへのドロップでも作成可。
+> - loop spec: `Branch.loopBounds?: {min,max}` 構造化。分解は parser の import 1回のみ、codegen が `(min,max) exit` を組み立て。
+> - ポインタ共有フック: 3 View とも `usePointerGestures`(PADDING パラメータ化)。
+> - L2: flowchart の self-loop 拒否に理由表示追加。自己関連は許可に倒した。
+> - C5: `MEMBER_NAME_RE` を ir に置き `setMembers` で検証、同値時は identity 保存。
+> - C6: `omitUndefined` を ir に置き class/sequence actions で使用。
+> - 2a: focused 中 `base !== code` でバナー(破棄 / このコードで上書き)。破損/stale draft 中は autosave 停止。
+> - S1-3: 破損データは `:broken-*` 退避に加え CodePane draft に流し込みエラー表示。
+> - キー粒度: `gmermaid:doc:` へ分離、旧キーは初回に一括移行。
+> - タブ間同期: FilesPanel が `storage` イベント購読。エディタ側は last-write-wins を既知制約として persistence.ts に明記。
+> - C4: `mermaid-integration.test.ts` で mermaid.js 本体パースを検証(`|` 入りエッジラベル含む、jsdom 環境)。
+
 ## 機能
 
 ### pan / zoom

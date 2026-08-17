@@ -9,13 +9,14 @@ import {
 import { layoutFlowchart } from "@gmermaid/layout";
 import { flowchartToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseFlowchart } from "@gmermaid/mermaid-parser";
-import { FlowchartView } from "@gmermaid/renderer";
+import { FlowchartView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { PropertyWindow } from "./PropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): FlowchartIR {
   let ir = emptyFlowchart("TB");
@@ -33,16 +34,26 @@ interface ViewState {
   readonly connectFrom?: NodeId;
 }
 
-const STORAGE_KEY = "gmermaid:flowchart";
+const STORAGE_KEY = "gmermaid:doc:flowchart";
 
-export interface EditorProps {
+export interface EditorProps extends EditorRuntimeProps {
   /** External replace request from the Files panel (null code = sample). */
   readonly loadRequest?: { readonly seq: number; readonly code: string | null } | undefined;
 }
 
-export function FlowchartEditor({ loadRequest }: EditorProps) {
-  const h = useDiagramHistory(() => loadInitial(STORAGE_KEY, parseFlowchart, initialIR), applyFlowchartAction);
+export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone", onCodeChange, onValidityChange }: EditorProps) {
+  // recoveredText: stored data that stopped parsing, poured into the code
+  // pane as a broken draft for manual repair (S1-3)
+  const [initial] = useState(() => {
+    if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseFlowchart, initialIR);
+    const parsed = parseFlowchart(initialCode);
+    return parsed.ok ? { ir: parsed.ir } : { ir: initialIR(), recoveredText: initialCode };
+  });
+  const h = useDiagramHistory(() => initial.ir, applyFlowchartAction);
   const [view, setView] = useState<ViewState>({});
+  // pan/zoom is ViewState (ADR 0001): held apart from the selection so a
+  // selection reset never snaps the camera; undefined = default framing
+  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // drag-to-connect rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   const ir = h.ir;
@@ -50,7 +61,11 @@ export function FlowchartEditor({ loadRequest }: EditorProps) {
   // The pipeline, spelled out: IR → layout → code. render happens below in JSX.
   const layout = useMemo(() => layoutFlowchart(ir, measurer), [ir]);
   const code = useMemo(() => flowchartToMermaid(ir), [ir]);
-  useAutosave(STORAGE_KEY, code);
+  // autosave pauses while the code pane shows a broken/stale draft, so a
+  // recovered draft is never clobbered by the sample it fell back to
+  const [codeValid, setCodeValid] = useState(initial.recoveredText === undefined);
+  useAutosave(STORAGE_KEY, code, mode === "standalone" && codeValid);
+  useEffect(() => onCodeChange?.(code), [code, onCodeChange]);
 
   useEffect(() => {
     if (!loadRequest) return;
@@ -104,9 +119,18 @@ export function FlowchartEditor({ loadRequest }: EditorProps) {
     setView({ selectedId: edgeId });
   }
 
+  // reducer rejections must be visible, not silent no-ops (L2)
+  const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
+
   function handleElementClick(id: string) {
     const targetNode = ir.nodes.find((n) => n.id === id);
     if (view.connectFrom !== undefined && targetNode) {
+      if (view.connectFrom === targetNode.id) {
+        setRejectHint("self-loop edges are not supported");
+        setView({ selectedId: id });
+        return;
+      }
+      setRejectHint(undefined);
       h.dispatch({ type: "addEdge", id: newId("edge"), from: view.connectFrom, to: targetNode.id });
     }
     setView({ selectedId: id });
@@ -115,8 +139,8 @@ export function FlowchartEditor({ loadRequest }: EditorProps) {
   return (
     <>
       <div className="toolbar">
-        <button onClick={openFile}>Open…</button>
-        <button onClick={() => saveMmd(code, "flowchart.mmd")}>Save…</button>
+        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
+        {mode === "standalone" && <button onClick={() => saveMmd(code, "flowchart.mmd")}>Save…</button>}
         <button onClick={addNode}>+ Node</button>
         <button
           disabled={selectedNode === undefined}
@@ -136,12 +160,15 @@ export function FlowchartEditor({ loadRequest }: EditorProps) {
           <option value="RL">Right→Left</option>
         </select>
         {view.connectFrom !== undefined && <span className="hint">click a target node to connect…</span>}
+        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
       <div className="canvas">
         <ErrorBoundary>
           <FlowchartView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
+            viewport={viewport}
+            onViewportChange={setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={() => setView({})}
             onConnectDrag={handleConnectDrag}
@@ -177,6 +204,11 @@ export function FlowchartEditor({ loadRequest }: EditorProps) {
         onCommit={(next) => h.pushIR(next, "code-pane")}
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
+        initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
+        onValidityChange={(valid) => {
+          setCodeValid(valid);
+          onValidityChange?.(valid);
+        }}
       />
     </>
   );

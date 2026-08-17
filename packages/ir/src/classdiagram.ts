@@ -26,7 +26,10 @@ export type RelationType =
   | "aggregation"
   | "association"
   | "dependency"
-  | "realization";
+  | "realization"
+  // plain links, no arrowhead: `--` (solid) and `..` (dashed)
+  | "linkSolid"
+  | "linkDashed";
 
 export interface ClassRelation {
   readonly id: RelationId;
@@ -38,8 +41,12 @@ export interface ClassRelation {
   readonly toCardinality?: string;
 }
 
+export type ClassDirection = "TB" | "LR" | "BT" | "RL";
+
 export interface ClassIR {
   readonly kind: "class";
+  /** absent = mermaid default (TB) */
+  readonly direction?: ClassDirection;
   readonly classes: readonly ClassNode[];
   readonly relations: readonly ClassRelation[];
 }
