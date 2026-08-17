@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./editor": "./src/App.tsx",
     "./review": "./src/review.ts",
     "./style.css": "./src/style.css"
   },

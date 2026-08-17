@@ -76,7 +76,7 @@ jobs:
           pnpm test
           pnpm typecheck
 
-      - run: pnpm --filter @gmermaid/mcp build
+      - run: pnpm --filter gmermaid build
 
       - run: pnpm --dir packages/mcp pack --pack-destination ../../artifacts
 

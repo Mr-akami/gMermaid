@@ -1,7 +1,7 @@
 {
-  "name": "@gmermaid/mcp",
+  "name": "gmermaid",
   "version": "2026.817.0",
-  "description": "Local MCP Apps Mermaid review editor",
+  "description": "Local GUI editor and MCP review server for Mermaid diagrams",
   "license": "MIT",
   "keywords": ["mcp", "mermaid", "diagram", "editor", "llm"],
   "homepage": "https://github.com/Mr-akami/gMermaid#readme",
@@ -15,11 +15,12 @@
   },
   "type": "module",
   "bin": {
+    "gmermaid": "dist/cli.js",
     "gmermaid-mcp": "dist/cli.js"
   },
   "files": ["dist", "README.md"],
   "scripts": {
-    "build": "vite build && tsup",
+    "build": "vite build && vite build --config vite.editor.config.ts && tsup",
     "prepack": "pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
