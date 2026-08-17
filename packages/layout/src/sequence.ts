@@ -26,7 +26,8 @@ const NOTE_GAP = 12;
 const FRAG_BOTTOM = 10;
 const FRAG_GAP_AFTER = 16;
 const FRAG_DIVIDER = 38;
-const FRAG_SIDE_PAD = 12;
+const FRAG_SIDE_PAD = 20; // frame padding around its involved lifelines
+const FRAG_NEST_PAD = 12; // extra margin a parent keeps around child frames
 const SELF_MSG_EXTRA = 14;
 const MIN_GAP = 60;
 const BOTTOM_MARGIN = 24;
@@ -147,7 +148,26 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
       }
       lastMessage = null;
 
-      // fragment frame spans the lifelines its messages touch (all, if empty)
+      // Frames are sized bottom-up: children are laid out first, then the
+      // parent hugs its involved lifelines AND encloses every child frame
+      // with a small nesting margin — so nested fragments never poke out,
+      // and a frame stays narrow enough not to cover uninvolved lifelines.
+      const top = y;
+      y += FRAG_TOP;
+      const childStart = fragments.length;
+      const branchMeta: { id: BranchBand["id"]; condition: string; dividerY?: number; condY: number }[] = [];
+      e.branches.forEach((branch, bi) => {
+        if (bi > 0) {
+          const dividerY = y + 4;
+          y += FRAG_DIVIDER;
+          branchMeta.push({ id: branch.id, condition: branch.condition, dividerY, condY: dividerY + 17 });
+        } else {
+          branchMeta.push({ id: branch.id, condition: branch.condition, condY: top + 14 });
+        }
+        walk(branch.events, depth + 1, { kind: "branch", branchId: branch.id });
+      });
+      y += FRAG_BOTTOM;
+
       const involved = lifelinesOf(e.branches.flatMap((b) => [...b.events]));
       const involvedXs =
         involved.size > 0
@@ -155,33 +175,22 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
           : xs.length > 0
             ? xs
             : [SIDE_MARGIN, SIDE_MARGIN + 200];
-      const pad = FRAG_SIDE_PAD * (depth + 1) + 30;
-      const left = Math.min(...involvedXs) - pad;
-      const right = Math.max(...involvedXs) + pad;
+      let left = Math.min(...involvedXs) - FRAG_SIDE_PAD;
+      let right = Math.max(...involvedXs) + FRAG_SIDE_PAD;
+      // fragments pushed while walking the branches are this frame's
+      // descendants (children push before their parent)
+      for (let ci = childStart; ci < fragments.length; ci++) {
+        const c = fragments[ci]!;
+        left = Math.min(left, c.rect.x - FRAG_NEST_PAD);
+        right = Math.max(right, c.rect.x + c.rect.w + FRAG_NEST_PAD);
+      }
 
-      const top = y;
-      y += FRAG_TOP;
-      const branches: BranchBand[] = [];
-      e.branches.forEach((branch, bi) => {
-        if (bi > 0) {
-          const dividerY = y + 4;
-          y += FRAG_DIVIDER;
-          branches.push({
-            id: branch.id,
-            condition: branch.condition,
-            conditionPos: { x: left + 10, y: dividerY + 17 },
-            dividerY,
-          });
-        } else {
-          branches.push({
-            id: branch.id,
-            condition: branch.condition,
-            conditionPos: { x: left + 52, y: top + 14 },
-          });
-        }
-        walk(branch.events, depth + 1, { kind: "branch", branchId: branch.id });
-      });
-      y += FRAG_BOTTOM;
+      const branches: BranchBand[] = branchMeta.map((b) => ({
+        id: b.id,
+        condition: b.condition,
+        conditionPos: { x: b.dividerY !== undefined ? left + 10 : left + 52, y: b.condY },
+        ...(b.dividerY !== undefined ? { dividerY: b.dividerY } : {}),
+      }));
 
       fragments.push({
         id: e.id,

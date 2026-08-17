@@ -64,6 +64,48 @@ describe("layoutSequence", () => {
     expect(frame.rect.x + frame.rect.w).toBeGreaterThan(xc);
   });
 
+  it("parents fully enclose nested fragment frames", () => {
+    const nested: SequenceIR = {
+      ...ir,
+      events: [
+        {
+          kind: "fragment",
+          id: "outer" as FragmentId,
+          fragmentKind: "alt",
+          branches: [
+            {
+              id: "ob" as BranchId,
+              condition: "c",
+              events: [
+                {
+                  kind: "fragment",
+                  id: "inner" as FragmentId,
+                  fragmentKind: "opt",
+                  branches: [
+                    {
+                      id: "ib" as BranchId,
+                      condition: "",
+                      events: [
+                        { kind: "message", id: "im" as MessageId, from: L("a"), to: L("c"), label: "wide", arrow: "solid" },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = layoutSequence(nested, fixedWidthMeasurer());
+    const outer = result.fragments.find((f) => f.id === "outer")!;
+    const inner = result.fragments.find((f) => f.id === "inner")!;
+    expect(outer.rect.x).toBeLessThan(inner.rect.x);
+    expect(outer.rect.x + outer.rect.w).toBeGreaterThan(inner.rect.x + inner.rect.w);
+    expect(outer.rect.y).toBeLessThan(inner.rect.y);
+    expect(outer.rect.y + outer.rect.h).toBeGreaterThan(inner.rect.y + inner.rect.h);
+  });
+
   it("returns pure JSON data (ADR 0001 guard)", () => {
     const result = layoutSequence(ir, fixedWidthMeasurer());
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);

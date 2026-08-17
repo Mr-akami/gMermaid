@@ -8,7 +8,7 @@ exports[`layoutSequence > matches the committed golden layout 1`] = `
         {
           "condition": "ok",
           "conditionPos": {
-            "x": 65,
+            "x": 87,
             "y": 126,
           },
           "id": "br1",
@@ -16,7 +16,7 @@ exports[`layoutSequence > matches the committed golden layout 1`] = `
         {
           "condition": "fail",
           "conditionPos": {
-            "x": 23,
+            "x": 45,
             "y": 211,
           },
           "dividerY": 194,
@@ -29,13 +29,13 @@ exports[`layoutSequence > matches the committed golden layout 1`] = `
       "labelTab": {
         "h": 20,
         "w": 44,
-        "x": 13,
+        "x": 35,
         "y": 112,
       },
       "rect": {
         "h": 164,
-        "w": 375,
-        "x": 13,
+        "w": 331,
+        "x": 35,
         "y": 112,
       },
     },
