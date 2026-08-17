@@ -4,6 +4,7 @@ import {
   emptyStateDiagram,
   newStateId,
   newId,
+  reparentRejection,
   type StateIR,
   type StateId,
 } from "@gmermaid/ir";
@@ -39,6 +40,10 @@ function initialIR(): StateIR {
 interface ViewState {
   readonly selectedId?: string;
   readonly transitionFrom?: StateId;
+  /** Composite membership picker: the state waiting for its new parent.
+   * Click-based (like transitionFrom) — a drag gesture would collide with
+   * drag-to-connect, which every state already owns. */
+  readonly moveInto?: StateId;
 }
 
 const STORAGE_KEY = "gmermaid:doc:state";
@@ -160,13 +165,41 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
     connect(from.id, target.id as StateId);
   }
 
+  // reducer rejections must be visible, not silent no-ops (L2)
+  const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
+
+  function moveInto(id: StateId, parent: StateId | null) {
+    const reason = reparentRejection(ir, id, parent);
+    if (reason !== undefined) {
+      setRejectHint(reason);
+      setView({ selectedId: id });
+      return;
+    }
+    setRejectHint(undefined);
+    h.dispatch({ type: "setStateParent", id, parent });
+    setView({ selectedId: id });
+  }
+
   function handleElementClick(id: string) {
     const target = ir.states.find((s) => s.id === id);
+    if (view.moveInto !== undefined && target) {
+      moveInto(view.moveInto, target.id);
+      return;
+    }
     if (view.transitionFrom !== undefined && target && target.id !== view.transitionFrom) {
       connect(view.transitionFrom, target.id);
       return;
     }
     setView({ selectedId: id });
+  }
+
+  function handleBackgroundClick() {
+    // in move mode the background means "take it out to the top level"
+    if (view.moveInto !== undefined) {
+      moveInto(view.moveInto, null);
+      return;
+    }
+    setView({});
   }
 
   return (
@@ -187,6 +220,12 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         >
           → Transition from selected
         </button>
+        <button
+          disabled={selectedState === undefined}
+          onClick={() => selectedState && setView({ selectedId: selectedState.id, moveInto: selectedState.id })}
+        >
+          ⊂ Move into…
+        </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
         <select
@@ -199,6 +238,8 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
           <option value="RL">Right→Left</option>
         </select>
         {view.transitionFrom !== undefined && <span className="hint">click a target state…</span>}
+        {view.moveInto !== undefined && <span className="hint">click the container state (background = top level)…</span>}
+        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
       <div className="canvas">
         <ErrorBoundary>
@@ -208,7 +249,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
             viewport={viewport}
             onViewportChange={setViewport}
             onElementClick={handleElementClick}
-            onBackgroundClick={() => setView({})}
+            onBackgroundClick={handleBackgroundClick}
             onConnectDrag={handleConnectDrag}
             onConnectDrop={handleConnectDrop}
             connectLine={connectLine}

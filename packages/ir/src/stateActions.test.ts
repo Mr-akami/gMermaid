@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StateId, TransitionId } from "./ids";
 import type { StateIR } from "./statediagram";
-import { applyStateAction, newStateId } from "./stateActions";
+import { applyStateAction, newStateId, reparentRejection } from "./stateActions";
 
 const S = (s: string) => s as StateId;
 const T = (s: string) => s as TransitionId;
@@ -81,6 +81,34 @@ describe("applyStateAction", () => {
     expect(inner.states.filter((s) => s.role === "start")).toHaveLength(2);
     // …but a second root-level start is still rejected
     expect(applyStateAction(inner, { type: "addState", state: { id: S("s2"), label: "", role: "start" } })).toBe(inner);
+  });
+
+  it("setStateParent nests, un-nests and turns the target into a composite", () => {
+    const nested = applyStateAction(base, { type: "setStateParent", id: S("A"), parent: S("B") });
+    expect(nested.states.find((s) => s.id === "A")).toMatchObject({ parent: "B" });
+    // background = top level: parent field disappears entirely
+    const out = applyStateAction(nested, { type: "setStateParent", id: S("A"), parent: null });
+    expect("parent" in out.states.find((s) => s.id === "A")!).toBe(false);
+    // identity on no-op (already at top level)
+    expect(applyStateAction(out, { type: "setStateParent", id: S("A"), parent: null })).toBe(out);
+  });
+
+  it("reparentRejection names the reason for every invalid move", () => {
+    expect(reparentRejection(base, S("A"), S("A"))).toMatch(/itself/);
+    expect(reparentRejection(base, S("A"), S("state_start"))).toMatch(/normal state/);
+    expect(reparentRejection(base, S("A"), S("zzz"))).toMatch(/unknown target/);
+    // cycle: B inside A, then A into B
+    const nested = applyStateAction(base, { type: "setStateParent", id: S("B"), parent: S("A") });
+    expect(reparentRejection(nested, S("A"), S("B"))).toMatch(/own child/);
+    expect(applyStateAction(nested, { type: "setStateParent", id: S("A"), parent: S("B") })).toBe(nested);
+    // scoped [*] uniqueness: two starts cannot share a container
+    const twoStarts = applyStateAction(base, {
+      type: "addState",
+      state: { id: S("s_in"), label: "", role: "start", parent: S("A") },
+    });
+    expect(reparentRejection(twoStarts, S("state_start"), S("A"))).toMatch(/already has a start/);
+    // a legal move has no reason
+    expect(reparentRejection(base, S("A"), S("B"))).toBeUndefined();
   });
 
   it("note actions: add requires a target, update/remove are identity-preserving", () => {
