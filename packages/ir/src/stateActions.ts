@@ -18,6 +18,8 @@ export type StateAction =
   | { type: "addState"; state: StateNode }
   | { type: "removeState"; id: StateId }
   | { type: "updateState"; id: StateId; label?: string }
+  // composite membership: null = move to top level
+  | { type: "setStateParent"; id: StateId; parent: StateId | null }
   | { type: "setDirection"; direction: StateDirection }
   | { type: "addTransition"; transition: StateTransition }
   | { type: "updateTransition"; id: TransitionId; label?: string }
@@ -27,6 +29,30 @@ export type StateAction =
   | { type: "removeStateNote"; id: NoteId };
 
 const norm = (v: string | undefined) => (v === "" ? undefined : v);
+
+/** Why re-parenting `id` under `parent` is not allowed, or undefined when it
+ * is. Shared by the reducer (reject) and the UI (disable + show the reason —
+ * a silent no-op would read as "the button does nothing"). */
+export function reparentRejection(ir: StateIR, id: StateId, parent: StateId | null): string | undefined {
+  const s = ir.states.find((x) => x.id === id);
+  if (!s) return "unknown state";
+  if (parent === null) return undefined;
+  if (parent === id) return "cannot move a state into itself";
+  const target = ir.states.find((x) => x.id === parent);
+  if (!target) return "unknown target state";
+  if (target.role !== "normal") return "only a normal state can contain states";
+  // the target must not live inside the moved state (cycle)
+  let cur: StateId | undefined = target.parent;
+  while (cur !== undefined) {
+    if (cur === id) return "cannot move a state into its own child";
+    cur = ir.states.find((x) => x.id === cur)?.parent;
+  }
+  // [*] is scoped: one start and one end per container
+  if ((s.role === "start" || s.role === "end") && ir.states.some((x) => x.id !== id && x.role === s.role && x.parent === parent)) {
+    return `the target already has a ${s.role} [*]`;
+  }
+  return undefined;
+}
 
 /** The removed state plus every descendant (composite children cascade). */
 function withDescendants(ir: StateIR, root: StateId): Set<StateId> {
@@ -78,6 +104,17 @@ export function applyStateAction(ir: StateIR, action: StateAction): StateIR {
       const label = action.label ?? s.label;
       if (label === s.label) return ir;
       return { ...ir, states: ir.states.map((x) => (x.id === action.id ? { ...x, label } : x)) };
+    }
+
+    case "setStateParent": {
+      if (reparentRejection(ir, action.id, action.parent) !== undefined) return ir;
+      const parent = action.parent ?? undefined;
+      const s = ir.states.find((x) => x.id === action.id)!;
+      if (s.parent === parent) return ir;
+      return {
+        ...ir,
+        states: ir.states.map((x) => (x.id === action.id ? omitUndefined({ ...x, parent }) : x)),
+      };
     }
 
     case "setDirection":
