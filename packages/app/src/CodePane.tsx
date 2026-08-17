@@ -1,6 +1,5 @@
-import { useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { Transaction } from "@codemirror/state";
+import { useCallback, useRef, useState } from "react";
+import CodeMirror, { ExternalChange } from "@uiw/react-codemirror";
 import type { ViewUpdate } from "@codemirror/view";
 import type { ParseError, ParseResult } from "@gmermaid/mermaid-parser";
 
@@ -30,22 +29,27 @@ export function CodePane<T>({ code, parse, onCommit, onEditStart, onEditEnd }: C
   const [errors, setErrors] = useState<readonly ParseError[]>([]);
   const active = draft !== null && (focused || draft.base === code) ? draft : null;
 
-  function handleChange(value: string, viewUpdate: ViewUpdate) {
-    // CodeMirror also fires onChange when WE replace the document (mirroring
-    // canvas edits). Only user-initiated transactions may commit to the IR —
-    // otherwise every canvas edit is followed by a spurious reparse that
-    // regenerates ids and clobbers the edit cycle.
-    const isUserEdit = viewUpdate.transactions.some((tr) => tr.annotation(Transaction.userEvent) !== undefined);
-    if (!isUserEdit) return;
-    setDraft({ text: value, base: code });
-    const result = parse(value);
+  // latest-ref: keeps handleChange referentially stable so the CodeMirror
+  // wrapper doesn't reconfigure its extensions on every parent render
+  const latest = useRef({ code, parse, onCommit });
+  latest.current = { code, parse, onCommit };
+
+  const handleChange = useCallback((value: string, viewUpdate: ViewUpdate) => {
+    // Reject only KNOWN-external transactions (our own value-prop syncs,
+    // tagged by the wrapper with ExternalChange). Filtering the other way
+    // round ("accept only userEvent") would silently drop user edits from
+    // any extension that forgets the annotation.
+    const isExternal = viewUpdate.transactions.some((tr) => tr.annotation(ExternalChange) !== undefined);
+    if (isExternal) return;
+    setDraft({ text: value, base: latest.current.code });
+    const result = latest.current.parse(value);
     if (result.ok) {
       setErrors([]);
-      onCommit(result.ir);
+      latest.current.onCommit(result.ir);
     } else {
       setErrors(result.errors);
     }
-  }
+  }, []);
 
   return (
     <div className="code-pane">

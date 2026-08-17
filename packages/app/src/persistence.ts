@@ -78,13 +78,19 @@ export function readStoredCode(raw: string): { code: string; updatedAt: number |
   return { code: raw, updatedAt: null };
 }
 
-/** Restore a diagram from localStorage, or fall back to a sample. */
+/** Restore a diagram from localStorage, or fall back to a sample.
+ * If the stored code no longer parses (grammar changed between versions),
+ * it is MOVED to a `:broken-<timestamp>` key first — otherwise the very
+ * first autosave would overwrite it with the sample and destroy the data.
+ * Broken entries stay visible in the Files panel for manual recovery. */
 export function loadInitial<T>(storageKey: string, parse: (code: string) => ParseResult<T>, sample: () => T): T {
   try {
     const stored = localStorage.getItem(storageKey);
     if (stored !== null) {
       const result = parse(readStoredCode(stored).code);
       if (result.ok) return result.ir;
+      localStorage.setItem(`${storageKey}:broken-${Date.now()}`, stored);
+      localStorage.removeItem(storageKey);
     }
   } catch {
     // storage unavailable (private mode etc.) — just start from the sample
@@ -92,14 +98,19 @@ export function loadInitial<T>(storageKey: string, parse: (code: string) => Pars
   return sample();
 }
 
-/** Mirror the canonical code to localStorage whenever the IR changes. */
+/** Mirror the canonical code to localStorage whenever the IR changes.
+ * Debounced: localStorage writes are synchronous and per-keystroke saves
+ * would stall the main thread on large diagrams. */
 export function useAutosave(storageKey: string, code: string): void {
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify({ code, updatedAt: Date.now() } satisfies StoredValue));
-    } catch {
-      // best effort only
-    }
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({ code, updatedAt: Date.now() } satisfies StoredValue));
+      } catch {
+        // best effort only
+      }
+    }, 500);
+    return () => clearTimeout(t);
   }, [storageKey, code]);
 }
 

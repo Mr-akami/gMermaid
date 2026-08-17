@@ -38,7 +38,7 @@ export function FilesPanel({ onLoad, onDeleted, onClose }: FilesPanelProps) {
                 <th>Key</th>
                 <th>Kind</th>
                 <th>Updated</th>
-                <th>Size</th>
+                <th>Chars</th>
                 <th />
               </tr>
             </thead>
@@ -48,7 +48,7 @@ export function FilesPanel({ onLoad, onDeleted, onClose }: FilesPanelProps) {
                   <td title={e.code.slice(0, 500)}>{e.key}</td>
                   <td>{e.kind}</td>
                   <td>{fmtTime(e.updatedAt)}</td>
-                  <td>{e.bytes} B</td>
+                  <td>{e.bytes}</td>
                   <td>
                     <button disabled={e.kind === "unknown"} onClick={() => onLoad(e)}>Load</button>{" "}
                     <button className="danger" onClick={() => handleDelete(e)}>Delete</button>
