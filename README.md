@@ -35,3 +35,20 @@ pnpm test
 pnpm typecheck
 pnpm --filter @gmermaid/mcp build
 ```
+
+## Releases
+
+Releases of `@gmermaid/mcp` use calendar versions such as `2026.817.0`. tagpr
+keeps a release pull request up to date on `main`. Merging that pull request
+creates the tag and GitHub Release, runs the full verification suite, and
+publishes the package to npm through trusted publishing.
+
+The version format is `YYYY.MMDD.MICRO`; `MICRO` increments when more than one
+release is made on the same day.
+
+For release setup and first-publish instructions, see
+[`docs/releasing.md`](docs/releasing.md).
+
+## License
+
+MIT

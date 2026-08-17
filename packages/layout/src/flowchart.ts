@@ -1,15 +1,20 @@
 import dagre from "@dagrejs/dagre";
-import type { FlowchartIR } from "@gmermaid/ir";
+import type { FlowchartEndpoint, FlowchartIR, SubgraphId } from "@gmermaid/ir";
 import type { TextMeasurer } from "./measurer";
-import type { EdgePath, FlowchartLayout, NodeBox, Point } from "./result";
+import type { EdgePath, FlowchartLayout, NodeBox, Point, SubgraphBox } from "./result";
+import { clipPolylineAtRect } from "./compound";
 
 const NODE_PADDING_X = 16;
 const NODE_PADDING_Y = 10;
 const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
+// visual breathing room around a cluster; the extra top holds the title
+const SUB_PAD = 8;
+const SUB_TITLE_H = 24;
 
 export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): FlowchartLayout {
   // multigraph: parallel edges between the same pair are keyed by edge id.
-  const g = new dagre.graphlib.Graph({ multigraph: true });
+  // compound: subgraphs become dagre clusters.
+  const g = new dagre.graphlib.Graph({ multigraph: true, compound: true });
   g.setGraph({ rankdir: ir.direction, nodesep: 40, ranksep: 50 });
   g.setDefaultEdgeLabel(() => ({}));
 
@@ -24,11 +29,42 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
     }
     g.setNode(node.id, { width: w, height: h });
   }
+
+  const memberCount = new Map<SubgraphId, number>();
+  for (const node of ir.nodes) if (node.parent !== undefined) memberCount.set(node.parent, (memberCount.get(node.parent) ?? 0) + 1);
+  for (const s of ir.subgraphs) if (s.parent !== undefined) memberCount.set(s.parent, (memberCount.get(s.parent) ?? 0) + 1);
+
+  // an empty subgraph is not a cluster for dagre — it becomes a plain box
+  const emptySubgraphs = new Set(ir.subgraphs.filter((s) => (memberCount.get(s.id) ?? 0) === 0).map((s) => s.id));
+  for (const s of ir.subgraphs) {
+    if (emptySubgraphs.has(s.id)) {
+      const m = measure.measure(s.label, LABEL_STYLE);
+      g.setNode(s.id, { width: m.w + NODE_PADDING_X * 2, height: SUB_TITLE_H + NODE_PADDING_Y * 2 });
+    } else {
+      g.setNode(s.id, {});
+    }
+  }
+  for (const node of ir.nodes) if (node.parent !== undefined) g.setParent(node.id, node.parent);
+  for (const s of ir.subgraphs) if (s.parent !== undefined && !emptySubgraphs.has(s.id)) g.setParent(s.id, s.parent);
+
+  // dagre cannot attach edges to clusters: route them to a representative
+  // leaf inside, and clip the drawn path at the cluster border afterwards
+  const isCluster = (id: FlowchartEndpoint): boolean =>
+    ir.subgraphs.some((s) => (s.id as string) === (id as string)) && !emptySubgraphs.has(id as SubgraphId);
+  const representative = (id: SubgraphId): string => {
+    const node = ir.nodes.find((n) => n.parent === id);
+    if (node) return node.id;
+    const child = ir.subgraphs.find((s) => s.parent === id);
+    if (child) return emptySubgraphs.has(child.id) ? child.id : representative(child.id);
+    throw new Error(`layoutFlowchart: cluster ${id} has no members`);
+  };
+  const anchor = (id: FlowchartEndpoint): string => (isCluster(id) ? representative(id as SubgraphId) : (id as string));
+
   for (const edge of ir.edges) {
-    if (!g.hasNode(edge.from) || !g.hasNode(edge.to)) {
+    if (!g.hasNode(edge.from as string) || !g.hasNode(edge.to as string)) {
       throw new Error(`layoutFlowchart: edge ${edge.id} references a missing node`);
     }
-    g.setEdge(edge.from, edge.to, {}, edge.id);
+    g.setEdge(anchor(edge.from), anchor(edge.to), {}, edge.id);
   }
 
   dagre.layout(g);
@@ -48,9 +84,40 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
     };
   });
 
+  // cluster rects come back tight around members — expand for border + title
+  const depth = (s: { parent?: SubgraphId }): number => {
+    let d = 0;
+    let cur = s.parent;
+    while (cur !== undefined) {
+      d += 1;
+      cur = ir.subgraphs.find((x) => x.id === cur)?.parent;
+    }
+    return d;
+  };
+  const subgraphRect = new Map<SubgraphId, { x: number; y: number; w: number; h: number }>();
+  for (const s of ir.subgraphs) {
+    const pos = g.node(s.id);
+    const grow = emptySubgraphs.has(s.id) ? 0 : SUB_PAD;
+    const growTop = emptySubgraphs.has(s.id) ? 0 : SUB_TITLE_H;
+    subgraphRect.set(s.id, {
+      x: pos.x - pos.width / 2 - grow,
+      y: pos.y - pos.height / 2 - growTop,
+      w: pos.width + grow * 2,
+      h: pos.height + growTop + grow,
+    });
+  }
+  const subgraphs: SubgraphBox[] = ir.subgraphs.map((s) => ({
+    id: s.id,
+    label: s.label,
+    rect: subgraphRect.get(s.id)!,
+    depth: depth(s),
+  }));
+
   const edges: EdgePath[] = ir.edges.map((edge) => {
-    const e = g.edge(edge.from, edge.to, edge.id);
-    const points: Point[] = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
+    const e = g.edge(anchor(edge.from), anchor(edge.to), edge.id);
+    let points: Point[] = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
+    if (isCluster(edge.to)) points = clipPolylineAtRect(points, subgraphRect.get(edge.to as SubgraphId)!, "to");
+    if (isCluster(edge.from)) points = clipPolylineAtRect(points, subgraphRect.get(edge.from as SubgraphId)!, "from");
     return {
       id: edge.id,
       points,
@@ -62,11 +129,18 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
   });
 
   const graph = g.graph();
+  let w = graph.width ?? 0;
+  let h = graph.height ?? 0;
+  for (const s of subgraphs) {
+    w = Math.max(w, s.rect.x + s.rect.w);
+    h = Math.max(h, s.rect.y + s.rect.h);
+  }
   return {
     kind: "flowchart",
-    size: { w: graph.width ?? 0, h: graph.height ?? 0 },
+    size: { w, h },
     nodes,
     edges,
+    subgraphs,
   };
 }
 

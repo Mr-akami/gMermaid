@@ -1,4 +1,4 @@
-import type { FlowchartEdge, FlowchartIR, FlowchartNode } from "@gmermaid/ir";
+import type { FlowchartEdge, FlowchartIR, FlowchartNode, FlowchartSubgraph, SubgraphId } from "@gmermaid/ir";
 
 function nodeDecl(node: FlowchartNode): string {
   const label = escapeLabel(node.label);
@@ -63,9 +63,35 @@ function escapeLabel(label: string): string {
 
 export function flowchartToMermaid(ir: FlowchartIR): string {
   const lines = [`flowchart ${ir.direction}`];
+
+  const nodesIn = new Map<SubgraphId | undefined, FlowchartNode[]>();
   for (const node of ir.nodes) {
-    lines.push(`  ${nodeDecl(node)}`);
+    const list = nodesIn.get(node.parent) ?? [];
+    list.push(node);
+    nodesIn.set(node.parent, list);
   }
+  const subgraphsIn = new Map<SubgraphId | undefined, FlowchartSubgraph[]>();
+  for (const s of ir.subgraphs) {
+    const list = subgraphsIn.get(s.parent) ?? [];
+    list.push(s);
+    subgraphsIn.set(s.parent, list);
+  }
+
+  // membership is positional in mermaid text: everything declared inside a
+  // `subgraph … end` block belongs to it, so blocks re-declare their members
+  const emitScope = (container: SubgraphId | undefined, indent: string): void => {
+    for (const node of nodesIn.get(container) ?? []) {
+      lines.push(`${indent}${nodeDecl(node)}`);
+    }
+    for (const s of subgraphsIn.get(container) ?? []) {
+      lines.push(`${indent}subgraph ${s.id}["${escapeLabel(s.label)}"]`);
+      if (s.direction !== undefined) lines.push(`${indent}  direction ${s.direction}`);
+      emitScope(s.id, indent + "  ");
+      lines.push(`${indent}end`);
+    }
+  };
+  emitScope(undefined, "  ");
+
   for (const edge of ir.edges) {
     const arrow = arrowToken(edge);
     // invisible links cannot carry a label in mermaid

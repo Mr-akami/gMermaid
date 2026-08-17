@@ -3,6 +3,7 @@ import type {
   FlowchartEdge,
   FlowchartNode,
   FlowchartNodeShape,
+  FlowchartSubgraph,
 } from "@gmermaid/ir";
 
 // Callbacks carry user intent only (ADR 0001) — the property window never
@@ -10,22 +11,48 @@ import type {
 // onEditStart/onEditEnd bracket a text-editing transaction so one focus
 // session undoes as a single step.
 export interface PropertyWindowProps {
-  readonly element: FlowchartNode | FlowchartEdge;
+  readonly element: FlowchartNode | FlowchartEdge | FlowchartSubgraph;
   readonly onChangeNodeLabel: (label: string) => void;
   readonly onChangeNodeShape: (shape: FlowchartNodeShape) => void;
   readonly onChangeEdgeLabel: (label: string) => void;
   readonly onChangeEdgeArrow: (arrow: FlowchartArrowType) => void;
+  readonly onChangeSubgraphLabel: (label: string) => void;
   readonly onDelete: () => void;
   readonly onEditStart: () => void;
   readonly onEditEnd: () => void;
 }
 
-function isNode(el: FlowchartNode | FlowchartEdge): el is FlowchartNode {
+function isNode(el: PropertyWindowProps["element"]): el is FlowchartNode {
   return "shape" in el;
+}
+
+function isSubgraph(el: PropertyWindowProps["element"]): el is FlowchartSubgraph {
+  return !("shape" in el) && !("arrow" in el);
 }
 
 export function PropertyWindow(props: PropertyWindowProps) {
   const { element, onEditStart, onEditEnd, onDelete } = props;
+
+  if (isSubgraph(element)) {
+    return (
+      <div className="property-window">
+        <h3>Subgraph</h3>
+        <label>
+          Label
+          <input
+            value={element.label}
+            onFocus={onEditStart}
+            onBlur={onEditEnd}
+            onChange={(e) => props.onChangeSubgraphLabel(e.target.value)}
+          />
+        </label>
+        <button className="danger" onClick={onDelete}>
+          Dissolve subgraph
+        </button>
+        <div className="hint">中のノードは残ります(親へ昇格)</div>
+      </div>
+    );
+  }
 
   return (
     <div className="property-window">

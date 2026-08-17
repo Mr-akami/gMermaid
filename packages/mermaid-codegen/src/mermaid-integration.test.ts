@@ -37,10 +37,12 @@ async function expectMermaidAccepts(code: string): Promise<void> {
 const N = (s: string) => s as NodeId;
 const L = (s: string) => s as LifelineId;
 const S = (s: string) => s as import("@gmermaid/ir").StateId;
+const G = (s: string) => s as import("@gmermaid/ir").SubgraphId;
 
 describe("mermaid.js accepts generated flowcharts", () => {
   const base: FlowchartIR = {
     kind: "flowchart",
+  subgraphs: [],
     direction: "TB",
     nodes: [
       { id: N("a"), label: "Start", shape: "rounded" },
@@ -73,11 +75,33 @@ describe("mermaid.js accepts generated flowcharts", () => {
     ] as const;
     const ir: FlowchartIR = {
       kind: "flowchart",
+  subgraphs: [],
       direction: "TB",
       nodes: shapes.map((shape, i) => ({ id: N(`n${i}`), label: `shape ${shape}`, shape })),
       edges: [
         { id: "e1" as EdgeId, from: N("n0"), to: N("n1"), arrow: "invisible" },
         { id: "e2" as EdgeId, from: N("n1"), to: N("n2"), arrow: "open", label: "still visible" },
+      ],
+    };
+    await expectMermaidAccepts(flowchartToMermaid(ir));
+  });
+
+  it("parses nested subgraphs, per-subgraph direction and edges to a subgraph", async () => {
+    const ir: FlowchartIR = {
+      kind: "flowchart",
+      direction: "TB",
+      nodes: [
+        { id: N("a"), label: "A & <b> #1", shape: "rect", parent: G("s1") },
+        { id: N("b"), label: "B", shape: "rounded", parent: G("s2") },
+        { id: N("c"), label: "C", shape: "rect" },
+      ],
+      edges: [
+        { id: "e1" as EdgeId, from: N("c"), to: G("s1"), arrow: "arrow", label: "into the group" },
+        { id: "e2" as EdgeId, from: N("a"), to: N("b"), arrow: "dotted" },
+      ],
+      subgraphs: [
+        { id: G("s1"), label: "Group \"one\"", direction: "LR" },
+        { id: G("s2"), label: "Inner", parent: G("s1") },
       ],
     };
     await expectMermaidAccepts(flowchartToMermaid(ir));
@@ -203,6 +227,7 @@ describe("mermaid.js accepts generated state diagrams", () => {
   it("parses [*] start/end, aliased states, labeled transitions and direction", async () => {
     const ir: StateIR = {
       kind: "state",
+  notes: [],
       direction: "LR",
       states: [
         { id: S("state_start"), label: "", role: "start" },
@@ -215,6 +240,33 @@ describe("mermaid.js accepts generated state diagrams", () => {
         { id: "t1" as TransitionId, from: S("state_start"), to: S("Still") },
         { id: "t2" as TransitionId, from: S("Still"), to: S("Moving"), label: "push > hard" },
         { id: "t3" as TransitionId, from: S("Moving"), to: S("state_end") },
+      ],
+    };
+    await expectMermaidAccepts(stateToMermaid(ir));
+  });
+
+  it("parses composites with scoped [*], choice/fork/join and notes", async () => {
+    const ir: StateIR = {
+      kind: "state",
+      states: [
+        { id: S("state_start"), label: "", role: "start" },
+        { id: S("NS"), label: "Not shooting", role: "normal" },
+        { id: S("Idle"), label: "Idle", role: "normal", parent: S("NS") },
+        { id: S("state_start_NS"), label: "", role: "start", parent: S("NS") },
+        { id: S("c1"), label: "", role: "choice" },
+        { id: S("f1"), label: "", role: "fork" },
+        { id: S("j1"), label: "", role: "join" },
+      ],
+      transitions: [
+        { id: "t1" as TransitionId, from: S("state_start"), to: S("NS") },
+        { id: "t2" as TransitionId, from: S("state_start_NS"), to: S("Idle") },
+        { id: "t3" as TransitionId, from: S("NS"), to: S("c1") },
+        { id: "t4" as TransitionId, from: S("c1"), to: S("f1"), label: "yes > no" },
+        { id: "t5" as TransitionId, from: S("f1"), to: S("j1") },
+      ],
+      notes: [
+        { id: "n1" as NoteId, target: S("NS"), position: "rightOf", text: "safety & <b> #1" },
+        { id: "n2" as NoteId, target: S("c1"), position: "leftOf", text: "pick" },
       ],
     };
     await expectMermaidAccepts(stateToMermaid(ir));

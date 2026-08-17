@@ -3,6 +3,8 @@ import type { EdgeId, FlowchartIR, NodeId } from "@gmermaid/ir";
 import { flowchartToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseFlowchart } from "./flowchart";
 
+const sortById = <T extends { id: string }>(xs: readonly T[]) => [...xs].toSorted((a, b) => a.id.localeCompare(b.id));
+
 describe("parseFlowchart", () => {
   it("parses the subset codegen emits", () => {
     const result = parseFlowchart(
@@ -57,6 +59,7 @@ describe("parseFlowchart", () => {
   it("round-trips: parse(gen(ir)) == ir, and gen is stable across the loop", () => {
     const ir: FlowchartIR = {
       kind: "flowchart",
+  subgraphs: [],
       direction: "LR",
       nodes: [
         { id: "n1" as NodeId, label: 'say "hi" #1', shape: "stadium" },
@@ -90,6 +93,7 @@ describe("parseFlowchart", () => {
     ] as const;
     const ir: FlowchartIR = {
       kind: "flowchart",
+  subgraphs: [],
       direction: "TB",
       nodes: shapes.map((shape, i) => ({ id: `n${i}` as NodeId, label: `s ${shape}`, shape })),
       edges: [{ id: "edge-1" as EdgeId, from: "n0" as NodeId, to: "n1" as NodeId, arrow: "invisible" }],
@@ -122,6 +126,56 @@ describe("parseFlowchart", () => {
       ["maybe", "dotted"],
       ["hard", "thick"],
     ]);
+  });
+
+  it("parses nested subgraphs with titles, direction and edges to a subgraph", () => {
+    const code = `flowchart TB
+  subgraph s1["Group 1"]
+    direction LR
+    a["A"] --> b["B"]
+    subgraph s2["Inner"]
+      c["C"]
+    end
+  end
+  d["D"] --> s1
+  b --> d
+`;
+    const result = parseFlowchart(code);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.subgraphs).toEqual([
+      { id: "s1", label: "Group 1", direction: "LR" },
+      { id: "s2", label: "Inner", parent: "s1" },
+    ]);
+    expect(result.ir.nodes.map((n) => [n.id, n.parent])).toEqual([
+      ["a", "s1"],
+      ["b", "s1"],
+      ["c", "s2"],
+      ["d", undefined],
+    ]);
+    expect(result.ir.edges.map((e) => [e.from, e.to])).toEqual([
+      ["a", "b"],
+      ["d", "s1"], // edge to the subgraph as a whole
+      ["b", "d"],
+    ]);
+    // round trip: blocks regroup members, so node ORDER may shift once —
+    // content must survive, and the text form must be a fixpoint after that
+    const regen = flowchartToMermaid(result.ir);
+    const back = parseFlowchart(regen);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(sortById(back.ir.nodes)).toEqual(sortById(result.ir.nodes));
+    expect(back.ir.edges).toEqual(result.ir.edges);
+    expect(back.ir.subgraphs).toEqual(result.ir.subgraphs);
+    expect(flowchartToMermaid(back.ir)).toBe(regen);
+  });
+
+  it("resolves an edge endpoint declared as a subgraph only later", () => {
+    const result = parseFlowchart("flowchart TB\n  a --> grp\n  subgraph grp[G]\n    b\n  end\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.nodes.map((n) => n.id)).toEqual(["a", "b"]);
+    expect(result.ir.edges[0]).toMatchObject({ from: "a", to: "grp" });
   });
 
   it("does not split `&` inside a bracketed label", () => {

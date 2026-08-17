@@ -3,6 +3,7 @@ import {
   applyFlowchartAction,
   emptyFlowchart,
   newId,
+  type FlowchartEndpoint,
   type FlowchartIR,
   type NodeId,
 } from "@gmermaid/ir";
@@ -94,28 +95,43 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
 
   function addNode() {
     const id = newId("node");
-    h.dispatch({ type: "addNode", node: { id, label: "Node", shape: "rect" } });
+    // a selected subgraph adopts the new node
+    const parent = selectedSubgraph?.id;
+    h.dispatch({ type: "addNode", node: { id, label: "Node", shape: "rect", ...(parent !== undefined ? { parent } : {}) } });
+    setView({ selectedId: id });
+  }
+
+  function addSubgraph() {
+    const id = newId("subgraph");
+    let n = 1;
+    while (ir.subgraphs.some((s) => s.label === `Group ${n}`)) n += 1;
+    h.dispatch({ type: "addSubgraph", subgraph: { id, label: `Group ${n}` } });
     setView({ selectedId: id });
   }
 
   const selectedNode = ir.nodes.find((n) => n.id === view.selectedId);
   const selectedEdge = ir.edges.find((e) => e.id === view.selectedId);
-  const selected = selectedNode ?? selectedEdge;
+  const selectedSubgraph = ir.subgraphs.find((s) => s.id === view.selectedId);
+  const selected = selectedNode ?? selectedEdge ?? selectedSubgraph;
 
   function handleConnectDrag(fromId: string, x: number, y: number) {
-    const from = layout.nodes.find((n) => n.id === fromId);
+    const from = layout.nodes.find((n) => n.id === fromId) ?? layout.subgraphs.find((s) => s.id === fromId);
     if (from) setConnectLine({ x1: from.rect.x + from.rect.w / 2, y1: from.rect.y + from.rect.h / 2, x2: x, y2: y });
   }
 
   function handleConnectDrop(fromId: string, x: number, y: number) {
     setConnectLine(undefined);
-    const from = ir.nodes.find((n) => n.id === fromId);
-    const target = layout.nodes.find(
-      (n) => n.id !== fromId && x >= n.rect.x && x <= n.rect.x + n.rect.w && y >= n.rect.y && y <= n.rect.y + n.rect.h,
-    );
-    if (!from || !target) return;
+    const from = fromId as FlowchartEndpoint;
+    const inRect = (r: { x: number; y: number; w: number; h: number }) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    // nodes win over subgraphs; among subgraphs the smallest (innermost) wins
+    const targetNode = layout.nodes.find((n) => n.id !== fromId && inRect(n.rect));
+    const targetSubgraph = layout.subgraphs
+      .filter((s) => s.id !== fromId && inRect(s.rect))
+      .toSorted((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0];
+    const target = targetNode?.id ?? targetSubgraph?.id;
+    if (target === undefined) return;
     const edgeId = newId("edge");
-    h.dispatch({ type: "addEdge", id: edgeId, from: from.id, to: target.id });
+    h.dispatch({ type: "addEdge", id: edgeId, from, to: target as FlowchartEndpoint });
     setView({ selectedId: edgeId });
   }
 
@@ -142,6 +158,7 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
         {mode === "standalone" && <button onClick={openFile}>Open…</button>}
         {mode === "standalone" && <button onClick={() => saveMmd(code, "flowchart.mmd")}>Save…</button>}
         <button onClick={addNode}>+ Node</button>
+        <button onClick={addSubgraph}>+ Subgraph</button>
         <button
           disabled={selectedNode === undefined}
           onClick={() => selectedNode && setView({ ...view, connectFrom: selectedNode.id })}
@@ -188,9 +205,13 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
               selectedEdge && h.dispatch({ type: "updateEdge", id: selectedEdge.id, label }, `edge:${selectedEdge.id}:label`)
             }
             onChangeEdgeArrow={(arrow) => selectedEdge && h.dispatch({ type: "updateEdge", id: selectedEdge.id, arrow })}
+            onChangeSubgraphLabel={(label) =>
+              selectedSubgraph && h.dispatch({ type: "updateSubgraph", id: selectedSubgraph.id, label }, `sub:${selectedSubgraph.id}:label`)
+            }
             onDelete={() => {
               if (selectedNode) h.dispatch({ type: "removeNode", id: selectedNode.id });
               if (selectedEdge) h.dispatch({ type: "removeEdge", id: selectedEdge.id });
+              if (selectedSubgraph) h.dispatch({ type: "removeSubgraph", id: selectedSubgraph.id });
               setView({});
             }}
             onEditStart={() => {}}

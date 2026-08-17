@@ -5,6 +5,7 @@ import { flowchartToMermaid } from "./flowchart";
 function one(label: string): FlowchartIR {
   return {
     kind: "flowchart",
+  subgraphs: [],
     direction: "TB",
     nodes: [{ id: "node-1" as NodeId, label, shape: "rect" }],
     edges: [],
@@ -37,6 +38,7 @@ describe("label escaping", () => {
   it("emits all shapes and arrows", () => {
     const ir: FlowchartIR = {
       kind: "flowchart",
+  subgraphs: [],
       direction: "LR",
       nodes: (["rect", "rounded", "stadium", "diamond", "circle"] as const).map((shape, i) => ({
         id: `node-${i}` as NodeId,

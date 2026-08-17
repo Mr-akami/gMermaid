@@ -63,11 +63,29 @@ export function StateView({
         </marker>
       </defs>
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+        {/* composite frames go under everything, outermost first */}
+        {layout.states
+          .filter((s) => s.composite)
+          .toSorted((a, b) => a.depth - b.depth)
+          .map((s) => (
+            <CompositeView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+          ))}
         {layout.transitions.map((t) => (
           <TransitionView key={t.id} t={t} selected={viewState.selectedId === t.id} />
         ))}
-        {layout.states.map((s) => (
-          <StateBoxView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+        {layout.states
+          .filter((s) => !s.composite)
+          .map((s) => (
+            <StateBoxView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+          ))}
+        {layout.notes.map((n) => (
+          <g key={n.id} data-element-id={n.id} style={{ cursor: "pointer" }}>
+            <line x1={n.anchor.x1} y1={n.anchor.y1} x2={n.anchor.x2} y2={n.anchor.y2} stroke="var(--gm-note-line, #b59a2e)" strokeWidth={1} strokeDasharray="3 3" style={{ pointerEvents: "none" }} />
+            <rect x={n.rect.x} y={n.rect.y} width={n.rect.w} height={n.rect.h} rx={3} fill="var(--gm-note-fill, #fdf6d3)" stroke="var(--gm-note-stroke, #c8b25a)" strokeWidth={1} />
+            <text x={n.rect.x + n.rect.w / 2} y={n.rect.y + n.rect.h / 2} textAnchor="middle" dominantBaseline="central" fontSize={12} fontFamily="sans-serif" fill="var(--gm-text, #333)" style={{ pointerEvents: "none", userSelect: "none" }}>
+              {n.text}
+            </text>
+          </g>
         ))}
         {connectLine !== undefined && (
           <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-state-arrow)" style={{ pointerEvents: "none" }} />
@@ -77,10 +95,38 @@ export function StateView({
   );
 }
 
+function CompositeView({ s, selected }: { s: StateBox; selected: boolean }) {
+  const { x, y, w, h } = s.rect;
+  const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #555)";
+  return (
+    <g>
+      {/* translucent body: visible but never clickable (like sequence fragments) */}
+      <rect x={x} y={y} width={w} height={h} rx={8} fill="var(--gm-frag-fill, rgba(120,140,180,0.06))" style={{ pointerEvents: "none" }} />
+      {/* border + title bar are the composite's only hit targets */}
+      <g data-element-id={s.id} style={{ cursor: "pointer" }}>
+        <rect x={x} y={y} width={w} height={h} rx={8} fill="none" stroke={stroke} strokeWidth={selected ? 2 : 1.2} pointerEvents="stroke" />
+        <line x1={x} y1={y + 22} x2={x + w} y2={y + 22} stroke={stroke} strokeWidth={1} style={{ pointerEvents: "none" }} />
+        <text
+          data-drag="connect"
+          x={x + 10}
+          y={y + 15}
+          fontSize={12}
+          fontWeight={600}
+          fontFamily="sans-serif"
+          fill="var(--gm-text, #333)"
+          style={{ userSelect: "none" }}
+        >
+          {s.label}
+        </text>
+      </g>
+    </g>
+  );
+}
+
 function StateBoxView({ s, selected }: { s: StateBox; selected: boolean }) {
   const { x, y, w, h } = s.rect;
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
-  if (s.role !== "normal") {
+  if (s.role === "start" || s.role === "end") {
     const cx = x + w / 2;
     const cy = y + h / 2;
     const r = Math.min(w, h) / 2;
@@ -95,6 +141,27 @@ function StateBoxView({ s, selected }: { s: StateBox; selected: boolean }) {
             <circle cx={cx} cy={cy} r={r - 3.5} fill="var(--gm-stroke, #333)" style={{ pointerEvents: "none" }} />
           </>
         )}
+      </g>
+    );
+  }
+  if (s.role === "choice") {
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    return (
+      <g data-element-id={s.id} data-drag="connect" style={{ cursor: "pointer" }}>
+        <polygon
+          points={`${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}`}
+          fill="var(--gm-node-fill, #fff)"
+          stroke={stroke}
+          strokeWidth={selected ? 2.5 : 1.4}
+        />
+      </g>
+    );
+  }
+  if (s.role === "fork" || s.role === "join") {
+    return (
+      <g data-element-id={s.id} data-drag="connect" style={{ cursor: "pointer" }}>
+        <rect x={x} y={y} width={w} height={h} rx={3} fill="var(--gm-stroke, #333)" stroke={stroke} strokeWidth={selected ? 2 : 0} />
       </g>
     );
   }

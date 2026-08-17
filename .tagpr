@@ -1,0 +1,7 @@
+[tagpr]
+	releaseBranch = main
+	versionFile = packages/mcp/package.json
+	vPrefix = true
+	calendarVersioning = YYYY.MM0D.MICRO
+	changelog = true
+	release = true

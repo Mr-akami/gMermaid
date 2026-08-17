@@ -5,6 +5,7 @@ import { layoutFlowchart } from "./flowchart";
 
 const ir: FlowchartIR = {
   kind: "flowchart",
+  subgraphs: [],
   direction: "TB",
   nodes: [
     { id: "node-1" as NodeId, label: "Start", shape: "rounded" },
@@ -16,6 +17,8 @@ const ir: FlowchartIR = {
     { id: "edge-2" as EdgeId, from: "node-2" as NodeId, to: "node-3" as NodeId, arrow: "arrow", label: "yes" },
   ],
 };
+
+const S = (s: string) => s as import("@gmermaid/ir").SubgraphId;
 
 describe("layoutFlowchart", () => {
   it("is deterministic and vertically ordered for TB", () => {
@@ -58,6 +61,38 @@ describe("layoutFlowchart", () => {
 
   it("returns pure JSON data (ADR 0001 guard)", () => {
     const result = layoutFlowchart(ir, fixedWidthMeasurer());
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+
+  it("lays out subgraphs as clusters and clips edges to them at the frame", () => {
+    const withSub: FlowchartIR = {
+      kind: "flowchart",
+      direction: "TB",
+      nodes: [
+        { id: "a" as NodeId, label: "A", shape: "rect", parent: S("grp") },
+        { id: "b" as NodeId, label: "B", shape: "rect" },
+      ],
+      edges: [{ id: "edge-1" as EdgeId, from: "b" as NodeId, to: S("grp"), arrow: "arrow" }],
+      subgraphs: [{ id: S("grp"), label: "Group" }],
+    };
+    const result = layoutFlowchart(withSub, fixedWidthMeasurer());
+    const grp = result.subgraphs[0]!;
+    const a = result.nodes.find((n) => n.id === "a")!;
+    // the frame encloses its member
+    expect(a.rect.x).toBeGreaterThanOrEqual(grp.rect.x);
+    expect(a.rect.y).toBeGreaterThanOrEqual(grp.rect.y);
+    expect(a.rect.y + a.rect.h).toBeLessThanOrEqual(grp.rect.y + grp.rect.h);
+    // the edge into the subgraph stops AT its frame border
+    const edge = result.edges[0]!;
+    const last = edge.points[edge.points.length - 1]!;
+    const onBorder =
+      Math.abs(last.y - grp.rect.y) < 0.5 ||
+      Math.abs(last.y - (grp.rect.y + grp.rect.h)) < 0.5 ||
+      Math.abs(last.x - grp.rect.x) < 0.5 ||
+      Math.abs(last.x - (grp.rect.x + grp.rect.w)) < 0.5;
+    expect(onBorder).toBe(true);
+    // canvas covers the expanded frame
+    expect(result.size.w).toBeGreaterThanOrEqual(grp.rect.x + grp.rect.w);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
 });

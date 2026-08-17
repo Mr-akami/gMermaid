@@ -6,6 +6,7 @@ import { FlowchartView } from "./FlowchartView";
 
 const layout: FlowchartLayout = {
   kind: "flowchart",
+  subgraphs: [],
   size: { w: 200, h: 160 },
   nodes: [
     { id: "node-1" as NodeId, label: "Start", shape: "rounded", rect: { x: 60, y: 0, w: 80, h: 40 } },

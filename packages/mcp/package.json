@@ -2,6 +2,17 @@
   "name": "@gmermaid/mcp",
   "version": "0.1.0",
   "description": "Local MCP Apps Mermaid review editor",
+  "license": "MIT",
+  "keywords": ["mcp", "mermaid", "diagram", "editor", "llm"],
+  "homepage": "https://github.com/Mr-akami/gMermaid#readme",
+  "bugs": {
+    "url": "https://github.com/Mr-akami/gMermaid/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mr-akami/gMermaid.git",
+    "directory": "packages/mcp"
+  },
   "type": "module",
   "bin": {
     "gmermaid-mcp": "dist/cli.js"

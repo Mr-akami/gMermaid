@@ -23,9 +23,13 @@ function initialIR(): StateIR {
   const sample = `stateDiagram-v2
   [*] --> Still
   Still --> Moving : push
-  Moving --> Still : stop
+  state Moving {
+    [*] --> Slow
+    Slow --> Fast : accelerate
+  }
   Moving --> Crash : collision
   Crash --> [*]
+  note right of Crash : investigate!
 `;
   const parsed = parseStateDiagram(sample);
   return parsed.ok ? parsed.ir : emptyStateDiagram();
@@ -111,13 +115,29 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
     setView({ selectedId: id });
   }
 
+  function addSpecial(role: "choice" | "fork" | "join") {
+    const id = newStateId();
+    h.dispatch({ type: "addState", state: { id, label: "", role } });
+    setView({ selectedId: id });
+  }
+
+  function addNote() {
+    if (!selectedState) return;
+    const id = newId("note");
+    h.dispatch({ type: "addStateNote", note: { id, target: selectedState.id, position: "rightOf", text: "note" } });
+    setView({ selectedId: id });
+  }
+
   const selectedState = ir.states.find((s) => s.id === view.selectedId);
   const selectedTransition = ir.transitions.find((t) => t.id === view.selectedId);
+  const selectedNote = ir.notes.find((n) => n.id === view.selectedId);
   const selection: StateSelection | undefined = selectedState
     ? { kind: "state", state: selectedState }
     : selectedTransition
       ? { kind: "transition", transition: selectedTransition }
-      : undefined;
+      : selectedNote
+        ? { kind: "note", note: selectedNote }
+        : undefined;
 
   function connect(fromId: StateId, toId: StateId) {
     const transId = newId("transition");
@@ -157,6 +177,10 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         <button onClick={addState}>+ State</button>
         <button onClick={() => addPseudo("start")}>+ Start [*]</button>
         <button onClick={() => addPseudo("end")}>+ End [*]</button>
+        <button onClick={() => addSpecial("choice")}>+ Choice</button>
+        <button onClick={() => addSpecial("fork")}>+ Fork</button>
+        <button onClick={() => addSpecial("join")}>+ Join</button>
+        <button disabled={selectedState === undefined} onClick={addNote}>+ Note</button>
         <button
           disabled={selectedState === undefined}
           onClick={() => selectedState && setView({ ...view, transitionFrom: selectedState.id })}
@@ -201,9 +225,16 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
               selectedTransition &&
               h.dispatch({ type: "updateTransition", id: selectedTransition.id, label }, `trans:${selectedTransition.id}:label`)
             }
+            onChangeNoteText={(text) =>
+              selectedNote && h.dispatch({ type: "updateStateNote", id: selectedNote.id, text }, `snote:${selectedNote.id}:text`)
+            }
+            onChangeNotePosition={(position) =>
+              selectedNote && h.dispatch({ type: "updateStateNote", id: selectedNote.id, position })
+            }
             onDelete={() => {
               if (selectedState) h.dispatch({ type: "removeState", id: selectedState.id });
               if (selectedTransition) h.dispatch({ type: "removeTransition", id: selectedTransition.id });
+              if (selectedNote) h.dispatch({ type: "removeStateNote", id: selectedNote.id });
               setView({});
             }}
             onEditStart={() => {}}
