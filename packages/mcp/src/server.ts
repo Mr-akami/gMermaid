@@ -12,6 +12,7 @@ import { z } from "zod";
 import { BrowserReviewServer } from "./browser";
 import { SessionStore, type ReviewResult } from "./session";
 import { validateDiagram } from "./diagram";
+import { packageVersion } from "./metadata";
 
 const RESOURCE_URI = "ui://gmermaid/review.html";
 const UI_PATH = join(dirname(fileURLToPath(import.meta.url)), "review.html");
@@ -44,7 +45,7 @@ export function createGMermaidServer(): GMermaidServer {
   const sessions = new SessionStore();
   const browser = new BrowserReviewServer(sessions, html);
   const server = new McpServer(
-    { name: "gmermaid", version: "0.1.0" },
+    { name: "gmermaid", version: packageVersion() },
     {
       capabilities: { tools: {}, resources: {} },
       instructions:
