@@ -83,6 +83,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
   const notes: NoteBox[] = [];
   const slots: DropSlot[] = [];
   let y = TOP_MARGIN + HEAD_H + FIRST_ROW_GAP;
+  let msgCount = 0; // autonumber walks messages in document order
 
   const lifelinesOf = (events: readonly SequenceEvent[]): Set<LifelineId> => {
     const s = new Set<LifelineId>();
@@ -116,6 +117,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
           label: e.label,
           labelPos: { x: (fromX + toX) / 2, y: y - 8 },
           arrow: e.arrow,
+          ...(ir.autonumber !== undefined ? { seq: ir.autonumber.start + msgCount++ * ir.autonumber.step } : {}),
         });
         y += ROW_H + (e.from === e.to ? SELF_MSG_EXTRA : 0);
         lastMessage = { x: (fromX + toX) / 2, y: messages[messages.length - 1]!.y };

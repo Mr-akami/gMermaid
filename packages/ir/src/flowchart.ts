@@ -5,7 +5,16 @@ export type FlowchartNodeShape =
   | "rounded"
   | "stadium"
   | "diamond"
-  | "circle";
+  | "circle"
+  | "subroutine"
+  | "cylinder"
+  | "hexagon"
+  | "asymmetric"
+  | "doubleCircle"
+  | "parallelogram"
+  | "parallelogramAlt"
+  | "trapezoid"
+  | "trapezoidAlt";
 
 export interface FlowchartNode {
   readonly id: NodeId;
@@ -13,7 +22,7 @@ export interface FlowchartNode {
   readonly shape: FlowchartNodeShape;
 }
 
-export type FlowchartArrowType = "arrow" | "open" | "dotted" | "thick";
+export type FlowchartArrowType = "arrow" | "open" | "dotted" | "thick" | "invisible";
 
 export interface FlowchartEdge {
   readonly id: EdgeId;

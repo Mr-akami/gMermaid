@@ -13,6 +13,24 @@ function nodeDecl(node: FlowchartNode): string {
       return `${node.id}{"${label}"}`;
     case "circle":
       return `${node.id}(("${label}"))`;
+    case "subroutine":
+      return `${node.id}[["${label}"]]`;
+    case "cylinder":
+      return `${node.id}[("${label}")]`;
+    case "hexagon":
+      return `${node.id}{{"${label}"}}`;
+    case "asymmetric":
+      return `${node.id}>"${label}"]`;
+    case "doubleCircle":
+      return `${node.id}((("${label}")))`;
+    case "parallelogram":
+      return `${node.id}[/"${label}"/]`;
+    case "parallelogramAlt":
+      return `${node.id}[\\"${label}"\\]`;
+    case "trapezoid":
+      return `${node.id}[/"${label}"\\]`;
+    case "trapezoidAlt":
+      return `${node.id}[\\"${label}"/]`;
   }
 }
 
@@ -26,6 +44,8 @@ function arrowToken(edge: FlowchartEdge): string {
       return "-.->";
     case "thick":
       return "==>";
+    case "invisible":
+      return "~~~";
   }
 }
 
@@ -48,7 +68,8 @@ export function flowchartToMermaid(ir: FlowchartIR): string {
   }
   for (const edge of ir.edges) {
     const arrow = arrowToken(edge);
-    const label = edge.label !== undefined ? `|"${escapeLabel(edge.label)}"|` : "";
+    // invisible links cannot carry a label in mermaid
+    const label = edge.label !== undefined && edge.arrow !== "invisible" ? `|"${escapeLabel(edge.label)}"|` : "";
     lines.push(`  ${edge.from} ${arrow}${label} ${edge.to}`);
   }
   return lines.join("\n") + "\n";

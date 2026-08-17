@@ -19,6 +19,8 @@ export interface MessageRow {
   readonly label: string;
   readonly labelPos: Point;
   readonly arrow: MessageArrowType;
+  /** Autonumber value, present when the diagram has numbering on. */
+  readonly seq?: number;
 }
 
 export interface BranchBand {

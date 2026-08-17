@@ -1,5 +1,6 @@
-import { useRef, type PointerEvent, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import type { EdgePath, FlowchartLayout, NodeBox } from "@gmermaid/layout";
+import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 // The renderer sees layout data (ids + geometry) only — never the IR.
 // Hit testing for click/hover is delegated to the DOM via data-element-id.
@@ -10,6 +11,9 @@ export interface FlowchartViewState {
 export interface FlowchartViewProps {
   readonly layout: FlowchartLayout;
   readonly viewState: FlowchartViewState;
+  /** Pan/zoom; undefined = default (identity, padding offset). */
+  readonly viewport?: Viewport | undefined;
+  readonly onViewportChange?: ((v: Viewport) => void) | undefined;
   readonly onElementClick?: (id: string) => void;
   readonly onBackgroundClick?: () => void;
   /** Dragging from a node = draw a new edge to the drop target. */
@@ -21,11 +25,12 @@ export interface FlowchartViewProps {
 }
 
 const PADDING = 20;
-const DRAG_THRESHOLD = 5;
 
 export function FlowchartView({
   layout,
   viewState,
+  viewport,
+  onViewportChange,
   onElementClick,
   onBackgroundClick,
   onConnectDrag,
@@ -33,72 +38,45 @@ export function FlowchartView({
   connectLine,
   onGestureCancel,
 }: FlowchartViewProps) {
-  // Clicks resolve on pointerup from the original press target: pointer
-  // capture retargets native clicks to the svg root (see SequenceView).
-  const pointer = useRef<{ targetId: string | null; connect: boolean; sx: number; sy: number; active: boolean } | null>(null);
-
-  function pt(e: PointerEvent<SVGSVGElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return { x: e.clientX - rect.left - PADDING, y: e.clientY - rect.top - PADDING };
-  }
+  const g = usePointerGestures({
+    padding: PADDING,
+    viewport,
+    onViewportChange,
+    dragKinds: ["connect"],
+    onElementClick,
+    onBackgroundClick,
+    onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
+    onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
+    onGestureCancel,
+  });
 
   return (
     <svg
-      width={layout.size.w + PADDING * 2}
-      height={layout.size.h + PADDING * 2}
-      viewBox={`${-PADDING} ${-PADDING} ${layout.size.w + PADDING * 2} ${layout.size.h + PADDING * 2}`}
-      onPointerDown={(e: PointerEvent<SVGSVGElement>) => {
-        if (e.button !== 0 || !e.isPrimary) return; // left/primary pointer only
-        const target = e.target as Element;
-        const targetId = target.closest("[data-element-id]")?.getAttribute("data-element-id") ?? null;
-        const connect = target.closest("[data-drag='connect']") !== null;
-        const { x, y } = pt(e);
-        pointer.current = { targetId, connect, sx: x, sy: y, active: false };
-        // always capture so pointerup reaches us even outside the svg
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }}
-      onPointerMove={(e: PointerEvent<SVGSVGElement>) => {
-        const p = pointer.current;
-        if (!p) return;
-        const { x, y } = pt(e);
-        if (!p.active && Math.abs(x - p.sx) < DRAG_THRESHOLD && Math.abs(y - p.sy) < DRAG_THRESHOLD) return;
-        p.active = true; // moved past threshold: no longer a click
-        if (!p.connect || p.targetId === null) return;
-        onConnectDrag?.(p.targetId, x, y);
-      }}
-      onPointerUp={(e: PointerEvent<SVGSVGElement>) => {
-        const p = pointer.current;
-        pointer.current = null;
-        if (!p) return;
-        if (p.active) {
-          if (!p.connect || p.targetId === null) return; // a swipe, not a click or drop
-          const { x, y } = pt(e);
-          onConnectDrop?.(p.targetId, x, y);
-          return;
-        }
-        if (p.targetId !== null) onElementClick?.(p.targetId);
-        else onBackgroundClick?.();
-      }}
-      onPointerCancel={() => {
-        pointer.current = null;
-        onGestureCancel?.();
-      }}
-      style={{ touchAction: "none" }}
+      width="100%"
+      height="100%"
+      ref={g.ref}
+      onPointerDown={g.onPointerDown}
+      onPointerMove={g.onPointerMove}
+      onPointerUp={g.onPointerUp}
+      onPointerCancel={g.onPointerCancel}
+      style={g.style}
     >
       <defs>
         <marker id="gm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--gm-stroke, #333)" />
         </marker>
       </defs>
-      {layout.edges.map((edge) => (
-        <EdgeView key={edge.id} edge={edge} selected={viewState.selectedId === edge.id} />
-      ))}
-      {layout.nodes.map((node) => (
-        <NodeView key={node.id} node={node} selected={viewState.selectedId === node.id} />
-      ))}
-      {connectLine !== undefined && (
-        <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-arrow)" style={{ pointerEvents: "none" }} />
-      )}
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+        {layout.edges.map((edge) => (
+          <EdgeView key={edge.id} edge={edge} selected={viewState.selectedId === edge.id} />
+        ))}
+        {layout.nodes.map((node) => (
+          <NodeView key={node.id} node={node} selected={viewState.selectedId === node.id} />
+        ))}
+        {connectLine !== undefined && (
+          <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-arrow)" style={{ pointerEvents: "none" }} />
+        )}
+      </g>
     </svg>
   );
 }
@@ -112,6 +90,10 @@ function NodeView({ node, selected }: { node: NodeBox; selected: boolean }) {
     strokeWidth: selected ? 2.5 : 1.5,
   } as const;
 
+  const slant = Math.min(14, w / 4); // parallelogram/trapezoid slope
+  const poly = (pts: [number, number][]) => (
+    <polygon points={pts.map(([px, py]) => `${px},${py}`).join(" ")} {...common} />
+  );
   let shape: ReactNode;
   switch (node.shape) {
     case "rect":
@@ -124,15 +106,57 @@ function NodeView({ node, selected }: { node: NodeBox; selected: boolean }) {
       shape = <rect x={x} y={y} width={w} height={h} rx={h / 2} {...common} />;
       break;
     case "diamond":
+      shape = poly([[x + w / 2, y], [x + w, y + h / 2], [x + w / 2, y + h], [x, y + h / 2]]);
+      break;
+    case "circle":
+      shape = <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} {...common} />;
+      break;
+    case "doubleCircle":
       shape = (
-        <polygon
-          points={`${x + w / 2},${y} ${x + w},${y + h / 2} ${x + w / 2},${y + h} ${x},${y + h / 2}`}
+        <>
+          <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} {...common} />
+          <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2 - 4} ry={h / 2 - 4} fill="none" stroke={stroke} strokeWidth={common.strokeWidth} />
+        </>
+      );
+      break;
+    case "subroutine":
+      shape = (
+        <>
+          <rect x={x} y={y} width={w} height={h} {...common} />
+          <line x1={x + 5} y1={y} x2={x + 5} y2={y + h} stroke={stroke} strokeWidth={1} />
+          <line x1={x + w - 5} y1={y} x2={x + w - 5} y2={y + h} stroke={stroke} strokeWidth={1} />
+        </>
+      );
+      break;
+    case "cylinder": {
+      const ry = Math.min(8, h / 4);
+      shape = (
+        <path
+          d={`M ${x} ${y + ry} A ${w / 2} ${ry} 0 0 1 ${x + w} ${y + ry} V ${y + h - ry} A ${w / 2} ${ry} 0 0 1 ${x} ${y + h - ry} Z M ${x} ${y + ry} A ${w / 2} ${ry} 0 0 0 ${x + w} ${y + ry}`}
           {...common}
         />
       );
       break;
-    case "circle":
-      shape = <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} {...common} />;
+    }
+    case "hexagon": {
+      const c = Math.min(14, w / 4);
+      shape = poly([[x + c, y], [x + w - c, y], [x + w, y + h / 2], [x + w - c, y + h], [x + c, y + h], [x, y + h / 2]]);
+      break;
+    }
+    case "asymmetric":
+      shape = poly([[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x + slant, y + h / 2]]);
+      break;
+    case "parallelogram":
+      shape = poly([[x + slant, y], [x + w, y], [x + w - slant, y + h], [x, y + h]]);
+      break;
+    case "parallelogramAlt":
+      shape = poly([[x, y], [x + w - slant, y], [x + w, y + h], [x + slant, y + h]]);
+      break;
+    case "trapezoid":
+      shape = poly([[x + slant, y], [x + w - slant, y], [x + w, y + h], [x, y + h]]);
+      break;
+    case "trapezoidAlt":
+      shape = poly([[x, y], [x + w, y], [x + w - slant, y + h], [x + slant, y + h]]);
       break;
   }
 
@@ -158,7 +182,10 @@ function NodeView({ node, selected }: { node: NodeBox; selected: boolean }) {
 function EdgeView({ edge, selected }: { edge: EdgePath; selected: boolean }) {
   const d = edge.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
-  const dash = edge.arrow === "dotted" ? "5 4" : undefined;
+  // invisible links shape the layout but draw (almost) nothing — a faint
+  // dotted trace appears only while selected so the edge stays editable
+  const invisible = edge.arrow === "invisible";
+  const dash = edge.arrow === "dotted" ? "5 4" : invisible ? "2 6" : undefined;
   const base = edge.arrow === "thick" ? 3.5 : 1.5;
   const width = selected ? base + 1 : base;
   return (
@@ -168,10 +195,10 @@ function EdgeView({ edge, selected }: { edge: EdgePath; selected: boolean }) {
       <path
         d={d}
         fill="none"
-        stroke={stroke}
+        stroke={invisible && !selected ? "transparent" : stroke}
         strokeWidth={width}
         strokeDasharray={dash}
-        markerEnd={edge.arrow === "open" ? undefined : "url(#gm-arrow)"}
+        markerEnd={edge.arrow === "open" || invisible ? undefined : "url(#gm-arrow)"}
       />
       {edge.label !== undefined && edge.labelPos && (
         <text

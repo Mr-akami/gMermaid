@@ -75,4 +75,32 @@ describe("parseClassDiagram", () => {
     expect(back.ir).toEqual(ir);
     expect(classToMermaid(back.ir)).toBe(code);
   });
+
+  it("parses direction, one-line annotations, inline members and plain links", () => {
+    const code = `classDiagram
+  direction LR
+  <<interface>> Shape
+  Shape : +area() float
+  Shape -- Circle
+  Shape .. Square : note
+`;
+    const result = parseClassDiagram(code);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.direction).toBe("LR");
+    expect(result.ir.classes[0]).toMatchObject({
+      name: "Shape",
+      stereotype: "interface",
+      methods: [{ name: "area", params: "", type: "float", visibility: "public" }],
+    });
+    expect(result.ir.relations.map((r) => [r.type, r.label])).toEqual([
+      ["linkSolid", undefined],
+      ["linkDashed", "note"],
+    ]);
+    // links and direction survive the round trip (members canonicalize to block form)
+    const back = parseClassDiagram(classToMermaid(result.ir));
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(result.ir);
+  });
 });

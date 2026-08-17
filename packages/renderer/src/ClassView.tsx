@@ -1,5 +1,5 @@
-import { useRef, type PointerEvent } from "react";
 import type { ClassBox, ClassLayout, RelationPath } from "@gmermaid/layout";
+import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 export interface ClassViewState {
   readonly selectedId?: string | undefined;
@@ -8,6 +8,9 @@ export interface ClassViewState {
 export interface ClassViewProps {
   readonly layout: ClassLayout;
   readonly viewState: ClassViewState;
+  /** Pan/zoom; undefined = default (identity, padding offset). */
+  readonly viewport?: Viewport | undefined;
+  readonly onViewportChange?: ((v: Viewport) => void) | undefined;
   readonly onElementClick?: (id: string) => void;
   readonly onBackgroundClick?: () => void;
   /** Dragging from a class = draw a new relation to the drop target. */
@@ -18,11 +21,12 @@ export interface ClassViewProps {
 }
 
 const PADDING = 20;
-const DRAG_THRESHOLD = 5;
 
 export function ClassView({
   layout,
   viewState,
+  viewport,
+  onViewportChange,
   onElementClick,
   onBackgroundClick,
   onConnectDrag,
@@ -30,57 +34,28 @@ export function ClassView({
   connectLine,
   onGestureCancel,
 }: ClassViewProps) {
-  // Clicks resolve on pointerup from the original press target: pointer
-  // capture retargets native clicks to the svg root (see SequenceView).
-  const pointer = useRef<{ targetId: string | null; connect: boolean; sx: number; sy: number; active: boolean } | null>(null);
-
-  function pt(e: PointerEvent<SVGSVGElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return { x: e.clientX - rect.left - PADDING, y: e.clientY - rect.top - PADDING };
-  }
+  const g = usePointerGestures({
+    padding: PADDING,
+    viewport,
+    onViewportChange,
+    dragKinds: ["connect"],
+    onElementClick,
+    onBackgroundClick,
+    onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
+    onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
+    onGestureCancel,
+  });
 
   return (
     <svg
-      width={layout.size.w + PADDING * 2}
-      height={layout.size.h + PADDING * 2}
-      viewBox={`${-PADDING} ${-PADDING} ${layout.size.w + PADDING * 2} ${layout.size.h + PADDING * 2}`}
-      onPointerDown={(e: PointerEvent<SVGSVGElement>) => {
-        if (e.button !== 0 || !e.isPrimary) return; // left/primary pointer only
-        const target = e.target as Element;
-        const targetId = target.closest("[data-element-id]")?.getAttribute("data-element-id") ?? null;
-        const connect = target.closest("[data-drag='connect']") !== null;
-        const { x, y } = pt(e);
-        pointer.current = { targetId, connect, sx: x, sy: y, active: false };
-        // always capture so pointerup reaches us even outside the svg
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }}
-      onPointerMove={(e: PointerEvent<SVGSVGElement>) => {
-        const p = pointer.current;
-        if (!p) return;
-        const { x, y } = pt(e);
-        if (!p.active && Math.abs(x - p.sx) < DRAG_THRESHOLD && Math.abs(y - p.sy) < DRAG_THRESHOLD) return;
-        p.active = true; // moved past threshold: no longer a click
-        if (!p.connect || p.targetId === null) return;
-        onConnectDrag?.(p.targetId, x, y);
-      }}
-      onPointerUp={(e: PointerEvent<SVGSVGElement>) => {
-        const p = pointer.current;
-        pointer.current = null;
-        if (!p) return;
-        if (p.active) {
-          if (!p.connect || p.targetId === null) return; // a swipe, not a click or drop
-          const { x, y } = pt(e);
-          onConnectDrop?.(p.targetId, x, y);
-          return;
-        }
-        if (p.targetId !== null) onElementClick?.(p.targetId);
-        else onBackgroundClick?.();
-      }}
-      onPointerCancel={() => {
-        pointer.current = null;
-        onGestureCancel?.();
-      }}
-      style={{ touchAction: "none" }}
+      width="100%"
+      height="100%"
+      ref={g.ref}
+      onPointerDown={g.onPointerDown}
+      onPointerMove={g.onPointerMove}
+      onPointerUp={g.onPointerUp}
+      onPointerCancel={g.onPointerCancel}
+      style={g.style}
     >
       <defs>
         {/* hollow triangle: inheritance / realization */}
@@ -101,15 +76,17 @@ export function ClassView({
         </marker>
       </defs>
 
-      {layout.relations.map((r) => (
-        <RelationView key={r.id} r={r} selected={viewState.selectedId === r.id} />
-      ))}
-      {layout.classes.map((c) => (
-        <ClassBoxView key={c.id} c={c} selected={viewState.selectedId === c.id} />
-      ))}
-      {connectLine !== undefined && (
-        <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-cls-open)" style={{ pointerEvents: "none" }} />
-      )}
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+        {layout.relations.map((r) => (
+          <RelationView key={r.id} r={r} selected={viewState.selectedId === r.id} />
+        ))}
+        {layout.classes.map((c) => (
+          <ClassBoxView key={c.id} c={c} selected={viewState.selectedId === c.id} />
+        ))}
+        {connectLine !== undefined && (
+          <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-cls-open)" style={{ pointerEvents: "none" }} />
+        )}
+      </g>
     </svg>
   );
 }
@@ -150,15 +127,17 @@ function ClassBoxView({ c, selected }: { c: ClassBox; selected: boolean }) {
 function RelationView({ r, selected }: { r: RelationPath; selected: boolean }) {
   const d = r.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
-  const dashed = r.type === "dependency" || r.type === "realization";
+  const dashed = r.type === "dependency" || r.type === "realization" || r.type === "linkDashed";
   const marker =
-    r.type === "inheritance" || r.type === "realization"
-      ? "url(#gm-cls-tri)"
-      : r.type === "composition"
-        ? "url(#gm-cls-dia-filled)"
-        : r.type === "aggregation"
-          ? "url(#gm-cls-dia-open)"
-          : "url(#gm-cls-open)";
+    r.type === "linkSolid" || r.type === "linkDashed"
+      ? undefined // plain links have no arrowhead
+      : r.type === "inheritance" || r.type === "realization"
+        ? "url(#gm-cls-tri)"
+        : r.type === "composition"
+          ? "url(#gm-cls-dia-filled)"
+          : r.type === "aggregation"
+            ? "url(#gm-cls-dia-open)"
+            : "url(#gm-cls-open)";
   return (
     <g data-element-id={r.id} style={{ cursor: "pointer" }}>
       <path d={d} fill="none" stroke="transparent" strokeWidth={12} />

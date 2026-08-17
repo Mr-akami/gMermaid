@@ -3,9 +3,10 @@ import { ClassEditor } from "./ClassEditor";
 import { FilesPanel } from "./FilesPanel";
 import { FlowchartEditor } from "./FlowchartEditor";
 import { SequenceEditor } from "./SequenceEditor";
-import { STORAGE_PREFIX } from "./persistence";
+import { StateEditor } from "./StateEditor";
+import { DOC_PREFIX } from "./persistence";
 
-type Kind = "flowchart" | "sequence" | "class";
+type Kind = "flowchart" | "sequence" | "class" | "state";
 
 /** A request for an editor to replace its diagram: code, or null = sample. */
 export interface LoadRequest {
@@ -36,6 +37,9 @@ export function App() {
         <button className={kind === "class" ? "tab active" : "tab"} onClick={() => setKind("class")}>
           Class
         </button>
+        <button className={kind === "state" ? "tab active" : "tab"} onClick={() => setKind("state")}>
+          State
+        </button>
         <span style={{ flex: 1 }} />
         <button className="tab" onClick={() => setFilesOpen(true)}>
           Files
@@ -50,6 +54,9 @@ export function App() {
       <div className={kind === "class" ? "editor" : "editor hidden"}>
         <ClassEditor loadRequest={loads.class} />
       </div>
+      <div className={kind === "state" ? "editor" : "editor hidden"}>
+        <StateEditor loadRequest={loads.state} />
+      </div>
       {filesOpen && (
         <FilesPanel
           onClose={() => setFilesOpen(false)}
@@ -61,7 +68,7 @@ export function App() {
           onDeleted={(entry) => {
             // deleting an autosave also resets its editor, otherwise the
             // in-memory diagram would just re-save itself unchanged
-            if (entry.kind !== "unknown" && entry.key === `${STORAGE_PREFIX}${entry.kind}`) {
+            if (entry.kind !== "unknown" && entry.key === `${DOC_PREFIX}${entry.kind}`) {
               requestLoad(entry.kind, null);
             }
           }}

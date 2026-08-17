@@ -66,6 +66,8 @@ export function ClassPropertyWindow(props: ClassPropertyWindowProps) {
               <option value="aggregation">Aggregation</option>
               <option value="association">Association</option>
               <option value="dependency">Dependency</option>
+              <option value="linkSolid">Link (solid, no head)</option>
+              <option value="linkDashed">Link (dashed, no head)</option>
             </select>
           </label>
           <label>

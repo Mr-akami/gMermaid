@@ -7,16 +7,6 @@ export type SequenceSelection =
   | { kind: "branch"; fragment: Fragment; branch: Branch }
   | { kind: "note"; note: Note };
 
-/** loop conditions are canonically "(min,max) exitCondition" — decompose for the form. */
-export function parseLoopSpec(condition: string): { min: string; max: string; exit: string } {
-  const m = condition.match(/^\((\d*)\s*,\s*(\d*)\)\s*(.*)$/);
-  return m ? { min: m[1]!, max: m[2]!, exit: m[3]! } : { min: "", max: "", exit: condition };
-}
-
-export function composeLoopSpec(min: string, max: string, exit: string): string {
-  return min !== "" || max !== "" ? `(${min},${max}) ${exit}`.trim() : exit;
-}
-
 export interface SequencePropertyWindowProps {
   readonly selection: SequenceSelection;
   readonly onChangeLifelineName: (name: string) => void;
@@ -26,6 +16,8 @@ export interface SequencePropertyWindowProps {
   readonly onChangeFragmentKind: (kind: FragmentKind) => void;
   /** Edits the FIRST branch's condition (the one shown beside the tab). */
   readonly onChangeFragmentCondition: (condition: string) => void;
+  /** Loop bounds are structural on the branch (B-2), never text-embedded. */
+  readonly onChangeLoopBounds: (min: string, max: string) => void;
   readonly onChangeBranchCondition: (condition: string) => void;
   readonly onChangeNoteText: (text: string) => void;
   readonly onChangeNotePosition: (position: NotePosition) => void;
@@ -33,22 +25,27 @@ export interface SequencePropertyWindowProps {
   readonly onDelete: () => void;
   /** e.g. a lifeline still referenced by messages cannot be deleted. */
   readonly deleteDisabledReason?: string | undefined;
+  /** Shown beside an ENABLED delete button, e.g. "also deletes its messages". */
+  readonly deleteWarning?: string | undefined;
   readonly onEditStart: () => void;
   readonly onEditEnd: () => void;
 }
 
 function LoopSpecFields({
-  condition,
-  onChange,
+  branch,
+  onChangeCondition,
+  onChangeBounds,
   onEditStart,
   onEditEnd,
 }: {
-  condition: string;
-  onChange: (condition: string) => void;
+  branch: Branch;
+  onChangeCondition: (condition: string) => void;
+  onChangeBounds: (min: string, max: string) => void;
   onEditStart: () => void;
   onEditEnd: () => void;
 }) {
-  const spec = parseLoopSpec(condition);
+  const min = branch.loopBounds?.min ?? "";
+  const max = branch.loopBounds?.max ?? "";
   const common = { onFocus: onEditStart, onBlur: onEditEnd } as const;
   return (
     <>
@@ -57,8 +54,8 @@ function LoopSpecFields({
         <input
           {...common}
           inputMode="numeric"
-          value={spec.min}
-          onChange={(e) => onChange(composeLoopSpec(e.target.value.replaceAll(/[^0-9]/g, ""), spec.max, spec.exit))}
+          value={min}
+          onChange={(e) => onChangeBounds(e.target.value.replaceAll(/[^0-9]/g, ""), max)}
         />
       </label>
       <label>
@@ -66,13 +63,13 @@ function LoopSpecFields({
         <input
           {...common}
           inputMode="numeric"
-          value={spec.max}
-          onChange={(e) => onChange(composeLoopSpec(spec.min, e.target.value.replaceAll(/[^0-9]/g, ""), spec.exit))}
+          value={max}
+          onChange={(e) => onChangeBounds(min, e.target.value.replaceAll(/[^0-9]/g, ""))}
         />
       </label>
       <label>
         Exit condition
-        <input {...common} value={spec.exit} onChange={(e) => onChange(composeLoopSpec(spec.min, spec.max, e.target.value))} />
+        <input {...common} value={branch.condition} onChange={(e) => onChangeCondition(e.target.value)} />
       </label>
     </>
   );
@@ -128,6 +125,11 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
               <option value="solidOpen">Solid (open head)</option>
               <option value="dottedOpen">Dotted (open head)</option>
               <option value="async">Async</option>
+              <option value="dottedAsync">Async (dotted)</option>
+              <option value="cross">Cross (✕)</option>
+              <option value="dottedCross">Cross (dotted)</option>
+              <option value="bidirectional">Bidirectional</option>
+              <option value="dottedBidirectional">Bidirectional (dotted)</option>
             </select>
           </label>
         </>
@@ -145,12 +147,15 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
               <option value="opt">opt</option>
               <option value="loop">loop</option>
               <option value="par">par</option>
+              <option value="break">break</option>
+              <option value="critical">critical</option>
             </select>
           </label>
-          {selection.fragment.fragmentKind === "loop" ? (
+          {selection.fragment.fragmentKind === "loop" && selection.fragment.branches[0] !== undefined ? (
             <LoopSpecFields
-              condition={selection.fragment.branches[0]?.condition ?? ""}
-              onChange={props.onChangeFragmentCondition}
+              branch={selection.fragment.branches[0]}
+              onChangeCondition={props.onChangeFragmentCondition}
+              onChangeBounds={props.onChangeLoopBounds}
               onEditStart={onEditStart}
               onEditEnd={onEditEnd}
             />
@@ -165,7 +170,7 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
               />
             </label>
           )}
-          {(selection.fragment.fragmentKind === "alt" || selection.fragment.fragmentKind === "par") && (
+          {["alt", "par", "critical"].includes(selection.fragment.fragmentKind) && (
             <button onClick={props.onAddBranch}>+ Branch</button>
           )}
         </>
@@ -212,6 +217,9 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
         </button>
       )}
       {props.deleteDisabledReason !== undefined && <div className="hint">{props.deleteDisabledReason}</div>}
+      {props.deleteDisabledReason === undefined && props.deleteWarning !== undefined && (
+        <div className="hint">{props.deleteWarning}</div>
+      )}
     </div>
   );
 }

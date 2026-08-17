@@ -39,6 +39,31 @@ describe("layoutClassDiagram", () => {
     expect(result.size.w).toBeGreaterThan(0);
   });
 
+  it("routes self-relations as a rectangular detour off the node's right side", () => {
+    const selfIr: ClassIR = {
+      ...ir,
+      relations: [
+        { id: "r1" as RelationId, from: "Dog" as ClassId, to: "Dog" as ClassId, type: "association", label: "parent" },
+        { id: "r2" as RelationId, from: "Dog" as ClassId, to: "Dog" as ClassId, type: "association" },
+      ],
+    };
+    const result = layoutClassDiagram(selfIr, fixedWidthMeasurer());
+    const dog = result.classes.find((c) => c.id === "Dog")!;
+    const right = dog.rect.x + dog.rect.w;
+    const [r1, r2] = result.relations;
+    for (const r of [r1!, r2!]) {
+      expect(r.points).toHaveLength(4);
+      expect(r.points[0]!.x).toBe(right); // leaves the right edge…
+      expect(r.points[3]!.x).toBe(right); // …and returns to it
+      expect(r.points[1]!.x).toBeGreaterThan(right); // detour is outside the box
+    }
+    // stacked self-relations must not overlap
+    expect(r2!.points[1]!.x).toBeGreaterThan(r1!.points[1]!.x);
+    // the canvas covers the detour and its label (the -Infinity class of oversight)
+    expect(result.size.w).toBeGreaterThanOrEqual(r2!.points[1]!.x);
+    expect(r1!.labelPos!.x).toBeGreaterThan(right);
+  });
+
   it("returns pure JSON data (ADR 0001 guard)", () => {
     const result = layoutClassDiagram(ir, fixedWidthMeasurer());
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);

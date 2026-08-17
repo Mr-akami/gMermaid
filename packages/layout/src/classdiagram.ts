@@ -17,6 +17,10 @@ const HEADER_PAD_Y = 8;
 const MEMBER_LINE_H = 18;
 const COMPARTMENT_PAD_Y = 5;
 const MIN_W = 110;
+// self-relation detour geometry (right side of the node)
+const SELF_REL_W = 30;
+const SELF_REL_H = 26;
+const SELF_REL_STEP = 14;
 
 export interface ClassBox {
   readonly id: ClassId;
@@ -52,7 +56,7 @@ export interface ClassLayout {
 
 export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLayout {
   const g = new dagre.graphlib.Graph({ multigraph: true });
-  g.setGraph({ rankdir: "TB", nodesep: 50, ranksep: 60 });
+  g.setGraph({ rankdir: ir.direction ?? "TB", nodesep: 50, ranksep: 60 });
   g.setDefaultEdgeLabel(() => ({}));
 
   const rendered = new Map<
@@ -84,7 +88,10 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     if (!g.hasNode(r.from) || !g.hasNode(r.to)) {
       throw new Error(`layoutClassDiagram: relation ${r.id} references a missing class`);
     }
-    g.setEdge(r.from, r.to, {}, r.id);
+    // dagre cannot route self-edges — they are synthesized after layout as a
+    // rectangular detour off the node's right side (cf. SELF_MSG_EXTRA in
+    // the sequence layout)
+    if (r.from !== r.to) g.setEdge(r.from, r.to, {}, r.id);
   }
 
   dagre.layout(g);
@@ -106,17 +113,43 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     };
   });
 
+  const boxByClass = new Map<ClassId, Rect>(classes.map((c) => [c.id, c.rect]));
+  // stacked self-relations on one node fan outward by index
+  const selfCount = new Map<ClassId, number>();
+  let selfMaxRight = 0;
+
   const relations: RelationPath[] = ir.relations.map((r) => {
-    const e = g.edge(r.from, r.to, r.id);
-    const points: Point[] = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
+    let points: Point[];
+    let labelPos: Point;
+    if (r.from === r.to) {
+      const rect = boxByClass.get(r.from)!;
+      const k = selfCount.get(r.from) ?? 0;
+      selfCount.set(r.from, k + 1);
+      const right = rect.x + rect.w;
+      const reach = right + SELF_REL_W + k * SELF_REL_STEP;
+      const cy = rect.y + Math.min(rect.h / 2, SELF_REL_H * (k + 1.5));
+      points = [
+        { x: right, y: cy - SELF_REL_H / 2 },
+        { x: reach, y: cy - SELF_REL_H / 2 },
+        { x: reach, y: cy + SELF_REL_H / 2 },
+        { x: right, y: cy + SELF_REL_H / 2 },
+      ];
+      labelPos = { x: reach + 6, y: cy };
+      const labelW = r.label !== undefined ? measure.measure(r.label, MEMBER_FONT).w + 12 : 0;
+      selfMaxRight = Math.max(selfMaxRight, reach + labelW);
+    } else {
+      const e = g.edge(r.from, r.to, r.id);
+      points = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
+      const mid = points[Math.floor(points.length / 2)]!;
+      labelPos = { x: mid.x, y: mid.y - 6 };
+    }
     const first = points[0]!;
     const last = points[points.length - 1]!;
-    const mid = points[Math.floor(points.length / 2)]!;
     return {
       id: r.id,
       points,
       type: r.type,
-      ...(r.label !== undefined ? { label: r.label, labelPos: { x: mid.x, y: mid.y - 6 } } : {}),
+      ...(r.label !== undefined ? { label: r.label, labelPos } : {}),
       ...(r.fromCardinality !== undefined
         ? { fromCardinality: r.fromCardinality, fromCardinalityPos: { x: first.x + 8, y: first.y + 14 } }
         : {}),
@@ -127,8 +160,11 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
   });
 
   const graph = g.graph();
-  // dagre reports -Infinity for an empty graph — clamp to a sane empty canvas
-  const w = graph.width !== undefined && Number.isFinite(graph.width) ? graph.width : 200;
+  // dagre reports -Infinity for an empty graph — clamp to a sane empty canvas.
+  // Self-relation detours (and their labels) stick out past dagre's extent,
+  // so they widen the canvas too (same class of oversight as the -Infinity).
+  const baseW = graph.width !== undefined && Number.isFinite(graph.width) ? graph.width : 200;
+  const w = Math.max(baseW, selfMaxRight);
   const hgt = graph.height !== undefined && Number.isFinite(graph.height) ? graph.height : 100;
   return {
     kind: "class",

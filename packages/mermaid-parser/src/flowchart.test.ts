@@ -75,4 +75,60 @@ describe("parseFlowchart", () => {
     expect(back.ir).toEqual(ir);
     expect(flowchartToMermaid(back.ir)).toBe(code);
   });
+
+  it("round-trips every extended node shape and the invisible link", () => {
+    const shapes = [
+      "subroutine",
+      "cylinder",
+      "hexagon",
+      "asymmetric",
+      "doubleCircle",
+      "parallelogram",
+      "parallelogramAlt",
+      "trapezoid",
+      "trapezoidAlt",
+    ] as const;
+    const ir: FlowchartIR = {
+      kind: "flowchart",
+      direction: "TB",
+      nodes: shapes.map((shape, i) => ({ id: `n${i}` as NodeId, label: `s ${shape}`, shape })),
+      edges: [{ id: "edge-1" as EdgeId, from: "n0" as NodeId, to: "n1" as NodeId, arrow: "invisible" }],
+    };
+    const code = flowchartToMermaid(ir);
+    const back = parseFlowchart(code);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(ir);
+  });
+
+  it("parses chained edges and `&` fan-out", () => {
+    const result = parseFlowchart("flowchart TB\n  a --> b --> c\n  a & b --> d\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.edges.map((e) => [e.from, e.to])).toEqual([
+      ["a", "b"],
+      ["b", "c"],
+      ["a", "d"],
+      ["b", "d"],
+    ]);
+  });
+
+  it("parses `A-- text -->B` inline edge labels", () => {
+    const result = parseFlowchart("flowchart TB\n  a-- go -->b\n  b-. maybe .->c\n  c== hard ==>d\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.edges.map((e) => [e.label, e.arrow])).toEqual([
+      ["go", "arrow"],
+      ["maybe", "dotted"],
+      ["hard", "thick"],
+    ]);
+  });
+
+  it("does not split `&` inside a bracketed label", () => {
+    const result = parseFlowchart('flowchart TB\n  a["x & y"] --> b\n');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.nodes[0]!.label).toBe("x & y");
+    expect(result.ir.edges).toHaveLength(1);
+  });
 });

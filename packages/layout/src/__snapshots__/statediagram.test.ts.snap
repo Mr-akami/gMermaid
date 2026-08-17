@@ -1,0 +1,87 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
+{
+  "kind": "state",
+  "size": {
+    "h": 171.6,
+    "w": 72,
+  },
+  "states": [
+    {
+      "id": "state_start",
+      "label": "",
+      "rect": {
+        "h": 16,
+        "w": 16,
+        "x": 28,
+        "y": 0,
+      },
+      "role": "start",
+    },
+    {
+      "id": "Still",
+      "label": "Still",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 72,
+        "x": 0,
+        "y": 66,
+      },
+      "role": "normal",
+    },
+    {
+      "id": "state_end",
+      "label": "",
+      "rect": {
+        "h": 16,
+        "w": 16,
+        "x": 28,
+        "y": 155.6,
+      },
+      "role": "end",
+    },
+  ],
+  "transitions": [
+    {
+      "id": "t1",
+      "points": [
+        {
+          "x": 36,
+          "y": 16,
+        },
+        {
+          "x": 36,
+          "y": 41,
+        },
+        {
+          "x": 36,
+          "y": 66,
+        },
+      ],
+    },
+    {
+      "id": "t2",
+      "label": "done",
+      "labelPos": {
+        "x": 36,
+        "y": 124.6,
+      },
+      "points": [
+        {
+          "x": 36,
+          "y": 105.6,
+        },
+        {
+          "x": 36,
+          "y": 130.6,
+        },
+        {
+          "x": 36,
+          "y": 155.6,
+        },
+      ],
+    },
+  ],
+}
+`;
