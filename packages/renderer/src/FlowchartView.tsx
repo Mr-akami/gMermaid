@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import type { EdgePath, FlowchartLayout, NodeBox } from "@gmermaid/layout";
+import type { EdgePath, FlowchartLayout, NodeBox, SubgraphBox } from "@gmermaid/layout";
 import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 // The renderer sees layout data (ids + geometry) only — never the IR.
@@ -67,6 +67,12 @@ export function FlowchartView({
         </marker>
       </defs>
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+        {/* subgraph frames go under everything, outermost first */}
+        {[...layout.subgraphs]
+          .toSorted((a, b) => a.depth - b.depth)
+          .map((s) => (
+            <SubgraphView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+          ))}
         {layout.edges.map((edge) => (
           <EdgeView key={edge.id} edge={edge} selected={viewState.selectedId === edge.id} />
         ))}
@@ -78,6 +84,34 @@ export function FlowchartView({
         )}
       </g>
     </svg>
+  );
+}
+
+function SubgraphView({ s, selected }: { s: SubgraphBox; selected: boolean }) {
+  const { x, y, w, h } = s.rect;
+  const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #888)";
+  return (
+    <g>
+      {/* translucent body: visible but never clickable (like sequence fragments) */}
+      <rect x={x} y={y} width={w} height={h} rx={6} fill="var(--gm-frag-fill, rgba(120,140,180,0.06))" style={{ pointerEvents: "none" }} />
+      {/* border + title are the subgraph's only hit targets; dragging the
+       * title draws an edge from the subgraph as a whole */}
+      <g data-element-id={s.id} style={{ cursor: "pointer" }}>
+        <rect x={x} y={y} width={w} height={h} rx={6} fill="none" stroke={stroke} strokeWidth={selected ? 2 : 1.2} pointerEvents="stroke" />
+        <text
+          data-drag="connect"
+          x={x + 8}
+          y={y + 15}
+          fontSize={12}
+          fontWeight={600}
+          fontFamily="sans-serif"
+          fill="var(--gm-text, #444)"
+          style={{ userSelect: "none" }}
+        >
+          {s.label}
+        </text>
+      </g>
+    </g>
   );
 }
 

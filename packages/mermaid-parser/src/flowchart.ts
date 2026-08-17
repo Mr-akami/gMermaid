@@ -3,10 +3,13 @@ import type {
   FlowchartArrowType,
   FlowchartDirection,
   FlowchartEdge,
+  FlowchartEndpoint,
   FlowchartIR,
   FlowchartNode,
   FlowchartNodeShape,
+  FlowchartSubgraph,
   NodeId,
+  SubgraphId,
 } from "@gmermaid/ir";
 import { unescapeLabel, unquote, type ParseError, type ParseResult } from "./common";
 
@@ -144,20 +147,34 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   const nodes = new Map<string, FlowchartNode>();
   const nodeOrder: string[] = [];
   const edges: FlowchartEdge[] = [];
+  const subgraphs = new Map<string, FlowchartSubgraph>();
+  const subgraphOrder: string[] = [];
   let edgeSeq = 0;
+
+  // subgraph nesting: declarations inside a block belong to it
+  const stack: { id: SubgraphId; openedAt: number }[] = [];
+  const currentParent = (): SubgraphId | undefined => stack[stack.length - 1]?.id;
+  // ids only ever seen as bare edge endpoints: may turn out to be subgraphs
+  const bareOnly = new Set<string>();
 
   const declare = (ref: NodeRef): void => {
     const existing = nodes.get(ref.id);
     if (!existing) {
+      if (subgraphs.has(ref.id)) return; // an edge endpoint naming a subgraph
       nodeOrder.push(ref.id);
+      const parent = currentParent();
       nodes.set(ref.id, {
         id: ref.id as NodeId,
         label: ref.label ?? ref.id,
         shape: ref.shape ?? "rect",
+        ...(parent !== undefined ? { parent } : {}),
       });
+      if (ref.label === undefined) bareOnly.add(ref.id);
+      else bareOnly.delete(ref.id);
     } else if (ref.label !== undefined) {
       // a later decl with an explicit label/shape wins over a bare reference
       nodes.set(ref.id, { ...existing, label: ref.label, shape: ref.shape ?? existing.shape });
+      bareOnly.delete(ref.id);
     }
   };
 
@@ -174,6 +191,51 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       }
       direction = h[1] === "TD" ? "TB" : (h[1] as FlowchartDirection);
       headerSeen = true;
+      continue;
+    }
+
+    // subgraph id / subgraph id[title] … end (nested)
+    const sub = line.match(new RegExp(`^subgraph\\s+(${ID})\\s*(?:\\[(.*)\\])?$`));
+    if (sub) {
+      const id = sub[1]!;
+      if (nodes.has(id)) {
+        if (!bareOnly.has(id)) {
+          errors.push({ line: lineNo, message: `\`${id}\` is already a node` });
+          continue;
+        }
+        // it was only ever a bare edge endpoint — that reference meant this
+        // subgraph all along, not an implicit node
+        nodes.delete(id);
+        nodeOrder.splice(nodeOrder.indexOf(id), 1);
+        bareOnly.delete(id);
+      }
+      if (!subgraphs.has(id)) {
+        subgraphOrder.push(id);
+        const parent = currentParent();
+        subgraphs.set(id, {
+          id: id as SubgraphId,
+          label: sub[2] !== undefined ? unescapeLabel(unquote(sub[2])) : id,
+          ...(parent !== undefined ? { parent } : {}),
+        });
+      }
+      stack.push({ id: id as SubgraphId, openedAt: lineNo });
+      continue;
+    }
+
+    if (line === "end") {
+      if (stack.pop() === undefined) errors.push({ line: lineNo, message: "`end` without an open subgraph" });
+      continue;
+    }
+
+    const dir = line.match(/^direction\s+(TB|TD|LR|BT|RL)$/);
+    if (dir) {
+      const top = stack[stack.length - 1];
+      if (top === undefined) {
+        errors.push({ line: lineNo, message: "`direction` is only valid inside a subgraph" });
+        continue;
+      }
+      const d = (dir[1] === "TD" ? "TB" : dir[1]) as FlowchartDirection;
+      subgraphs.set(top.id, { ...subgraphs.get(top.id)!, direction: d });
       continue;
     }
 
@@ -206,8 +268,8 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
             edgeSeq += 1;
             edges.push({
               id: `edge-${edgeSeq}` as EdgeId,
-              from: from.id as NodeId,
-              to: to.id as NodeId,
+              from: from.id as FlowchartEndpoint,
+              to: to.id as FlowchartEndpoint,
               arrow: link.arrow,
               ...(link.label !== undefined ? { label: link.label } : {}),
             });
@@ -228,6 +290,7 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   }
 
   if (!headerSeen) errors.push({ line: 1, message: "empty diagram: missing header" });
+  for (const open of stack) errors.push({ line: open.openedAt, message: `unclosed subgraph: ${open.id}` });
   if (errors.length > 0) return { ok: false, errors };
 
   return {
@@ -237,6 +300,7 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       direction,
       nodes: nodeOrder.map((id) => nodes.get(id)!),
       edges,
+      subgraphs: subgraphOrder.map((id) => subgraphs.get(id)!),
     },
   };
 }

@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_version:
+        description: Publish an existing tagged version, for example 2026.817.0
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tagpr:
+    if: inputs.publish_version == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    outputs:
+      tag: ${{ steps.tagpr.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Prepare release
+        id: tagpr
+        uses: Songmu/tagpr@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    needs: tagpr
+    if: always() && (needs.tagpr.outputs.tag != '' || inputs.publish_version != '')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.publish_version != '' && format('v{0}', inputs.publish_version) || needs.tagpr.outputs.tag }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify release tag
+        env:
+          REQUESTED_VERSION: ${{ inputs.publish_version }}
+          TAGPR_TAG: ${{ needs.tagpr.outputs.tag }}
+        run: |
+          package_version=$(node --input-type=module -e "import pkg from './packages/mcp/package.json' with { type: 'json' }; process.stdout.write(pkg.version)")
+          expected_version=${REQUESTED_VERSION:-${TAGPR_TAG#v}}
+          test "$package_version" = "$expected_version"
+          test "$(git describe --tags --exact-match)" = "v${package_version}"
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify release
+        run: |
+          pnpm lint
+          pnpm test
+          pnpm typecheck
+
+      - run: pnpm --filter @gmermaid/mcp build
+
+      - run: pnpm --dir packages/mcp pack --pack-destination ../../artifacts
+
+      - run: npm publish ./artifacts/*.tgz --access public

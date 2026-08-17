@@ -3,12 +3,15 @@
 exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
 {
   "kind": "state",
+  "notes": [],
   "size": {
     "h": 171.6,
     "w": 72,
   },
   "states": [
     {
+      "composite": false,
+      "depth": 0,
       "id": "state_start",
       "label": "",
       "rect": {
@@ -20,6 +23,8 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
       "role": "start",
     },
     {
+      "composite": false,
+      "depth": 0,
       "id": "Still",
       "label": "Still",
       "rect": {
@@ -31,6 +36,8 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
       "role": "normal",
     },
     {
+      "composite": false,
+      "depth": 0,
       "id": "state_end",
       "label": "",
       "rect": {

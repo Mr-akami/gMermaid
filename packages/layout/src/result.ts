@@ -1,4 +1,4 @@
-import type { EdgeId, FlowchartArrowType, FlowchartNodeShape, NodeId } from "@gmermaid/ir";
+import type { EdgeId, FlowchartArrowType, FlowchartNodeShape, NodeId, SubgraphId } from "@gmermaid/ir";
 
 // LayoutResult is pure data in diagram space. It carries ids only — never IR
 // object references — so the renderer cannot reach into the IR. Must survive
@@ -30,9 +30,18 @@ export interface EdgePath {
   readonly arrow: FlowchartArrowType;
 }
 
+export interface SubgraphBox {
+  readonly id: SubgraphId;
+  readonly rect: Rect;
+  readonly label: string;
+  /** Nesting depth (0 = top level) — outer frames draw first. */
+  readonly depth: number;
+}
+
 export interface FlowchartLayout {
   readonly kind: "flowchart";
   readonly size: { readonly w: number; readonly h: number };
   readonly nodes: readonly NodeBox[];
   readonly edges: readonly EdgePath[];
+  readonly subgraphs: readonly SubgraphBox[];
 }

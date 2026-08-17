@@ -1,18 +1,18 @@
-import { newId, type StateId, type TransitionId } from "./ids";
-import type { StateDirection, StateIR, StateNode, StateTransition } from "./statediagram";
+import { newId, type NoteId, type StateId, type TransitionId } from "./ids";
+import type { StateDirection, StateIR, StateNode, StateNotePosition, StateTransition } from "./statediagram";
 import { omitUndefined } from "./omitUndefined";
-
-/** State ids appear verbatim in mermaid text, which rejects hyphens —
- * generated ids use underscores instead of newId's `kind-hash` form. */
-export function newStateId(): StateId {
-  return newId("state").replaceAll("-", "_") as string as StateId;
-}
 
 // Same contract as the other diagram actions: intent-carrying, immutable,
 // identity-preserving on no-ops.
 
 /** State ids are the exchange identity in mermaid text — keep them id-safe. */
 export const STATE_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** State ids appear verbatim in mermaid text, which rejects hyphens —
+ * generated ids use underscores instead of newId's `kind-hash` form. */
+export function newStateId(): StateId {
+  return newId("state").replaceAll("-", "_") as string as StateId;
+}
 
 export type StateAction =
   | { type: "addState"; state: StateNode }
@@ -21,9 +21,28 @@ export type StateAction =
   | { type: "setDirection"; direction: StateDirection }
   | { type: "addTransition"; transition: StateTransition }
   | { type: "updateTransition"; id: TransitionId; label?: string }
-  | { type: "removeTransition"; id: TransitionId };
+  | { type: "removeTransition"; id: TransitionId }
+  | { type: "addStateNote"; note: { id: NoteId; target: StateId; position: StateNotePosition; text: string } }
+  | { type: "updateStateNote"; id: NoteId; text?: string; position?: StateNotePosition }
+  | { type: "removeStateNote"; id: NoteId };
 
 const norm = (v: string | undefined) => (v === "" ? undefined : v);
+
+/** The removed state plus every descendant (composite children cascade). */
+function withDescendants(ir: StateIR, root: StateId): Set<StateId> {
+  const doomed = new Set<StateId>([root]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const s of ir.states) {
+      if (s.parent !== undefined && doomed.has(s.parent) && !doomed.has(s.id)) {
+        doomed.add(s.id);
+        grew = true;
+      }
+    }
+  }
+  return doomed;
+}
 
 export function applyStateAction(ir: StateIR, action: StateAction): StateIR {
   switch (action.type) {
@@ -31,23 +50,31 @@ export function applyStateAction(ir: StateIR, action: StateAction): StateIR {
       const s = action.state;
       if (ir.states.some((x) => x.id === s.id)) return ir;
       if (!STATE_NAME_RE.test(s.id)) return ir;
-      // one shared start and one shared end pseudo-state per diagram
-      if (s.role !== "normal" && ir.states.some((x) => x.role === s.role)) return ir;
+      if (s.parent !== undefined && !ir.states.some((x) => x.id === s.parent && x.role === "normal")) return ir;
+      // one start and one end pseudo-state per container ([*] is scoped)
+      if (
+        (s.role === "start" || s.role === "end") &&
+        ir.states.some((x) => x.role === s.role && x.parent === s.parent)
+      ) {
+        return ir;
+      }
       return { ...ir, states: [...ir.states, s] };
     }
 
     case "removeState": {
       if (!ir.states.some((s) => s.id === action.id)) return ir;
+      const doomed = withDescendants(ir, action.id);
       return {
         ...ir,
-        states: ir.states.filter((s) => s.id !== action.id),
-        transitions: ir.transitions.filter((t) => t.from !== action.id && t.to !== action.id),
+        states: ir.states.filter((s) => !doomed.has(s.id)),
+        transitions: ir.transitions.filter((t) => !doomed.has(t.from) && !doomed.has(t.to)),
+        notes: ir.notes.filter((n) => !doomed.has(n.target)),
       };
     }
 
     case "updateState": {
       const s = ir.states.find((x) => x.id === action.id);
-      if (!s || s.role !== "normal") return ir; // [*] has no label
+      if (!s || s.role !== "normal") return ir; // pseudo-states have no label
       const label = action.label ?? s.label;
       if (label === s.label) return ir;
       return { ...ir, states: ir.states.map((x) => (x.id === action.id ? { ...x, label } : x)) };
@@ -80,6 +107,27 @@ export function applyStateAction(ir: StateIR, action: StateAction): StateIR {
     case "removeTransition": {
       if (!ir.transitions.some((t) => t.id === action.id)) return ir;
       return { ...ir, transitions: ir.transitions.filter((t) => t.id !== action.id) };
+    }
+
+    case "addStateNote": {
+      const n = action.note;
+      if (ir.notes.some((x) => x.id === n.id)) return ir;
+      if (!ir.states.some((s) => s.id === n.target)) return ir;
+      return { ...ir, notes: [...ir.notes, n] };
+    }
+
+    case "updateStateNote": {
+      const n = ir.notes.find((x) => x.id === action.id);
+      if (!n) return ir;
+      const text = action.text ?? n.text;
+      const position = action.position ?? n.position;
+      if (text === n.text && position === n.position) return ir;
+      return { ...ir, notes: ir.notes.map((x) => (x.id === action.id ? { ...x, text, position } : x)) };
+    }
+
+    case "removeStateNote": {
+      if (!ir.notes.some((n) => n.id === action.id)) return ir;
+      return { ...ir, notes: ir.notes.filter((n) => n.id !== action.id) };
     }
   }
 }

@@ -4,6 +4,7 @@ import { flowchartToMermaid } from "./flowchart";
 
 const ir: FlowchartIR = {
   kind: "flowchart",
+  subgraphs: [],
   direction: "TB",
   nodes: [
     { id: "node-1" as NodeId, label: "Start", shape: "rounded" },

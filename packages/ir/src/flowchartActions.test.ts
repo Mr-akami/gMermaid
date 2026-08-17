@@ -9,6 +9,7 @@ const e1 = "edge-1" as EdgeId;
 
 const base: FlowchartIR = {
   kind: "flowchart",
+  subgraphs: [],
   direction: "TB",
   nodes: [
     { id: a, label: "A", shape: "rect" },
