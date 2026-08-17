@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`label escaping > emits all shapes and arrows 1`] = `
+"flowchart LR
+  node-0["rect"]
+  node-1("rounded")
+  node-2(["stadium"])
+  node-3{"diamond"}
+  node-4(("circle"))
+  node-0 --> node-1
+  node-1 --- node-2
+  node-2 -.-> node-3
+  node-3 ==> node-4
+"
+`;

@@ -1,0 +1,66 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutClassDiagram > matches the committed golden layout 1`] = `
+{
+  "classes": [
+    {
+      "attributes": [
+        "#name : String",
+      ],
+      "attributesBottom": 197.2,
+      "headerBottom": 169.2,
+      "id": "Animal",
+      "methods": [
+        "+speak() : String",
+      ],
+      "name": "Animal",
+      "rect": {
+        "h": 109.6,
+        "w": 160,
+        "x": 0,
+        "y": 115.59999999999998,
+      },
+      "stereotype": "abstract",
+    },
+    {
+      "attributes": [],
+      "attributesBottom": 45.599999999999994,
+      "headerBottom": 35.599999999999994,
+      "id": "Dog",
+      "methods": [],
+      "name": "Dog",
+      "rect": {
+        "h": 55.599999999999994,
+        "w": 110,
+        "x": 25,
+        "y": 0,
+      },
+    },
+  ],
+  "kind": "class",
+  "relations": [
+    {
+      "id": "r1",
+      "points": [
+        {
+          "x": 80,
+          "y": 55.599999999999994,
+        },
+        {
+          "x": 80,
+          "y": 85.6,
+        },
+        {
+          "x": 80,
+          "y": 115.59999999999998,
+        },
+      ],
+      "type": "inheritance",
+    },
+  ],
+  "size": {
+    "h": 225.2,
+    "w": 160,
+  },
+}
+`;

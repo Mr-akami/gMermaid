@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutFlowchart > matches the committed golden layout 1`] = `
+{
+  "edges": [
+    {
+      "arrow": "arrow",
+      "id": "edge-1",
+      "points": [
+        {
+          "x": 57.6,
+          "y": 39.599999999999994,
+        },
+        {
+          "x": 57.6,
+          "y": 64.6,
+        },
+        {
+          "x": 57.6,
+          "y": 89.6,
+        },
+      ],
+    },
+    {
+      "arrow": "arrow",
+      "id": "edge-2",
+      "label": "yes",
+      "labelPos": {
+        "x": 57.6,
+        "y": 177.95999999999998,
+      },
+      "points": [
+        {
+          "x": 57.6,
+          "y": 152.95999999999998,
+        },
+        {
+          "x": 57.6,
+          "y": 177.95999999999998,
+        },
+        {
+          "x": 57.6,
+          "y": 202.95999999999998,
+        },
+      ],
+    },
+  ],
+  "kind": "flowchart",
+  "nodes": [
+    {
+      "id": "node-1",
+      "label": "Start",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 72,
+        "x": 21.6,
+        "y": 0,
+      },
+      "shape": "rounded",
+    },
+    {
+      "id": "node-2",
+      "label": "Check",
+      "rect": {
+        "h": 63.35999999999999,
+        "w": 115.2,
+        "x": 0,
+        "y": 89.6,
+      },
+      "shape": "diamond",
+    },
+    {
+      "id": "node-3",
+      "label": "End",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 56,
+        "x": 29.6,
+        "y": 202.95999999999998,
+      },
+      "shape": "rounded",
+    },
+  ],
+  "size": {
+    "h": 242.56,
+    "w": 115.2,
+  },
+}
+`;

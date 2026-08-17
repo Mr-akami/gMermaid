@@ -1,0 +1,15 @@
+{
+  "name": "@gmermaid/mermaid-parser",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gmermaid/ir": "workspace:*"
+  },
+  "devDependencies": {
+    "@gmermaid/mermaid-codegen": "workspace:*"
+  }
+}

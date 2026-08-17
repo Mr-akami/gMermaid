@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/ir" },
+    { "path": "packages/layout" },
+    { "path": "packages/mermaid-codegen" },
+    { "path": "packages/renderer" },
+    { "path": "packages/mermaid-parser" },
+    { "path": "packages/app" }
+  ]
+}

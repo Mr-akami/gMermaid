@@ -1,0 +1,206 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutSequence > matches the committed golden layout 1`] = `
+{
+  "fragments": [
+    {
+      "branches": [
+        {
+          "condition": "ok",
+          "conditionPos": {
+            "x": 65,
+            "y": 126,
+          },
+          "id": "br1",
+        },
+        {
+          "condition": "fail",
+          "conditionPos": {
+            "x": 23,
+            "y": 211,
+          },
+          "dividerY": 194,
+          "id": "br2",
+        },
+      ],
+      "depth": 0,
+      "fragmentKind": "alt",
+      "id": "f1",
+      "labelTab": {
+        "h": 20,
+        "w": 44,
+        "x": 13,
+        "y": 112,
+      },
+      "rect": {
+        "h": 164,
+        "w": 375,
+        "x": 13,
+        "y": 112,
+      },
+    },
+  ],
+  "kind": "sequence",
+  "lifelines": [
+    {
+      "headRect": {
+        "h": 36,
+        "w": 70,
+        "x": 20,
+        "y": 10,
+      },
+      "id": "a",
+      "isActor": true,
+      "name": "Alice",
+      "spineBottom": 350,
+      "spineTop": 46,
+      "x": 55,
+    },
+    {
+      "headRect": {
+        "h": 36,
+        "w": 70,
+        "x": 154,
+        "y": 10,
+      },
+      "id": "b",
+      "isActor": false,
+      "name": "Bob",
+      "spineBottom": 350,
+      "spineTop": 46,
+      "x": 189,
+    },
+    {
+      "headRect": {
+        "h": 36,
+        "w": 84,
+        "x": 304,
+        "y": 10,
+      },
+      "id": "c",
+      "isActor": false,
+      "name": "Charlie",
+      "spineBottom": 350,
+      "spineTop": 46,
+      "x": 346,
+    },
+  ],
+  "messages": [
+    {
+      "arrow": "solid",
+      "fromX": 55,
+      "id": "m1",
+      "label": "hello",
+      "labelPos": {
+        "x": 122,
+        "y": 66,
+      },
+      "toX": 189,
+      "y": 74,
+    },
+    {
+      "arrow": "dotted",
+      "fromX": 189,
+      "id": "m2",
+      "label": "forward",
+      "labelPos": {
+        "x": 267.5,
+        "y": 144,
+      },
+      "toX": 346,
+      "y": 152,
+    },
+    {
+      "arrow": "solid",
+      "fromX": 189,
+      "id": "m3",
+      "label": "sorry",
+      "labelPos": {
+        "x": 122,
+        "y": 220,
+      },
+      "toX": 55,
+      "y": 228,
+    },
+    {
+      "arrow": "async",
+      "fromX": 346,
+      "id": "m4",
+      "label": "self",
+      "labelPos": {
+        "x": 346,
+        "y": 284,
+      },
+      "toX": 346,
+      "y": 292,
+    },
+  ],
+  "notes": [],
+  "size": {
+    "h": 374,
+    "w": 408,
+  },
+  "slots": [
+    {
+      "container": {
+        "kind": "root",
+      },
+      "index": 0,
+      "y": 55,
+    },
+    {
+      "container": {
+        "kind": "root",
+      },
+      "index": 1,
+      "y": 93,
+    },
+    {
+      "container": {
+        "branchId": "br1",
+        "kind": "branch",
+      },
+      "index": 0,
+      "y": 133,
+    },
+    {
+      "container": {
+        "branchId": "br1",
+        "kind": "branch",
+      },
+      "index": 1,
+      "y": 175,
+    },
+    {
+      "container": {
+        "branchId": "br2",
+        "kind": "branch",
+      },
+      "index": 0,
+      "y": 209,
+    },
+    {
+      "container": {
+        "branchId": "br2",
+        "kind": "branch",
+      },
+      "index": 1,
+      "y": 251,
+    },
+    {
+      "container": {
+        "kind": "root",
+      },
+      "index": 2,
+      "y": 273,
+    },
+    {
+      "container": {
+        "kind": "root",
+      },
+      "index": 3,
+      "y": 329,
+    },
+  ],
+}
+`;
