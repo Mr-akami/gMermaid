@@ -84,3 +84,43 @@ body { margin: 0; font-family: sans-serif; }
 .property-window input[type="text"], .property-window input:not([type]), .property-window select { width: 100%; margin-top: 2px; }
 .property-window .danger { margin-top: 12px; color: #b00; }
 .hint { color: #888; font-size: 12px; }
+
+.files-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 60px;
+}
+.files-panel {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  min-width: 560px;
+  max-width: 80vw;
+  max-height: 70vh;
+  overflow: auto;
+}
+.files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #ddd;
+}
+.files-header h3 { margin: 0; font-size: 14px; }
+.files-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.files-table th, .files-table td {
+  text-align: left;
+  padding: 6px 12px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+}
+.files-table .danger { color: #b00; }

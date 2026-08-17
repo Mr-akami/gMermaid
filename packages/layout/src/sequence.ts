@@ -83,8 +83,6 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
   const notes: NoteBox[] = [];
   const slots: DropSlot[] = [];
   let y = TOP_MARGIN + HEAD_H + FIRST_ROW_GAP;
-  // the message a directly-following note should point its reference line at
-  let lastMessage: { x: number; y: number } | null = null;
 
   const lifelinesOf = (events: readonly SequenceEvent[]): Set<LifelineId> => {
     const s = new Set<LifelineId>();
@@ -101,6 +99,9 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
     container: DropSlot["container"],
   ): void => {
     let idx = 0;
+    // per-container: a note only anchors to a message that is its DIRECT
+    // preceding sibling — never across fragment borders or branch dividers
+    let lastMessage: { x: number; y: number } | null = null;
     for (const e of events) {
       slots.push({ container, index: idx, y: y - ROW_H / 2 });
       idx += 1;

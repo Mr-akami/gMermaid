@@ -64,6 +64,43 @@ describe("layoutSequence", () => {
     expect(frame.rect.x + frame.rect.w).toBeGreaterThan(xc);
   });
 
+  it("note reference lines never cross container borders", () => {
+    const withNotes: SequenceIR = {
+      ...ir,
+      events: [
+        { kind: "message", id: "m1" as MessageId, from: L("a"), to: L("b"), label: "hi", arrow: "solid" },
+        {
+          kind: "fragment",
+          id: "f1" as FragmentId,
+          fragmentKind: "alt",
+          branches: [
+            {
+              id: "br1" as BranchId,
+              condition: "x",
+              events: [{ kind: "message", id: "m2" as MessageId, from: L("a"), to: L("b"), label: "in", arrow: "solid" }],
+            },
+            {
+              id: "br2" as BranchId,
+              condition: "y",
+              // a note at the head of a branch must NOT anchor across the divider
+              events: [{ kind: "note", id: "n2" as never, position: "over", lifelines: [L("a")], text: "head" }],
+            },
+          ],
+        },
+        // a note directly after a fragment must NOT anchor into its inside
+        { kind: "note", id: "n1" as never, position: "over", lifelines: [L("a")], text: "after frag" },
+        { kind: "message", id: "m3" as MessageId, from: L("a"), to: L("b"), label: "tail", arrow: "solid" },
+        { kind: "note", id: "n3" as never, position: "over", lifelines: [L("a")], text: "anchored" },
+      ],
+    };
+    const result = layoutSequence(withNotes, fixedWidthMeasurer());
+    const note = (id: string) => result.notes.find((n) => n.id === id)!;
+    expect(note("n1").anchor).toBeUndefined();
+    expect(note("n2").anchor).toBeUndefined();
+    const m3 = result.messages.find((m) => m.id === "m3")!;
+    expect(note("n3").anchor).toEqual(expect.objectContaining({ x2: (m3.fromX + m3.toX) / 2, y2: m3.y }));
+  });
+
   it("parents fully enclose nested fragment frames", () => {
     const nested: SequenceIR = {
       ...ir,

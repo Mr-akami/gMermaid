@@ -59,12 +59,31 @@ export async function openMmd(): Promise<string | null> {
   });
 }
 
+// Stored value format: JSON {code, updatedAt}. Legacy entries hold the raw
+// code string — readStoredCode accepts both.
+interface StoredValue {
+  readonly code: string;
+  readonly updatedAt: number;
+}
+
+export function readStoredCode(raw: string): { code: string; updatedAt: number | null } {
+  try {
+    const v = JSON.parse(raw) as Partial<StoredValue>;
+    if (typeof v === "object" && v !== null && typeof v.code === "string") {
+      return { code: v.code, updatedAt: typeof v.updatedAt === "number" ? v.updatedAt : null };
+    }
+  } catch {
+    // legacy: raw code string
+  }
+  return { code: raw, updatedAt: null };
+}
+
 /** Restore a diagram from localStorage, or fall back to a sample. */
 export function loadInitial<T>(storageKey: string, parse: (code: string) => ParseResult<T>, sample: () => T): T {
   try {
     const stored = localStorage.getItem(storageKey);
     if (stored !== null) {
-      const result = parse(stored);
+      const result = parse(readStoredCode(stored).code);
       if (result.ok) return result.ir;
     }
   } catch {
@@ -77,9 +96,53 @@ export function loadInitial<T>(storageKey: string, parse: (code: string) => Pars
 export function useAutosave(storageKey: string, code: string): void {
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey, code);
+      localStorage.setItem(storageKey, JSON.stringify({ code, updatedAt: Date.now() } satisfies StoredValue));
     } catch {
       // best effort only
     }
   }, [storageKey, code]);
+}
+
+export const STORAGE_PREFIX = "gmermaid:";
+
+export interface StoredEntry {
+  readonly key: string;
+  readonly kind: "flowchart" | "sequence" | "class" | "unknown";
+  readonly updatedAt: number | null;
+  readonly bytes: number;
+  readonly code: string;
+}
+
+function detectKind(code: string): StoredEntry["kind"] {
+  const head = code.trimStart();
+  if (head.startsWith("flowchart") || head.startsWith("graph")) return "flowchart";
+  if (head.startsWith("sequenceDiagram")) return "sequence";
+  if (head.startsWith("classDiagram")) return "class";
+  return "unknown";
+}
+
+/** Every gMermaid entry currently in localStorage, newest first. */
+export function listStoredEntries(): StoredEntry[] {
+  const entries: StoredEntry[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === null || !key.startsWith(STORAGE_PREFIX)) continue;
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      const { code, updatedAt } = readStoredCode(raw);
+      entries.push({ key, kind: detectKind(code), updatedAt, bytes: raw.length, code });
+    }
+  } catch {
+    // storage unavailable
+  }
+  return entries.toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+}
+
+export function deleteStoredEntry(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // storage unavailable
+  }
 }

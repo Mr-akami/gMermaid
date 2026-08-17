@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   applySequenceAction,
   emptySequence,
@@ -68,7 +68,11 @@ function rowYMap(layout: SequenceLayout): Map<string, number> {
 
 const STORAGE_KEY = "gmermaid:sequence";
 
-export function SequenceEditor() {
+export interface EditorProps {
+  readonly loadRequest?: { readonly seq: number; readonly code: string | null } | undefined;
+}
+
+export function SequenceEditor({ loadRequest }: EditorProps) {
   const h = useDiagramHistory(() => loadInitial(STORAGE_KEY, parseSequence, initialIR), applySequenceAction);
   const [view, setView] = useState<ViewState>({});
   // drag feedback is view-transient (ADR 0001): the IR changes once, on drop
@@ -81,6 +85,18 @@ export function SequenceEditor() {
   const layout = useMemo(() => layoutSequence(ir, measurer), [ir]);
   const code = useMemo(() => sequenceToMermaid(ir), [ir]);
   useAutosave(STORAGE_KEY, code);
+
+  useEffect(() => {
+    if (!loadRequest) return;
+    if (loadRequest.code === null) {
+      h.pushIR(initialIR());
+    } else {
+      const result = parseSequence(loadRequest.code);
+      if (result.ok) h.pushIR(result.ir);
+    }
+    setView({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadRequest?.seq]);
 
   async function openFile() {
     const text = await openMmd();
@@ -346,6 +362,11 @@ export function SequenceEditor() {
             dropIndicatorY={dropY}
             dropIndicatorX={dropX}
             connectLine={connectLine}
+            onGestureCancel={() => {
+              setDropY(undefined);
+              setDropX(undefined);
+              setConnectLine(undefined);
+            }}
           />
         </ErrorBoundary>
         {selection && (

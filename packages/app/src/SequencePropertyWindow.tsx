@@ -54,11 +54,21 @@ function LoopSpecFields({
     <>
       <label>
         Min iterations
-        <input {...common} value={spec.min} onChange={(e) => onChange(composeLoopSpec(e.target.value, spec.max, spec.exit))} />
+        <input
+          {...common}
+          inputMode="numeric"
+          value={spec.min}
+          onChange={(e) => onChange(composeLoopSpec(e.target.value.replaceAll(/[^0-9]/g, ""), spec.max, spec.exit))}
+        />
       </label>
       <label>
         Max iterations
-        <input {...common} value={spec.max} onChange={(e) => onChange(composeLoopSpec(spec.min, e.target.value, spec.exit))} />
+        <input
+          {...common}
+          inputMode="numeric"
+          value={spec.max}
+          onChange={(e) => onChange(composeLoopSpec(spec.min, e.target.value.replaceAll(/[^0-9]/g, ""), spec.exit))}
+        />
       </label>
       <label>
         Exit condition

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
+import { Transaction } from "@codemirror/state";
+import type { ViewUpdate } from "@codemirror/view";
 import type { ParseError, ParseResult } from "@gmermaid/mermaid-parser";
 
 export interface CodePaneProps<T> {
@@ -28,7 +30,13 @@ export function CodePane<T>({ code, parse, onCommit, onEditStart, onEditEnd }: C
   const [errors, setErrors] = useState<readonly ParseError[]>([]);
   const active = draft !== null && (focused || draft.base === code) ? draft : null;
 
-  function handleChange(value: string) {
+  function handleChange(value: string, viewUpdate: ViewUpdate) {
+    // CodeMirror also fires onChange when WE replace the document (mirroring
+    // canvas edits). Only user-initiated transactions may commit to the IR —
+    // otherwise every canvas edit is followed by a spurious reparse that
+    // regenerates ids and clobbers the edit cycle.
+    const isUserEdit = viewUpdate.transactions.some((tr) => tr.annotation(Transaction.userEvent) !== undefined);
+    if (!isUserEdit) return;
     setDraft({ text: value, base: code });
     const result = parse(value);
     if (result.ok) {

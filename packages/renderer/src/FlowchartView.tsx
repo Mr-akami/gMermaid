@@ -17,6 +17,7 @@ export interface FlowchartViewProps {
   readonly onConnectDrop?: (fromId: string, x: number, y: number) => void;
   /** Rubber band for the edge-creation gesture. */
   readonly connectLine?: { x1: number; y1: number; x2: number; y2: number } | undefined;
+  readonly onGestureCancel?: () => void;
 }
 
 const PADDING = 20;
@@ -30,6 +31,7 @@ export function FlowchartView({
   onConnectDrag,
   onConnectDrop,
   connectLine,
+  onGestureCancel,
 }: FlowchartViewProps) {
   // Clicks resolve on pointerup from the original press target: pointer
   // capture retargets native clicks to the svg root (see SequenceView).
@@ -46,26 +48,30 @@ export function FlowchartView({
       height={layout.size.h + PADDING * 2}
       viewBox={`${-PADDING} ${-PADDING} ${layout.size.w + PADDING * 2} ${layout.size.h + PADDING * 2}`}
       onPointerDown={(e: PointerEvent<SVGSVGElement>) => {
+        if (e.button !== 0 || !e.isPrimary) return; // left/primary pointer only
         const target = e.target as Element;
         const targetId = target.closest("[data-element-id]")?.getAttribute("data-element-id") ?? null;
         const connect = target.closest("[data-drag='connect']") !== null;
         const { x, y } = pt(e);
         pointer.current = { targetId, connect, sx: x, sy: y, active: false };
-        if (connect) e.currentTarget.setPointerCapture(e.pointerId);
+        // always capture so pointerup reaches us even outside the svg
+        e.currentTarget.setPointerCapture(e.pointerId);
       }}
       onPointerMove={(e: PointerEvent<SVGSVGElement>) => {
         const p = pointer.current;
-        if (!p || !p.connect || p.targetId === null) return;
+        if (!p) return;
         const { x, y } = pt(e);
         if (!p.active && Math.abs(x - p.sx) < DRAG_THRESHOLD && Math.abs(y - p.sy) < DRAG_THRESHOLD) return;
-        p.active = true;
+        p.active = true; // moved past threshold: no longer a click
+        if (!p.connect || p.targetId === null) return;
         onConnectDrag?.(p.targetId, x, y);
       }}
       onPointerUp={(e: PointerEvent<SVGSVGElement>) => {
         const p = pointer.current;
         pointer.current = null;
         if (!p) return;
-        if (p.active && p.targetId !== null) {
+        if (p.active) {
+          if (!p.connect || p.targetId === null) return; // a swipe, not a click or drop
           const { x, y } = pt(e);
           onConnectDrop?.(p.targetId, x, y);
           return;
@@ -73,6 +79,11 @@ export function FlowchartView({
         if (p.targetId !== null) onElementClick?.(p.targetId);
         else onBackgroundClick?.();
       }}
+      onPointerCancel={() => {
+        pointer.current = null;
+        onGestureCancel?.();
+      }}
+      style={{ touchAction: "none" }}
     >
       <defs>
         <marker id="gm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">

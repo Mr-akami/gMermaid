@@ -22,6 +22,11 @@ export type SequenceAction =
   | { type: "removeLifeline"; id: LifelineId }
   | { type: "moveLifeline"; id: LifelineId; index: number }
   | { type: "addMessage"; message: Message; afterEventId?: MessageId | FragmentId }
+  // index semantics differ per action — read carefully:
+  //   addEventAt:  insertion position in the CURRENT container list (nothing is removed first)
+  //   moveEventTo: insertion position AFTER the event is removed — moving down
+  //                within the same container needs a -1 adjustment by the caller
+  //   moveLifeline: final position after removal+insert (= resulting index)
   | { type: "addEventAt"; event: Message | Note; container: EventContainer; index: number }
   | { type: "updateMessage"; id: MessageId; label?: string; arrow?: MessageArrowType }
   | { type: "updateNote"; id: NoteId; text?: string; position?: NotePosition }

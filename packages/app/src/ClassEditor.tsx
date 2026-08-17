@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   applyClassAction,
   emptyClassDiagram,
@@ -67,7 +67,11 @@ function parseMembers(text: string): { attributes: ClassMember[]; methods: Class
 
 const STORAGE_KEY = "gmermaid:class";
 
-export function ClassEditor() {
+export interface EditorProps {
+  readonly loadRequest?: { readonly seq: number; readonly code: string | null } | undefined;
+}
+
+export function ClassEditor({ loadRequest }: EditorProps) {
   const h = useDiagramHistory(() => loadInitial(STORAGE_KEY, parseClassDiagram, initialIR), applyClassAction);
   const [view, setView] = useState<ViewState>({});
   // drag-to-connect rubber band: view-transient (ADR 0001)
@@ -88,6 +92,19 @@ export function ClassEditor() {
   const layout = useMemo(() => layoutClassDiagram(ir, measurer), [ir]);
   const code = useMemo(() => classToMermaid(ir), [ir]);
   useAutosave(STORAGE_KEY, code);
+
+  useEffect(() => {
+    if (!loadRequest) return;
+    setMemberDraft(null);
+    if (loadRequest.code === null) {
+      h.pushIR(initialIR());
+    } else {
+      const result = parseClassDiagram(loadRequest.code);
+      if (result.ok) h.pushIR(result.ir);
+    }
+    setView({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadRequest?.seq]);
 
   async function openFile() {
     const text = await openMmd();
@@ -219,6 +236,7 @@ export function ClassEditor() {
             onConnectDrag={handleConnectDrag}
             onConnectDrop={handleConnectDrop}
             connectLine={connectLine}
+            onGestureCancel={() => setConnectLine(undefined)}
           />
         </ErrorBoundary>
         {selection && (

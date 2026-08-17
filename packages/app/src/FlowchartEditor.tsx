@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   applyFlowchartAction,
   emptyFlowchart,
@@ -35,7 +35,12 @@ interface ViewState {
 
 const STORAGE_KEY = "gmermaid:flowchart";
 
-export function FlowchartEditor() {
+export interface EditorProps {
+  /** External replace request from the Files panel (null code = sample). */
+  readonly loadRequest?: { readonly seq: number; readonly code: string | null } | undefined;
+}
+
+export function FlowchartEditor({ loadRequest }: EditorProps) {
   const h = useDiagramHistory(() => loadInitial(STORAGE_KEY, parseFlowchart, initialIR), applyFlowchartAction);
   const [view, setView] = useState<ViewState>({});
   // drag-to-connect rubber band: view-transient (ADR 0001)
@@ -46,6 +51,18 @@ export function FlowchartEditor() {
   const layout = useMemo(() => layoutFlowchart(ir, measurer), [ir]);
   const code = useMemo(() => flowchartToMermaid(ir), [ir]);
   useAutosave(STORAGE_KEY, code);
+
+  useEffect(() => {
+    if (!loadRequest) return;
+    if (loadRequest.code === null) {
+      h.pushIR(initialIR());
+    } else {
+      const result = parseFlowchart(loadRequest.code);
+      if (result.ok) h.pushIR(result.ir);
+    }
+    setView({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadRequest?.seq]);
 
   async function openFile() {
     const text = await openMmd();
@@ -129,6 +146,7 @@ export function FlowchartEditor() {
             onConnectDrag={handleConnectDrag}
             onConnectDrop={handleConnectDrop}
             connectLine={connectLine}
+            onGestureCancel={() => setConnectLine(undefined)}
           />
         </ErrorBoundary>
         {selected && (

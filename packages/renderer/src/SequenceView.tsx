@@ -34,6 +34,9 @@ export interface SequenceViewProps {
   readonly dropIndicatorX?: number | undefined;
   /** Rubber band for the message-creation gesture. */
   readonly connectLine?: { x1: number; y1: number; x2: number; y2: number } | undefined;
+  /** The pointer was cancelled mid-gesture (touch scroll etc.) — clear any
+   * drag feedback the app is showing. */
+  readonly onGestureCancel?: () => void;
 }
 
 const DRAG_THRESHOLD = 5;
@@ -68,6 +71,7 @@ export function SequenceView({
   dropIndicatorY,
   dropIndicatorX,
   connectLine,
+  onGestureCancel,
 }: SequenceViewProps) {
   // pointer bookkeeping only — all meaning lives in the emitted intents.
   // Clicks are resolved on pointerup from the ORIGINAL press target: pointer
@@ -80,50 +84,64 @@ export function SequenceView({
     return { x: e.clientX - rect.left - PADDING, y: e.clientY - rect.top - PADDING };
   }
 
+  const KNOWN_DRAG_KINDS = ["message", "fragment-bottom", "divider", "lifeline", "spine"] as const;
+
   function handlePointerDown(e: PointerEvent<SVGSVGElement>) {
+    if (e.button !== 0 || !e.isPrimary) return; // left/primary pointer only
     const target = e.target as Element;
-    const dragEl = target.closest("[data-drag]");
+    const rawKind = target.closest("[data-drag]")?.getAttribute("data-drag") ?? null;
     const targetId = target.closest("[data-element-id]")?.getAttribute("data-element-id") ?? null;
     const { x, y } = diagramPoint(e);
     pointer.current = {
-      dragKind: (dragEl?.getAttribute("data-drag") as PointerState["dragKind"]) ?? null,
+      dragKind: (KNOWN_DRAG_KINDS as readonly string[]).includes(rawKind ?? "")
+        ? (rawKind as PointerState["dragKind"])
+        : null,
       targetId,
       startX: x,
       startY: y,
       active: false,
     };
-    if (dragEl) e.currentTarget.setPointerCapture(e.pointerId);
+    // always capture, so pointerup reaches us even outside the svg —
+    // otherwise stale state produces a phantom click later
+    e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function handlePointerMove(e: PointerEvent<SVGSVGElement>) {
     const p = pointer.current;
-    if (!p || p.dragKind === null || p.targetId === null) return;
+    if (!p) return;
     const { x, y } = diagramPoint(e);
     if (!p.active && Math.abs(y - p.startY) < DRAG_THRESHOLD && Math.abs(x - p.startX) < DRAG_THRESHOLD) return;
-    p.active = true;
+    p.active = true; // moved past threshold: this press can no longer be a click
+    if (p.targetId === null) return;
     if (p.dragKind === "message") onMessageDrag?.(p.targetId, y);
     else if (p.dragKind === "divider") onDividerDrag?.(p.targetId, y);
     else if (p.dragKind === "lifeline") onLifelineDrag?.(p.targetId, x);
     else if (p.dragKind === "spine") onSpineDrag?.(p.targetId, x, y);
-    else onFragmentBottomDrag?.(p.targetId, y);
+    else if (p.dragKind === "fragment-bottom") onFragmentBottomDrag?.(p.targetId, y);
   }
 
   function handlePointerUp(e: PointerEvent<SVGSVGElement>) {
     const p = pointer.current;
     pointer.current = null;
     if (!p) return;
-    if (p.active && p.dragKind !== null && p.targetId !== null) {
+    if (p.active) {
+      if (p.dragKind === null || p.targetId === null) return; // a swipe, not a click or drop
       const { x, y } = diagramPoint(e);
       if (p.dragKind === "message") onMessageDrop?.(p.targetId, y);
       else if (p.dragKind === "divider") onDividerDrop?.(p.targetId, y);
       else if (p.dragKind === "lifeline") onLifelineDrop?.(p.targetId, x);
       else if (p.dragKind === "spine") onSpineDrop?.(p.targetId, x, y);
-      else onFragmentBottomDrop?.(p.targetId, y);
+      else if (p.dragKind === "fragment-bottom") onFragmentBottomDrop?.(p.targetId, y);
       return;
     }
     // no drag happened: this press was a click
     if (p.targetId !== null) onElementClick?.(p.targetId);
     else onBackgroundClick?.();
+  }
+
+  function handlePointerCancel() {
+    pointer.current = null;
+    onGestureCancel?.();
   }
 
   return (
@@ -134,6 +152,8 @@ export function SequenceView({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      style={{ touchAction: "none" }}
     >
       <defs>
         <marker id="gm-seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
