@@ -114,6 +114,10 @@ export function useAutosave(storageKey: string, code: string): void {
   }, [storageKey, code]);
 }
 
+export function formatParseErrors(errors: readonly { line: number; message: string }[]): string {
+  return errors.map((e) => `line ${e.line}: ${e.message}`).join("\n");
+}
+
 export const STORAGE_PREFIX = "gmermaid:";
 
 export interface StoredEntry {

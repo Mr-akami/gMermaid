@@ -17,7 +17,7 @@ import { sequenceToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseSequence } from "@gmermaid/mermaid-parser";
 import { SequenceView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
+import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SequencePropertyWindow, type SequenceSelection } from "./SequencePropertyWindow";
@@ -93,6 +93,7 @@ export function SequenceEditor({ loadRequest }: EditorProps) {
     } else {
       const result = parseSequence(loadRequest.code);
       if (result.ok) h.pushIR(result.ir);
+      else alert(`Cannot load stored diagram:\n${formatParseErrors(result.errors)}`);
     }
     setView({});
     // eslint-disable-next-line react-hooks/exhaustive-deps

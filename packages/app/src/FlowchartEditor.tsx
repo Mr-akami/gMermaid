@@ -11,7 +11,7 @@ import { flowchartToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseFlowchart } from "@gmermaid/mermaid-parser";
 import { FlowchartView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
+import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { PropertyWindow } from "./PropertyWindow";
@@ -59,6 +59,7 @@ export function FlowchartEditor({ loadRequest }: EditorProps) {
     } else {
       const result = parseFlowchart(loadRequest.code);
       if (result.ok) h.pushIR(result.ir);
+      else alert(`Cannot load stored diagram:\n${formatParseErrors(result.errors)}`);
     }
     setView({});
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -16,7 +16,7 @@ import { classToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseClassDiagram, parseMemberLine } from "@gmermaid/mermaid-parser";
 import { ClassView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
+import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ClassPropertyWindow, type ClassSelection } from "./ClassPropertyWindow";
@@ -101,6 +101,7 @@ export function ClassEditor({ loadRequest }: EditorProps) {
     } else {
       const result = parseClassDiagram(loadRequest.code);
       if (result.ok) h.pushIR(result.ir);
+      else alert(`Cannot load stored diagram:\n${formatParseErrors(result.errors)}`);
     }
     setView({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
