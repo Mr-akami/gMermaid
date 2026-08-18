@@ -1,5 +1,10 @@
 # Changelog
 
+## [v2026.818.0](https://github.com/Mr-akami/gMermaid/compare/v2026.817.0...v2026.818.0) - 2026-08-18
+
+### Other changes
+- ci: skip publish when the version is already on npm by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/8
+
 ## [v2026.818.0](https://github.com/Mr-akami/gMermaid/commits/v2026.818.0) - 2026-08-18
 
 ### Other changes
