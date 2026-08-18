@@ -1,4 +1,4 @@
-# Releasing `gmermaid`
+# Releasing `@mr-akami/gmermaid`
 
 ## Release flow
 
@@ -8,8 +8,8 @@ request causes the same workflow to:
 
 1. create a `vYYYY.MMDD.MICRO` tag and GitHub Release;
 2. run lint, tests, type checking, and the package build;
-3. create the npm tarball; and
-4. publish `gmermaid` to npm using OIDC trusted publishing.
+3. publish `@mr-akami/gmermaid` to npm using OIDC trusted publishing, run from
+   `packages/mcp` with `--provenance` so npm attests the build.
 
 No npm token is stored in GitHub.
 
@@ -22,39 +22,84 @@ In GitHub, open **Settings → Actions → General → Workflow permissions** an
 
 The workflows also declare their minimum required permissions directly.
 
-## First npm publish
+## Manual publish
 
-npm trusted publishing is configured from an existing package's settings, so the
-first publication is done manually. Authenticate locally with an npm account
-that may publish `gmermaid`, then run from the repository root:
+Only `packages/mcp` is published; every other workspace package is
+`private: true`. The published package is `@mr-akami/gmermaid` and it ships a
+single `gmermaid` binary with two modes — `gmermaid` opens the editor and
+`gmermaid mcp` speaks stdio MCP. The directory is still named `mcp` for
+historical reasons; it is not a feature-limited build.
+
+### 1. Authenticate
+
+```sh
+npm login          # web auth; must be run interactively in your own terminal
+npm whoami         # expect: mr-akami
+```
+
+### 2. Verify from the repository root
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm lint
 pnpm test
 pnpm typecheck
-pnpm --filter gmermaid build
-pnpm --dir packages/mcp pack --pack-destination ../../artifacts
-npm publish ./artifacts/gmermaid-2026.817.0.tgz --access public
+pnpm --filter @mr-akami/gmermaid build
 ```
 
-Inspect the tarball before publishing with:
+### 3. Inspect the tarball
 
 ```sh
-tar -tzf ./artifacts/gmermaid-2026.817.0.tgz
+cd packages/mcp
+npm pack --dry-run --ignore-scripts
 ```
 
-It must contain `dist/cli.js`, `dist/editor.html`, `dist/review.html`, and
-`README.md` — the editor and review HTML are bundled as single files, so the
-package has no build step on the consumer side.
-
-Verify both CLI modes from the tarball before publishing:
+It must list `dist/cli.js`, `dist/editor.html`, `dist/review.html`, `README.md`,
+and `LICENSE` — the editor and review HTML are bundled as single files, so the
+package needs no build step on the consumer side. Smoke-test both modes:
 
 ```sh
-npm pack --dry-run   # sanity check the file list
 node ./dist/cli.js --version
 node ./dist/cli.js --help
 ```
+
+### 4. Publish
+
+```sh
+cd packages/mcp
+npm publish
+```
+
+`prepack` re-runs the full build, so the tarball always matches the current
+source. `publishConfig.access` is `public`, which scoped packages need.
+
+If the account requires a one-time password the command fails with `EOTP`;
+re-run it with the code from your authenticator:
+
+```sh
+npm publish --otp=<6-digit code>
+```
+
+Web-based auth may instead print an `npmjs.com/auth/cli/...` URL — open it,
+approve, and the publish continues. Success ends with
+`+ @mr-akami/gmermaid@<version>`.
+
+### 5. Verify the published package
+
+```sh
+npm view @mr-akami/gmermaid version bin
+npx -y @mr-akami/gmermaid --version
+```
+
+A `404 Not Found` right after a successful publish usually is not the registry
+lagging — safe-chain hides versions below its minimum package age, which makes a
+brand-new version look absent. Confirm against the registry directly:
+
+```sh
+curl -s https://registry.npmjs.org/@mr-akami%2Fgmermaid | jq '{tags: .["dist-tags"], versions: (.versions | keys)}'
+```
+
+or re-run the `npm` command with `--safe-chain-skip-minimum-package-age`.
 
 Subsequent versions are CalVer releases managed by tagpr.
 
@@ -62,7 +107,7 @@ Subsequent versions are CalVer releases managed by tagpr.
 
 After the first package exists, open:
 
-**npmjs.com → gmermaid → Settings → Trusted Publisher → GitHub Actions**
+**npmjs.com → @mr-akami/gmermaid → Settings → Trusted Publisher → GitHub Actions**
 
 Configure it with these exact values:
 
@@ -76,6 +121,9 @@ Configure it with these exact values:
 Do not configure an environment name unless the `publish` job in
 `.github/workflows/release.yml` is also updated to use that environment.
 
+Until this is configured the `publish` job fails with `401`; the manual publish
+above stays the fallback.
+
 After a successful OIDC release, set the package's publishing access to
 **Require two-factor authentication and disallow tokens**, then revoke any
 automation token that is no longer needed.
@@ -86,11 +134,11 @@ automation token that is no longer needed.
 merged into one package. It stays on npm as a pointer only:
 
 ```sh
-npm deprecate @gmermaid/mcp "Renamed to gmermaid. Install it with: npx gmermaid mcp"
+npm deprecate @gmermaid/mcp "Renamed to gmermaid. Install it with: npx @mr-akami/gmermaid mcp"
 ```
 
-Do not publish new versions under the old name — the `gmermaid` package covers
-both the editor (`npx gmermaid`) and the MCP server (`npx gmermaid mcp`).
+Do not publish new versions under the old name — `@mr-akami/gmermaid` covers
+both the editor (`npx @mr-akami/gmermaid`) and the MCP server (`npx @mr-akami/gmermaid mcp`).
 
 ## Recovery
 
@@ -101,7 +149,7 @@ If verification or npm publication fails after tagpr creates a release, first
 check whether the version already exists:
 
 ```sh
-npm view gmermaid@<version> version
+npm view @mr-akami/gmermaid@<version> version
 ```
 
 If it does not exist, open **Actions → Release → Run workflow**, select `main`,

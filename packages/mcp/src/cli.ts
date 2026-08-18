@@ -1,6 +1,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { readFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { packageVersion } from "./metadata";
@@ -52,7 +52,6 @@ async function runMcp(): Promise<void> {
   await instance.server.connect(new StdioServerTransport(input, output));
 }
 
-const executable = basename(process.argv[1] ?? "gmermaid");
 const [command, ...rest] = process.argv.slice(2);
 
 try {
@@ -61,7 +60,7 @@ try {
     process.stdout.write(help());
   } else if (command === "--version" || command === "-v") {
     process.stdout.write(`${packageVersion()}\n`);
-  } else if (command === "mcp" || executable === "gmermaid-mcp") {
+  } else if (command === "mcp") {
     await runMcp();
   } else if (command === undefined || command === "editor") {
     await runEditor();

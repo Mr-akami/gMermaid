@@ -1,5 +1,5 @@
 {
-  "name": "gmermaid",
+  "name": "@mr-akami/gmermaid",
   "version": "2026.817.0",
   "description": "Local GUI editor and MCP review server for Mermaid diagrams",
   "license": "MIT",
@@ -15,8 +15,7 @@
   },
   "type": "module",
   "bin": {
-    "gmermaid": "dist/cli.js",
-    "gmermaid-mcp": "dist/cli.js"
+    "gmermaid": "dist/cli.js"
   },
   "files": ["dist", "README.md"],
   "scripts": {

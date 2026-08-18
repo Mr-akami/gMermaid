@@ -26,5 +26,5 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm typecheck
-      - run: pnpm --filter gmermaid build
+      - run: pnpm --filter @mr-akami/gmermaid build
       - run: pnpm --dir packages/mcp pack --pack-destination ../../artifacts
