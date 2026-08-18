@@ -78,7 +78,21 @@ jobs:
 
       - run: pnpm --filter @mr-akami/gmermaid build
 
+      # A re-run, or a release tag whose version was already published
+      # manually, must not fail the whole workflow.
+      - name: Check whether the version is already published
+        id: published
+        run: |
+          version=$(node --input-type=module -e "import pkg from './packages/mcp/package.json' with { type: 'json' }; process.stdout.write(pkg.version)")
+          if npm view "@mr-akami/gmermaid@${version}" version --json >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::@mr-akami/gmermaid@${version} is already on npm; skipping publish."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Publish from the package directory, not a tarball: OIDC trusted
       # publishing generates provenance and needs the repository checkout.
-      - run: npm publish --provenance --access public --ignore-scripts
+      - if: steps.published.outputs.already == 'false'
+        run: npm publish --provenance --access public --ignore-scripts
         working-directory: packages/mcp

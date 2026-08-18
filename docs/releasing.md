@@ -140,6 +140,17 @@ npm deprecate @gmermaid/mcp "Renamed to gmermaid. Install it with: npx @mr-akami
 Do not publish new versions under the old name — `@mr-akami/gmermaid` covers
 both the editor (`npx @mr-akami/gmermaid`) and the MCP server (`npx @mr-akami/gmermaid mcp`).
 
+## Stale tagpr branches
+
+`v2026.817.0` was tagged from a release pull request that had been opened while
+the version was still `0.0.0` (`tagpr-from-v0.0.0`). Merging it wrote a
+`v2026.818.0` changelog entry without bumping `versionFile`, so tagpr tagged the
+already-published `2026.817.0` and the publish job failed.
+
+Only merge the release pull request tagpr currently maintains. Close and delete
+older ones. The publish job now skips a version that is already on npm, so this
+fails soft.
+
 ## Recovery
 
 The publish command is intentionally in the tagpr workflow. Tags created with
