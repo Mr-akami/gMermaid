@@ -76,8 +76,9 @@ jobs:
           pnpm test
           pnpm typecheck
 
-      - run: pnpm --filter gmermaid build
+      - run: pnpm --filter @mr-akami/gmermaid build
 
-      - run: pnpm --dir packages/mcp pack --pack-destination ../../artifacts
-
-      - run: npm publish ./artifacts/*.tgz --access public
+      # Publish from the package directory, not a tarball: OIDC trusted
+      # publishing generates provenance and needs the repository checkout.
+      - run: npm publish --provenance --access public --ignore-scripts
+        working-directory: packages/mcp

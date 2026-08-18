@@ -7,7 +7,7 @@
     "lint": "oxlint packages",
     "fmt": "oxlint --fix packages",
     "test": "vitest run",
-    "typecheck": "tsc -b && pnpm --filter gmermaid typecheck"
+    "typecheck": "tsc -b && pnpm --filter @mr-akami/gmermaid typecheck"
   },
   "devDependencies": {
     "oxlint": "^1.0.0",

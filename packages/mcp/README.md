@@ -7,7 +7,7 @@ LLM can hand a diagram to a human, wait for the edit, and read back the result.
 ## Edit a diagram yourself
 
 ```sh
-npx gmermaid
+npx @mr-akami/gmermaid
 ```
 
 This starts a loopback-only server on a random port and opens the editor in
@@ -17,7 +17,7 @@ by side; work in progress is saved in the browser's local storage.
 ## Use it from an LLM
 
 ```sh
-codex mcp add gmermaid -- npx -y gmermaid mcp
+codex mcp add gmermaid -- npx -y @mr-akami/gmermaid mcp
 ```
 
 For clients configured with JSON:
@@ -27,7 +27,7 @@ For clients configured with JSON:
   "mcpServers": {
     "gmermaid": {
       "command": "npx",
-      "args": ["-y", "gmermaid", "mcp"]
+      "args": ["-y", "@mr-akami/gmermaid", "mcp"]
     }
   }
 }
