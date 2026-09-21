@@ -11,7 +11,7 @@ import {
 import { z } from "zod";
 import { BrowserReviewServer } from "./browser";
 import { SessionStore, type ReviewResult } from "./session";
-import { validateDiagram } from "./diagram";
+import { DIAGRAM_KINDS, validateDiagram } from "./diagram";
 import { packageVersion } from "./metadata";
 
 const RESOURCE_URI = "ui://gmermaid/review.html";
@@ -20,7 +20,7 @@ const UI_PATH = join(dirname(fileURLToPath(import.meta.url)), "review.html");
 const resultShape = {
   status: z.enum(["editing", "pending", "confirmed", "expired"]),
   sessionId: z.string().uuid(),
-  kind: z.enum(["flowchart", "sequence", "class", "state"]).optional(),
+  kind: z.enum(DIAGRAM_KINDS).optional(),
   mermaid: z.string().optional(),
   changed: z.boolean().optional(),
   title: z.string().optional(),

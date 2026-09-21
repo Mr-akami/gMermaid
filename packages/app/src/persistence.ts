@@ -1,3 +1,4 @@
+import { detectDiagramKind, type DiagramKind } from "@gmermaid/mermaid-parser";
 import { useEffect } from "react";
 import type { ParseResult } from "@gmermaid/mermaid-parser";
 
@@ -161,19 +162,14 @@ export function migrateLegacyEntries(): void {
 
 export interface StoredEntry {
   readonly key: string;
-  readonly kind: "flowchart" | "sequence" | "class" | "state" | "unknown";
+  readonly kind: DiagramKind | "unknown";
   readonly updatedAt: number | null;
   readonly bytes: number;
   readonly code: string;
 }
 
 function detectKind(code: string): StoredEntry["kind"] {
-  const head = code.trimStart();
-  if (head.startsWith("flowchart") || head.startsWith("graph")) return "flowchart";
-  if (head.startsWith("sequenceDiagram")) return "sequence";
-  if (head.startsWith("classDiagram")) return "class";
-  if (head.startsWith("stateDiagram")) return "state";
-  return "unknown";
+  return detectDiagramKind(code) ?? "unknown";
 }
 
 /** Every gMermaid diagram document currently in localStorage, newest first. */
