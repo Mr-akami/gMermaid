@@ -1,5 +1,7 @@
 import { type ReactNode } from "react";
 import type { EdgePath, FlowchartLayout, NodeBox, SubgraphBox } from "@gmermaid/layout";
+import { SUBGRAPH_TITLE_BAND } from "@gmermaid/layout";
+import { edgePath } from "./edgePath";
 import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 // The renderer sees layout data (ids + geometry) only — never the IR.
@@ -107,7 +109,7 @@ function SubgraphView({ s, selected }: { s: SubgraphBox; selected: boolean }) {
         <text
           data-drag="connect"
           x={x + 8}
-          y={y + 15}
+          y={y + SUBGRAPH_TITLE_BAND - 8}
           fontSize={12}
           fontWeight={600}
           fontFamily="sans-serif"
@@ -405,7 +407,7 @@ const MARKER: Record<string, string | undefined> = {
 };
 
 function EdgeView({ edge, selected }: { edge: EdgePath; selected: boolean }) {
-  const d = edge.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const d = edgePath(edge.points);
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
   // invisible links shape the layout but draw (almost) nothing — a faint
   // dotted trace appears only while selected so the edge stays editable

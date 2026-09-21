@@ -10,7 +10,11 @@ const NODE_PADDING_Y = 10;
 const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
 // visual breathing room around a cluster; the extra top holds the title
 const SUB_PAD = 8;
-const SUB_TITLE_H = 24;
+/** Height of a subgraph's title band — where the renderer puts the label. */
+export const SUBGRAPH_TITLE_BAND = 24;
+/** Reserved above the members: the band plus the same padding the other
+ * sides get, so a node never sits against the title. */
+const SUB_TITLE_H = SUBGRAPH_TITLE_BAND + SUB_PAD;
 // marker-like shapes carry no label of their own, so they get a fixed box
 // instead of one measured from text
 const FIXED_SIZE: Partial<Record<FlowchartNodeShape, readonly [number, number]>> = {

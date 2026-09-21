@@ -1,4 +1,6 @@
 import type { StateBox, StateLayout, StateNoteBox, TransitionPath } from "@gmermaid/layout";
+import { COMPOSITE_TITLE_BAND } from "@gmermaid/layout";
+import { edgePath } from "./edgePath";
 import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 export interface StateViewState {
@@ -152,11 +154,11 @@ function CompositeView({ s, selected, dragMode }: { s: StateBox; selected: boole
       {/* border + title bar are the composite's only hit targets */}
       <g data-element-id={s.id} style={{ cursor: "pointer" }}>
         <rect x={x} y={y} width={w} height={h} rx={8} fill="none" stroke={stroke} strokeWidth={selected ? 2 : 1.2} pointerEvents="stroke" />
-        <line x1={x} y1={y + 22} x2={x + w} y2={y + 22} stroke={stroke} strokeWidth={1} style={{ pointerEvents: "none" }} />
+        <line x1={x} y1={y + COMPOSITE_TITLE_BAND} x2={x + w} y2={y + COMPOSITE_TITLE_BAND} stroke={stroke} strokeWidth={1} style={{ pointerEvents: "none" }} />
         <text
           data-drag={dragMode}
           x={x + 10}
-          y={y + 15}
+          y={y + COMPOSITE_TITLE_BAND - 8}
           fontSize={12}
           fontWeight={600}
           fontFamily="sans-serif"
@@ -232,7 +234,7 @@ function StateBoxView({ s, selected, dragMode }: { s: StateBox; selected: boolea
 }
 
 function TransitionView({ t, selected }: { t: TransitionPath; selected: boolean }) {
-  const d = t.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const d = edgePath(t.points);
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
   return (
     <g data-element-id={t.id} style={{ cursor: "pointer" }}>
