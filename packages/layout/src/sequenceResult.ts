@@ -1,14 +1,46 @@
-import type { BranchId, FragmentId, FragmentKind, LifelineId, MessageArrowType, MessageId, NoteId, NotePosition } from "@gmermaid/ir";
+import type {
+  BoxId,
+  BranchId,
+  FragmentId,
+  FragmentKind,
+  LifelineId,
+  MessageArrowType,
+  MessageId,
+  NoteId,
+  NotePosition,
+  ParticipantKind,
+} from "@gmermaid/ir";
 import type { Point, Rect } from "./result";
 
 export interface LifelineColumn {
   readonly id: LifelineId;
   readonly name: string;
-  readonly isActor: boolean;
+  readonly kind: ParticipantKind;
   readonly x: number; // center of the lifeline spine
   readonly headRect: Rect;
   readonly spineTop: number;
   readonly spineBottom: number;
+  /** `create participant X`: the head sits at the create row, not the top. */
+  readonly created?: boolean;
+  /** `destroy X`: the spine ends in a cross at spineBottom. */
+  readonly destroyed?: boolean;
+}
+
+/** `box … end` frame drawn behind the heads of its member lifelines. */
+export interface BoxFrame {
+  readonly id: BoxId;
+  readonly name: string;
+  readonly color?: string;
+  readonly rect: Rect;
+  readonly labelPos: Point;
+}
+
+/** An activation bar on a lifeline spine. `depth` is the nesting level of
+ * the activation stack; layout has already offset `rect.x` by it. */
+export interface ActivationBar {
+  readonly lifeline: LifelineId;
+  readonly rect: Rect;
+  readonly depth: number;
 }
 
 export interface MessageRow {
@@ -39,6 +71,8 @@ export interface FragmentFrame {
   readonly labelTab: Rect;
   readonly branches: readonly BranchBand[];
   readonly depth: number;
+  /** `rect` fragments: the fill color, drawn instead of a label tab. */
+  readonly fill?: string;
 }
 
 export interface NoteBox {
@@ -63,6 +97,8 @@ export interface SequenceLayout {
   readonly kind: "sequence";
   readonly size: { readonly w: number; readonly h: number };
   readonly lifelines: readonly LifelineColumn[];
+  readonly boxes: readonly BoxFrame[];
+  readonly activations: readonly ActivationBar[];
   readonly messages: readonly MessageRow[];
   readonly fragments: readonly FragmentFrame[];
   readonly notes: readonly NoteBox[];

@@ -1,4 +1,20 @@
-import type { Branch, Fragment, FragmentKind, Lifeline, Message, MessageArrowType, Note, NotePosition } from "@gmermaid/ir";
+import type {
+  Box,
+  BoxId,
+  Branch,
+  Fragment,
+  FragmentKind,
+  Lifeline,
+  Message,
+  MessageArrowType,
+  Note,
+  NotePosition,
+  ParticipantKind,
+} from "@gmermaid/ir";
+import { PARTICIPANT_KINDS } from "@gmermaid/ir";
+
+/** What the Box select emits: an existing box, no box, or "make a new one". */
+export type BoxChoice = BoxId | null | "new";
 
 export type SequenceSelection =
   | { kind: "lifeline"; lifeline: Lifeline }
@@ -10,7 +26,19 @@ export type SequenceSelection =
 export interface SequencePropertyWindowProps {
   readonly selection: SequenceSelection;
   readonly onChangeLifelineName: (name: string) => void;
-  readonly onToggleActor: (isActor: boolean) => void;
+  readonly onChangeLifelineKind: (kind: ParticipantKind) => void;
+  /** Boxes offered in the lifeline's Box select. */
+  readonly boxes: readonly Box[];
+  readonly lifelineBox?: Box | undefined;
+  readonly onChangeLifelineBox: (choice: BoxChoice) => void;
+  readonly onChangeBoxName: (name: string) => void;
+  readonly onChangeBoxColor: (color: string) => void;
+  /** create/destroy events for the selected lifeline (first/last message). */
+  readonly lifelineCreated: boolean;
+  readonly lifelineDestroyed: boolean;
+  readonly onToggleCreated: (on: boolean) => void;
+  readonly onToggleDestroyed: (on: boolean) => void;
+  readonly onChangeMessageActivation: (activate: "start" | "end" | null) => void;
   readonly onChangeMessageLabel: (label: string) => void;
   readonly onChangeMessageArrow: (arrow: MessageArrowType) => void;
   readonly onChangeFragmentKind: (kind: FragmentKind) => void;
@@ -93,12 +121,67 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
             />
           </label>
           <label>
-            <input
-              type="checkbox"
-              checked={selection.lifeline.isActor}
-              onChange={(e) => props.onToggleActor(e.target.checked)}
-            />{" "}
-            Actor
+            Type
+            <select
+              aria-label="Type"
+              value={selection.lifeline.kind}
+              onChange={(e) => props.onChangeLifelineKind(e.target.value as ParticipantKind)}
+            >
+              {PARTICIPANT_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Box
+            <select
+              aria-label="Box"
+              value={props.lifelineBox?.id ?? ""}
+              onChange={(e) => props.onChangeLifelineBox(e.target.value === "" ? null : e.target.value === "new" ? "new" : (e.target.value as BoxId))}
+            >
+              <option value="">(none)</option>
+              {props.boxes.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name === "" ? b.id : b.name}
+                </option>
+              ))}
+              <option value="new">New box…</option>
+            </select>
+          </label>
+          {props.lifelineBox !== undefined && (
+            <>
+              <label>
+                Box name
+                <input
+                  aria-label="Box name"
+                  value={props.lifelineBox.name}
+                  onFocus={onEditStart}
+                  onBlur={onEditEnd}
+                  onChange={(e) => props.onChangeBoxName(e.target.value)}
+                />
+              </label>
+              <label>
+                Box color
+                <input
+                  aria-label="Box color"
+                  value={props.lifelineBox.color ?? ""}
+                  placeholder="rgb(200,220,255)"
+                  onFocus={onEditStart}
+                  onBlur={onEditEnd}
+                  onChange={(e) => props.onChangeBoxColor(e.target.value)}
+                />
+              </label>
+            </>
+          )}
+          <label>
+            <input type="checkbox" aria-label="Created at first message" checked={props.lifelineCreated} onChange={(e) => props.onToggleCreated(e.target.checked)} />{" "}
+            Created at first message
+          </label>
+          <label>
+            <input type="checkbox" aria-label="Destroyed at last message" checked={props.lifelineDestroyed} onChange={(e) => props.onToggleDestroyed(e.target.checked)} />{" "}
+            Destroyed at last message
           </label>
         </>
       )}
@@ -132,9 +215,37 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
               <option value="dottedBidirectional">Bidirectional (dotted)</option>
             </select>
           </label>
+          <label>
+            Activation
+            <select
+              aria-label="Activation"
+              value={selection.message.activate ?? ""}
+              onChange={(e) => props.onChangeMessageActivation(e.target.value === "" ? null : (e.target.value as "start" | "end"))}
+            >
+              <option value="">(none)</option>
+              <option value="start">Activate target (+)</option>
+              <option value="end">Deactivate source (-)</option>
+            </select>
+          </label>
         </>
       )}
-      {selection.kind === "fragment" && (
+      {selection.kind === "fragment" && selection.fragment.fragmentKind === "rect" && (
+        <>
+          <h3>Rect</h3>
+          <label>
+            Fill color
+            <input
+              aria-label="Fill color"
+              value={selection.fragment.branches[0]?.condition ?? ""}
+              placeholder="rgb(0,0,255)"
+              onFocus={onEditStart}
+              onBlur={onEditEnd}
+              onChange={(e) => props.onChangeFragmentCondition(e.target.value)}
+            />
+          </label>
+        </>
+      )}
+      {selection.kind === "fragment" && selection.fragment.fragmentKind !== "rect" && (
         <>
           <h3>Fragment</h3>
           <label>
@@ -180,7 +291,13 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
           <h3>Note</h3>
           <label>
             Text
-            <input value={selection.note.text} onFocus={onEditStart} onBlur={onEditEnd} onChange={(e) => props.onChangeNoteText(e.target.value)} />
+            <textarea
+              rows={3}
+              value={selection.note.text}
+              onFocus={onEditStart}
+              onBlur={onEditEnd}
+              onChange={(e) => props.onChangeNoteText(e.target.value)}
+            />
           </label>
           <label>
             Position
