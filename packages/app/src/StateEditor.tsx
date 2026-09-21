@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   applyStateAction,
   emptyStateDiagram,
+  mergeMermaidDetail,
+  mergeXStateDetail,
   newStateId,
   newId,
   reparentRejection,
@@ -14,10 +16,11 @@ import {
 import { layoutStateDiagram } from "@gmermaid/layout";
 import { stateToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseStateDiagram } from "@gmermaid/mermaid-parser";
+import { parseXStateMachine, stateToXState, XSTATE_SUBSET } from "@gmermaid/xstate";
 import { StateView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
-import { CodePane } from "./CodePane";
+import { loadInitial, openMmd, readStoredCode, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
+import { CodeTabs } from "./CodeTabs";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { StatePropertyWindow, type StateSelection } from "./StatePropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
@@ -58,6 +61,26 @@ interface ViewState {
 }
 
 const STORAGE_KEY = "gmermaid:doc:state";
+/** The XState detail of the autosaved diagram, kept BESIDE the `.mmd` text
+ * because mermaid has no syntax for it: without this, a page reload would
+ * quietly delete every entry action and invocation in the document. Not under
+ * `gmermaid:doc:` — it is not a diagram, and the Files panel lists that
+ * namespace. */
+const XSTATE_KEY = "gmermaid-xstate:doc:state";
+
+/** Fold the XState detail of the autosaved machine back onto the diagram the
+ * mermaid autosave restored. The mermaid text stays the structural truth; the
+ * sidecar only re-attaches what it could not spell. */
+function withStoredXState(ir: StateIR): StateIR {
+  try {
+    const raw = localStorage.getItem(XSTATE_KEY);
+    if (raw === null) return ir;
+    const parsed = parseXStateMachine(readStoredCode(raw).code);
+    return parsed.ok ? mergeXStateDetail(parsed.ir, ir) : ir;
+  } catch {
+    return ir; // storage unavailable, or a sidecar from an older grammar
+  }
+}
 
 export interface EditorProps extends EditorRuntimeProps {
   readonly loadRequest?: { readonly seq: number; readonly code: string | null } | undefined;
@@ -67,7 +90,10 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   // recoveredText: stored data that stopped parsing, poured into the code
   // pane as a broken draft for manual repair (S1-3)
   const [initial] = useState(() => {
-    if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseStateDiagram, initialIR);
+    if (initialCode === undefined) {
+      const restored = loadInitial(STORAGE_KEY, parseStateDiagram, initialIR);
+      return { ...restored, ir: withStoredXState(restored.ir) };
+    }
     const parsed = parseStateDiagram(initialCode);
     return parsed.ok ? { ir: parsed.ir, warnings: parsed.warnings } : { ir: initialIR(), recoveredText: initialCode, warnings: [] };
   });
@@ -82,11 +108,17 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   const layout = useMemo(() => layoutStateDiagram(ir, measurer), [ir]);
   const code = useMemo(() => stateToMermaid(ir), [ir]);
-  // autosave pauses while the code pane shows a broken/stale draft, so a
+  // the second projection of the same IR (ADR 0002) — never a second master
+  const machine = useMemo(() => stateToXState(ir), [ir]);
+  // autosave pauses while EITHER code pane shows a broken/stale draft, so a
   // recovered draft is never clobbered by the sample it fell back to
-  const [codeValid, setCodeValid] = useState(initial.recoveredText === undefined);
+  const [mermaidValid, setMermaidValid] = useState(initial.recoveredText === undefined);
+  const [machineValid, setMachineValid] = useState(true);
+  const codeValid = mermaidValid && machineValid;
   useAutosave(STORAGE_KEY, code, mode === "standalone" && codeValid);
+  useAutosave(XSTATE_KEY, machine.code, mode === "standalone" && codeValid);
   useEffect(() => onCodeChange?.(code), [code, onCodeChange]);
+  useEffect(() => onValidityChange?.(codeValid), [codeValid, onValidityChange]);
 
   useEffect(() => {
     if (!loadRequest) return;
@@ -427,18 +459,34 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
           />
         )}
       </div>
-      <CodePane
-        code={code}
-        parse={parseStateDiagram}
-        onCommit={(next) => h.pushIR(next, "code-pane")}
+      <CodeTabs
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
-        initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
-        loadWarnings={load.warnings}
-        onValidityChange={(valid) => {
-          setCodeValid(valid);
-          onValidityChange?.(valid);
-        }}
+        tabs={[
+          {
+            id: "mermaid",
+            label: "Mermaid",
+            code,
+            parse: parseStateDiagram,
+            // a mermaid edit rebuilds the whole IR from text mermaid cannot
+            // spell every action in — re-attach what it could not carry
+            onCommit: (next) => h.pushIR(mergeXStateDetail(ir, next), "code-pane"),
+            initialDraft: mode === "standalone" ? initial.recoveredText : undefined,
+            loadWarnings: load.warnings,
+            onValidityChange: setMermaidValid,
+          },
+          {
+            id: "xstate",
+            label: "XState",
+            hint: XSTATE_SUBSET,
+            code: machine.code,
+            parse: parseXStateMachine,
+            // …and the mirror image: XState has no notes and no direction
+            onCommit: (next) => h.pushIR(mergeMermaidDetail(ir, next), "code-pane"),
+            codeWarnings: machine.warnings,
+            onValidityChange: setMachineValid,
+          },
+        ]}
       />
     </>
   );

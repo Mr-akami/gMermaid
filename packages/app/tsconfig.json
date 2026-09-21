@@ -6,6 +6,7 @@
     { "path": "../ir" },
     { "path": "../layout" },
     { "path": "../mermaid-codegen" },
-    { "path": "../renderer" }
+    { "path": "../renderer" },
+    { "path": "../xstate" }
   ]
 }

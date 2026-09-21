@@ -18,6 +18,11 @@ export interface CodePaneProps<T> {
   /** What the LAST load (file, Files panel, autosave) threw away. Shown until
    * the user starts editing, at which point their own draft speaks instead. */
   readonly loadWarnings?: readonly ParseWarning[] | undefined;
+  /** What THIS projection cannot say about the current IR — produced by
+   * codegen, not by a parse, so it has no line to point at. Only shown while
+   * the pane mirrors the canonical code: once the user has a draft, the text
+   * on screen is theirs and the canonical losses are not about it. */
+  readonly codeWarnings?: readonly string[] | undefined;
 }
 
 // While focused the pane always shows its own draft (never reformatted
@@ -40,6 +45,7 @@ export function CodePane<T>({
   initialDraft,
   onValidityChange,
   loadWarnings,
+  codeWarnings,
 }: CodePaneProps<T>) {
   const [draft, setDraft] = useState<Draft | null>(() =>
     initialDraft !== undefined ? { text: initialDraft, base: code } : null,
@@ -154,13 +160,14 @@ export function CodePane<T>({
           ))}
         </div>
       )}
-      {shownWarnings.length > 0 && (
+      {(shownWarnings.length > 0 || (active === null && (codeWarnings?.length ?? 0) > 0)) && (
         <div className="code-warnings">
           {shownWarnings.map((w, i) => (
             <div key={i}>
               line {w.line}: {w.message}
             </div>
           ))}
+          {active === null && codeWarnings?.map((w, i) => <div key={`c${i}`}>{w}</div>)}
         </div>
       )}
     </div>

@@ -11,6 +11,7 @@ export * from "./history";
 export * from "./omitUndefined";
 export * from "./statediagram";
 export * from "./stateActions";
+export * from "./xstateMeta";
 export * from "./timeline";
 export * from "./timelineActions";
 export * from "./journey";

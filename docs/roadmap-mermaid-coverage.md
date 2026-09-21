@@ -95,6 +95,19 @@ window, registry entry, mermaid.js integration test, e2e spec.
   value updates for 200ms after a local edit, so a single read of the pane
   right after an edit races the sync. Poll instead of reading once.
 
+## Phase 5 — State diagrams as XState v5 machines (done)
+- Second text projection of `StateIR` (ADR 0002), `packages/xstate`:
+  `parseXStateMachine` / `stateToXState`, plus the optional `xstate`
+  extension on the IR for what mermaid cannot spell.
+- Code pane tabs (Mermaid / XState) on the State tab; either text commits to
+  the one IR, and the two commit paths re-attach the other projection's
+  detail instead of deleting it.
+- Generated configs are checked against the real `createMachine`, and the
+  mermaid text an XState machine becomes is checked against mermaid.js.
+- Left out: composite guards (`and`/`or`/`not`/`stateIn` are function calls,
+  and the config is never executed), `params` given as a function, a parallel
+  machine root and root-level transitions (mermaid has nowhere to draw them).
+
 ## Not planned
 - Styling and interaction syntax (`classDef`, `style`, `:::`, `click`,
   `linkStyle`, `%%` comments) stays tolerated-and-dropped: it has no
