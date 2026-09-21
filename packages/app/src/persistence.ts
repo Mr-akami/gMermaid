@@ -1,6 +1,6 @@
 import { detectDiagramKind, type DiagramKind } from "@gmermaid/mermaid-parser";
-import { useEffect } from "react";
-import type { ParseResult } from "@gmermaid/mermaid-parser";
+import { useEffect, useState } from "react";
+import type { ParseResult, ParseWarning } from "@gmermaid/mermaid-parser";
 
 // .mmd open/save via the File System Access API where available (Chromium),
 // falling back to download / <input type=file>. Work in progress is also
@@ -90,22 +90,22 @@ export function loadInitial<T>(
   storageKey: string,
   parse: (code: string) => ParseResult<T>,
   sample: () => T,
-): { ir: T; recoveredText?: string } {
+): { ir: T; recoveredText?: string; warnings: readonly ParseWarning[] } {
   try {
     migrateLegacyEntries();
     const stored = localStorage.getItem(storageKey);
     if (stored !== null) {
       const { code } = readStoredCode(stored);
       const result = parse(code);
-      if (result.ok) return { ir: result.ir };
+      if (result.ok) return { ir: result.ir, warnings: result.warnings };
       localStorage.setItem(`${storageKey}:broken-${Date.now()}`, stored);
       localStorage.removeItem(storageKey);
-      return { ir: sample(), recoveredText: code };
+      return { ir: sample(), recoveredText: code, warnings: [] };
     }
   } catch {
     // storage unavailable (private mode etc.) — just start from the sample
   }
-  return { ir: sample() };
+  return { ir: sample(), warnings: [] };
 }
 
 /** Mirror the canonical code to localStorage whenever the IR changes.
@@ -131,6 +131,32 @@ export function useAutosave(storageKey: string, code: string, enabled = true): v
 
 export function formatParseErrors(errors: readonly { line: number; message: string }[]): string {
   return errors.map((e) => `line ${e.line}: ${e.message}`).join("\n");
+}
+
+/** Same seam as formatParseErrors, for the statements a parse THREW AWAY. */
+export function formatParseWarnings(warnings: readonly ParseWarning[]): string {
+  return warnings.map((w) => `line ${w.line}: ${w.message}`).join("\n");
+}
+
+/** Warnings from the last load — restored autosave, opened file, or a pick
+ * in the Files panel. All ten editors load those same three ways, so they
+ * share this: `accept` reports a failed parse (blocking alert, as before)
+ * and, on success, hands the warnings to the code pane, where a dropped
+ * `classDef` can be read at leisure instead of vanishing. */
+export function useLoadWarnings(initial: readonly ParseWarning[]): {
+  readonly warnings: readonly ParseWarning[];
+  readonly accept: <T>(result: ParseResult<T>, failure: string) => T | undefined;
+} {
+  const [warnings, setWarnings] = useState<readonly ParseWarning[]>(initial);
+  function accept<T>(result: ParseResult<T>, failure: string): T | undefined {
+    if (!result.ok) {
+      alert(`${failure}:\n${formatParseErrors(result.errors)}`);
+      return undefined;
+    }
+    setWarnings(result.warnings);
+    return result.ir;
+  }
+  return { warnings, accept };
 }
 
 export const STORAGE_PREFIX = "gmermaid:";

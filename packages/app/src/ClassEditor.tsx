@@ -17,7 +17,7 @@ import { classToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseClassDiagram, parseMemberLine } from "@gmermaid/mermaid-parser";
 import { ClassView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
+import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ClassPropertyWindow, type ClassSelection } from "./ClassPropertyWindow";
@@ -80,8 +80,9 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
   const [initial] = useState(() => {
     if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseClassDiagram, initialIR);
     const parsed = parseClassDiagram(initialCode);
-    return parsed.ok ? { ir: parsed.ir } : { ir: initialIR(), recoveredText: initialCode };
+    return parsed.ok ? { ir: parsed.ir, warnings: parsed.warnings } : { ir: initialIR(), recoveredText: initialCode, warnings: [] };
   });
+  const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyClassAction);
   const [view, setView] = useState<ViewState>({});
   // pan/zoom is ViewState (ADR 0001), held apart from the selection
@@ -115,9 +116,8 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
-      const result = parseClassDiagram(loadRequest.code);
-      if (result.ok) h.pushIR(result.ir);
-      else alert(`Cannot load stored diagram:\n${formatParseErrors(result.errors)}`);
+      const loaded = load.accept(parseClassDiagram(loadRequest.code), "Cannot load stored diagram");
+      if (loaded !== undefined) h.pushIR(loaded);
     }
     setView({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -126,14 +126,11 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
   async function openFile() {
     const text = await openMmd();
     if (text === null) return;
-    const result = parseClassDiagram(text);
-    if (result.ok) {
-      setMemberDraft(null);
-      h.pushIR(result.ir);
-      setView({});
-    } else {
-      alert(`Cannot open file:\n${result.errors.map((e) => `line ${e.line}: ${e.message}`).join("\n")}`);
-    }
+    const opened = load.accept(parseClassDiagram(text), "Cannot open file");
+    if (opened === undefined) return;
+    setMemberDraft(null);
+    h.pushIR(opened);
+    setView({});
   }
 
   const selectedClass = ir.classes.find((c) => c.id === view.selectedId);
@@ -376,6 +373,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
         initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
+        loadWarnings={load.warnings}
         onValidityChange={setCodeValid}
       />
     </>

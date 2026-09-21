@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstStatement, prepareLines } from "./common";
+import { dropList, firstStatement, prepareLines, type ParseWarning } from "./common";
 
 const texts = (code: string, opts?: Parameters<typeof prepareLines>[1]) => prepareLines(code, opts).map((l) => l.text);
 
@@ -59,6 +59,27 @@ flowchart LR
       "flowchart LR",
       "styleNode --> classy",
     ]);
+  });
+
+  it("collects a warning per dropped statement, at its original line", () => {
+    const warnings: ParseWarning[] = [];
+    prepareLines("flowchart LR\n  A --> B\n  classDef cls fill:#f9f\n  accTitle: t\n", {
+      drop: dropList(),
+      warnings,
+    });
+    expect(warnings).toEqual([
+      { line: 3, message: "`classDef` is not represented in the editor and will be lost on save" },
+      { line: 4, message: "`accTitle` is not represented in the editor and will be lost on save" },
+    ]);
+  });
+
+  it("only drops a keyword whose argument has the shape of that statement", () => {
+    const drop = dropList();
+    // `class:` is a journey task, `style guide` a mindmap node, `click here`
+    // an edge label — none of them styling
+    expect(texts("journey\n  class: 5: Me\n", { drop })).toEqual(["journey", "class: 5: Me"]);
+    expect(texts("mindmap\n  style guide\n", { drop })).toEqual(["mindmap", "style guide"]);
+    expect(texts('flowchart LR\n  click here\n  click A "u"\n', { drop })).toEqual(["flowchart LR", "click here"]);
   });
 
   it("strips `:::className` suffixes outside quotes", () => {

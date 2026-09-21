@@ -13,16 +13,16 @@ import type {
   RelationId,
   Visibility,
 } from "@gmermaid/ir";
-import { prepareLines, unescapeLabel, type ParseError, type ParseResult } from "./common";
+import { dropList, prepareLines, unescapeLabel, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // Dialect the IR cannot hold is DISCARDED by design, same as `%%` comments:
-// frontmatter, `%%{init}%%` directives, `cssClass` / `style` / `classDef`,
-// `click` / `callback` / `link`, `accTitle` / `accDescr`, trailing `;`, and
-// `:::className` suffixes. (`class` itself is a declaration here — kept.)
+// frontmatter, `%%{init}%%` directives, the shared styling statements plus
+// `callback` / `link` / `title`, trailing `;`, and `:::className` suffixes.
+// (`class` itself is a declaration here — kept, unlike every other kind.)
 // Also lossy: the `*` (abstract) classifier on an ATTRIBUTE — UML has no
 // abstract field and the IR only keeps `abstract` on methods.
 
-const DROPPED = ["cssClass", "style", "classDef", "click", "callback", "link", "accTitle", "accDescr"];
+const DROPPED = dropList({ extra: ["callback", "link", "title"], keep: ["class"] });
 
 // Plain names are what mermaid tokenizes as an identifier; anything else
 // (spaces, `-`, punctuation) travels in backticks. `-` is accepted bare only
@@ -93,7 +93,8 @@ export function parseMemberLine(line: string): { attribute?: ClassMember; method
 
 export function parseClassDiagram(code: string): ParseResult<ClassIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true, warnings });
 
   const classes = new Map<string, ClassNode>();
   const order: string[] = [];
@@ -269,6 +270,7 @@ export function parseClassDiagram(code: string): ParseResult<ClassIR> {
 
   return {
     ok: true,
+    warnings,
     ir: {
       kind: "class",
       ...(direction !== undefined ? { direction } : {}),

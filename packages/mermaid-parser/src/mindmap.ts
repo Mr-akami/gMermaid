@@ -1,5 +1,5 @@
 import type { MindmapIR, MindmapNode, MindmapNodeId, MindmapShape } from "@gmermaid/ir";
-import { prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult } from "./common";
+import { dropList, prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // mindmap: an indented outline, one node per line. Hierarchy comes from the
 // INDENTATION, not from any edge syntax — mermaid's rule is "a node is the
@@ -7,11 +7,15 @@ import { prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult
 // covers outlines whose indentation is uneven (docs: "Unclear indentation").
 // `::icon(…)` and `:::a b` lines attach to the node written above them.
 // Dialect the IR cannot hold is DISCARDED by design, same as `%%` comments:
-// frontmatter, `%%{init}%%` directives and trailing `;`.
+// frontmatter, `%%{init}%%` directives, trailing `;` and the shared styling
+// statements. `class` is NOT dropped here: mindmap has no `class` statement,
+// and node labels are free prose (`class diagram`) — see dropList.
 //
 // prepareLines trims every line, so indentation is read back from the
 // original source by line number (it never splits a mindmap line — `;` is
 // not a mindmap separator, so line numbers stay 1:1).
+
+const DROPPED = dropList({ keep: ["class"] });
 
 /** Shape delimiters, longest/most specific first: `((x))` must win over
  * `(x)`, and `))x((` over both. Group 1 = id (may be empty), group 2 = text. */
@@ -79,7 +83,8 @@ function nodeForm(text: string): NodeForm {
 
 export function parseMindmap(code: string): ParseResult<MindmapIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code);
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, warnings });
   const source = code.split("\n");
 
   const nodes: MindmapNode[] = [];
@@ -172,5 +177,5 @@ export function parseMindmap(code: string): ParseResult<MindmapIR> {
   if (!headerSeen) errors.push({ line: 1, message: "empty diagram: missing header" });
   if (errors.length > 0) return { ok: false, errors };
 
-  return { ok: true, ir: { kind: "mindmap", nodes } };
+  return { ok: true, warnings, ir: { kind: "mindmap", nodes } };
 }

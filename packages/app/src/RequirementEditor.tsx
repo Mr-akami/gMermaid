@@ -14,7 +14,7 @@ import { requirementToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseRequirementDiagram } from "@gmermaid/mermaid-parser";
 import { RequirementView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
+import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RequirementPropertyWindow, type RequirementSelection } from "./RequirementPropertyWindow";
@@ -54,8 +54,9 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
   const [initial] = useState(() => {
     if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseRequirementDiagram, initialIR);
     const parsed = parseRequirementDiagram(initialCode);
-    return parsed.ok ? { ir: parsed.ir } : { ir: initialIR(), recoveredText: initialCode };
+    return parsed.ok ? { ir: parsed.ir, warnings: parsed.warnings } : { ir: initialIR(), recoveredText: initialCode, warnings: [] };
   });
+  const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyRequirementAction);
   const [view, setView] = useState<ViewState>({});
   // pan/zoom is ViewState (ADR 0001), held apart from the selection
@@ -77,9 +78,8 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
-      const result = parseRequirementDiagram(loadRequest.code);
-      if (result.ok) h.pushIR(result.ir);
-      else alert(`Cannot load stored diagram:\n${formatParseErrors(result.errors)}`);
+      const loaded = load.accept(parseRequirementDiagram(loadRequest.code), "Cannot load stored diagram");
+      if (loaded !== undefined) h.pushIR(loaded);
     }
     setView({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,13 +88,10 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
   async function openFile() {
     const text = await openMmd();
     if (text === null) return;
-    const result = parseRequirementDiagram(text);
-    if (result.ok) {
-      h.pushIR(result.ir);
-      setView({});
-    } else {
-      alert(`Cannot open file:\n${formatParseErrors(result.errors)}`);
-    }
+    const opened = load.accept(parseRequirementDiagram(text), "Cannot open file");
+    if (opened === undefined) return;
+    h.pushIR(opened);
+    setView({});
   }
 
   const selectedRequirement = ir.requirements.find((r) => r.id === view.selectedId);
@@ -233,6 +230,7 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
         initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
+        loadWarnings={load.warnings}
         onValidityChange={setCodeValid}
       />
     </>
