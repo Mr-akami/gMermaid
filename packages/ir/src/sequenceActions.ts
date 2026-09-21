@@ -130,6 +130,36 @@ function withoutMember(boxes: readonly Box[], lifeline: LifelineId): readonly Bo
 const sameBounds = (a: LoopBounds | undefined, b: LoopBounds | undefined) =>
   a === b || (a !== undefined && b !== undefined && a.min === b.min && a.max === b.max);
 
+/**
+ * Force a note into a shape mermaid can actually spell.
+ *
+ * `Note over` takes one or two lifelines; `left of` / `right of` take exactly
+ * one — mermaid has no form for the rest, so an extra lifeline would be
+ * emitted into a line mermaid rejects (and that our own lenient parser would
+ * read back as something else). Same reasoning as normalizeFlowchartEdge:
+ * the IR must not be able to hold the state at all.
+ */
+export function normalizeSequenceNote(note: Note): Note {
+  const max = note.position === "over" ? 2 : 1;
+  if (note.lifelines.length <= max) return note;
+  return { ...note, lifelines: note.lifelines.slice(0, max) };
+}
+
+/**
+ * Force a fragment into a shape mermaid can actually spell.
+ *
+ * `(min,max)` is only a loop header: codegen writes it in front of the branch
+ * condition, and the parser only takes it apart again for the FIRST branch of
+ * a `loop`. Anywhere else the bounds would come back glued to the condition
+ * text — and double themselves on the next save — so they are dropped here.
+ */
+export function normalizeFragment(fragment: Fragment): Fragment {
+  const branches = fragment.branches.map((b, i) =>
+    b.loopBounds !== undefined && !(i === 0 && fragment.fragmentKind === "loop") ? omitUndefined({ ...b, loopBounds: undefined }) : b,
+  );
+  return branches.some((b, i) => b !== fragment.branches[i]) ? { ...fragment, branches } : fragment;
+}
+
 export function applySequenceAction(ir: SequenceIR, action: SequenceAction): SequenceIR {
   switch (action.type) {
     case "addLifeline":
@@ -185,10 +215,11 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
       const known = (id: LifelineId) => ir.lifelines.some((l) => l.id === id);
       if (ev.kind === "message" && (!known(ev.from) || !known(ev.to))) return ir;
       if (ev.kind === "note" && (ev.lifelines.length === 0 || !ev.lifelines.every(known))) return ir;
+      const event = ev.kind === "note" ? normalizeSequenceNote(ev) : ev;
       if ((ev.kind === "activation" || ev.kind === "create" || ev.kind === "destroy") && !known(ev.lifeline)) return ir;
       const insert = (events: Events): Events => {
         const i = Math.max(0, Math.min(action.index, events.length));
-        return [...events.slice(0, i), ev, ...events.slice(i)];
+        return [...events.slice(0, i), event, ...events.slice(i)];
       };
       if (action.container.kind === "root") return { ...ir, events: insert(ir.events) };
       const branchId = action.container.branchId;
@@ -205,7 +236,9 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         const text = action.text ?? e.text;
         const position = action.position ?? e.position;
         if (text === e.text && position === e.position) return e;
-        return { ...e, text, position };
+        // `left of`/`right of` hold one lifeline only: the pair a two-sided
+        // `over` note carried has to go with the position change
+        return normalizeSequenceNote({ ...e, text, position });
       });
       return next === ir.events ? ir : { ...ir, events: next };
     }
@@ -246,7 +279,8 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         if (e.kind !== "fragment" || e.id !== action.id) return e;
         const fragmentKind = action.fragmentKind ?? e.fragmentKind;
         if (fragmentKind === e.fragmentKind) return e;
-        return { ...e, fragmentKind };
+        // leaving `loop` leaves the bounds unspellable
+        return normalizeFragment({ ...e, fragmentKind });
       });
       return next === ir.events ? ir : { ...ir, events: next };
     }
@@ -261,7 +295,7 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
           if (condition === b.condition && sameBounds(loopBounds, b.loopBounds)) return b;
           return omitUndefined({ ...b, condition, loopBounds });
         });
-        return branches.some((b, i) => b !== e.branches[i]) ? { ...e, branches } : e;
+        return branches.some((b, i) => b !== e.branches[i]) ? normalizeFragment({ ...e, branches }) : e;
       });
       return next === ir.events ? ir : { ...ir, events: next };
     }
@@ -449,7 +483,8 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         fragmentKind: action.fragmentKind,
         branches: [omitUndefined({ id: action.branchId, condition: action.condition, loopBounds: action.loopBounds, events: run })],
       };
-      const replaced = [...list.slice(0, idx), fragment, ...list.slice(i)];
+      const normalized = normalizeFragment(fragment);
+      const replaced = [...list.slice(0, idx), normalized, ...list.slice(i)];
       if (pos.container.kind === "root") return { ...ir, events: replaced };
       const branchId = pos.container.branchId;
       const next = mapEvents(ir.events, (e) => {

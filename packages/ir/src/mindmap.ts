@@ -26,6 +26,29 @@ export interface MindmapNode {
   readonly parent?: MindmapNodeId;
 }
 
+/** A node is one outline line, and the line's own shape carries meaning the
+ * label cannot be allowed to fake: leading whitespace would add indentation
+ * and re-parent the node, `:::` is read as a css class wherever it appears in
+ * the line (even inside a bracket form), `%%` comments out the rest of the
+ * line and a trailing `;` is a statement terminator. None of them has an
+ * escape, so they are removed at the IR boundary (GUI input). */
+export function sanitizeMindmapLabel(label: string): string {
+  return label
+    .replaceAll(":::", "")
+    .replaceAll(/%%+/g, "")
+    .trim()
+    .replace(/;+$/, "")
+    .trim();
+}
+
+/** Why `label` cannot be a node label, or undefined when it can. An empty
+ * label emits a line with nothing but indentation, which disappears on
+ * re-import and takes the node's children up a level with it. Shared by the
+ * reducer (reject) and the UI (show the reason). */
+export function mindmapLabelRejection(label: string): string | undefined {
+  return sanitizeMindmapLabel(label) === "" ? "a node needs a label" : undefined;
+}
+
 export interface MindmapIR {
   readonly kind: "mindmap";
   readonly nodes: readonly MindmapNode[];

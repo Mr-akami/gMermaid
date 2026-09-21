@@ -498,4 +498,32 @@ describe("parseSequence multi-line text", () => {
     expect(note.kind === "note" && note.text).toBe("one\ntwo");
     expect(sequenceToMermaid(ir)).toContain("a->>b: first<br/>second");
   });
+
+  // the two states the reducer now forbids, from the other side: what it does
+  // allow has to come back unchanged
+  it("a one-sided note and first-branch loop bounds survive emit → parse", () => {
+    const ir: SequenceIR = {
+      kind: "sequence",
+      lifelines: [
+        { id: L("a"), name: "A", kind: "participant" },
+        { id: L("b"), name: "B", kind: "participant" },
+      ],
+      boxes: [],
+      events: [
+        { kind: "note", id: "note-1" as import("@gmermaid/ir").NoteId, position: "leftOf", lifelines: [L("a")], text: "only one" },
+        {
+          kind: "fragment",
+          id: "fragment-1" as FragmentId,
+          fragmentKind: "loop",
+          branches: [
+            { id: "branch-1" as BranchId, condition: "retry", loopBounds: { min: "1", max: "3" }, events: [] },
+          ],
+        },
+      ],
+    };
+    const back = parseSequence(sequenceToMermaid(ir));
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(ir);
+  });
 });

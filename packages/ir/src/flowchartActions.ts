@@ -44,10 +44,11 @@ export type FlowchartAction =
  * Force an edge into a shape mermaid can actually spell.
  *
  * Mermaid has a link token for a SYMMETRIC head pair only (`<-->`, `o--o`,
- * `x--x`) and none at all for the ends of an invisible link (`~~~`), so any
- * other combination would be emitted as a lie and read back as something
- * else. Keeping the invariant here — not in codegen — is what makes the
- * canvas and the saved text agree: the IR can no longer hold the states.
+ * `x--x`) and neither heads nor a label slot on an invisible link (`~~~`),
+ * so any other combination would be emitted as a lie and read back as
+ * something else. Keeping the invariant here — not in codegen — is what
+ * makes the canvas and the saved text agree: the IR can no longer hold the
+ * states.
  *
  * `edited` names the end the user just changed; that end wins and pulls the
  * other one, so a select in the property window always does what it says.
@@ -57,15 +58,17 @@ export type FlowchartAction =
  */
 export function normalizeFlowchartEdge(edge: FlowchartEdge, edited?: "headStart" | "headEnd"): FlowchartEdge {
   let { headStart, headEnd } = edge;
+  let label = edge.label;
   if (edge.line === "invisible") {
     headStart = "none";
     headEnd = "none";
+    label = undefined;
   } else if (headStart !== "none" && headStart !== headEnd) {
     if (edited === "headStart") headEnd = headStart;
     else headStart = headEnd;
   }
-  if (headStart === edge.headStart && headEnd === edge.headEnd) return edge;
-  return { ...edge, headStart, headEnd };
+  if (headStart === edge.headStart && headEnd === edge.headEnd && label === edge.label) return edge;
+  return omitUndefined({ ...edge, headStart, headEnd, label });
 }
 
 export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): FlowchartIR {

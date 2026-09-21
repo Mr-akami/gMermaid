@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   applyJourneyAction,
   emptyJourney,
+  journeyTaskNameRejection,
   newId,
   type JourneyIR,
   type SectionId,
@@ -57,6 +58,8 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyJourneyAction);
   const [view, setView] = useState<ViewState>({});
+  // reducer rejections must be visible, not silent no-ops (L2)
+  const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
   // pan/zoom is ViewState (ADR 0001), held apart from the selection
   const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   const ir = h.ir;
@@ -190,9 +193,13 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
         {selection && (
           <JourneyPropertyWindow
             selection={selection}
-            onChangeTaskName={(name) =>
-              selectedTask && h.dispatch({ type: "updateTask", id: selectedTask.id, name }, `task:${selectedTask.id}:name`)
-            }
+            rejectHint={rejectHint}
+            onChangeTaskName={(name) => {
+              const reason = journeyTaskNameRejection(name);
+              setRejectHint(reason);
+              if (reason === undefined && selectedTask)
+                h.dispatch({ type: "updateTask", id: selectedTask.id, name }, `task:${selectedTask.id}:name`);
+            }}
             onChangeTaskScore={(score) => selectedTask && h.dispatch({ type: "updateTask", id: selectedTask.id, score })}
             onChangeTaskActors={(actors) =>
               selectedTask && h.dispatch({ type: "updateTask", id: selectedTask.id, actors }, `task:${selectedTask.id}:actors`)

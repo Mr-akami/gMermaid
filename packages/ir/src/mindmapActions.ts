@@ -1,5 +1,5 @@
 import type { MindmapNodeId } from "./ids";
-import { mindmapSubtree, type MindmapIR, type MindmapNode, type MindmapShape } from "./mindmap";
+import { mindmapSubtree, sanitizeMindmapLabel, type MindmapIR, type MindmapNode, type MindmapShape } from "./mindmap";
 import { omitUndefined } from "./omitUndefined";
 
 // Same contract as the other diagram actions: intent-carrying, immutable,
@@ -55,7 +55,9 @@ export function applyMindmapAction(ir: MindmapIR, action: MindmapAction): Mindma
       const after = action.after !== undefined && ir.nodes.find((x) => x.id === action.after)?.parent === n.parent
         ? action.after
         : undefined;
-      return { ...ir, nodes: insert(ir.nodes, omitUndefined({ ...n, icon: norm(n.icon) }), after) };
+      const label = sanitizeMindmapLabel(n.label);
+      if (label === "") return ir;
+      return { ...ir, nodes: insert(ir.nodes, omitUndefined({ ...n, label, icon: norm(n.icon) }), after) };
     }
 
     case "removeNode": {
@@ -67,7 +69,8 @@ export function applyMindmapAction(ir: MindmapIR, action: MindmapAction): Mindma
     case "updateNode": {
       const n = ir.nodes.find((x) => x.id === action.id);
       if (!n) return ir;
-      const label = action.label ?? n.label;
+      const label = action.label !== undefined ? sanitizeMindmapLabel(action.label) : n.label;
+      if (label === "") return ir;
       const shape = action.shape ?? n.shape;
       const icon = action.icon !== undefined ? norm(action.icon) : n.icon;
       const classes = action.classes !== undefined ? (action.classes.length > 0 ? action.classes : undefined) : n.classes;

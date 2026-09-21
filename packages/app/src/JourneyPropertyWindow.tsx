@@ -7,6 +7,8 @@ export type JourneySelection =
 export interface JourneyPropertyWindowProps {
   readonly selection: JourneySelection;
   readonly onChangeTaskName: (name: string) => void;
+  /** Why the last name edit was refused (empty, `title` prefix), or undefined. */
+  readonly rejectHint?: string | undefined;
   readonly onChangeTaskScore: (score: number) => void;
   readonly onChangeTaskActors: (actors: readonly string[]) => void;
   readonly onChangeSectionName: (name: string) => void;
@@ -90,6 +92,7 @@ export function JourneyPropertyWindow(props: JourneyPropertyWindowProps) {
           ↓ Later
         </button>
       </div>
+      {props.rejectHint !== undefined && <div className="hint">{props.rejectHint}</div>}
       <button className="danger" onClick={props.onDelete}>
         Delete {selection.kind}
       </button>

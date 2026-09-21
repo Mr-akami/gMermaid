@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ActorId, BoundaryId, NoteId, UseCaseId, UsecaseRelationId } from "./ids";
 import type { UsecaseIR } from "./usecase";
 import { emptyUsecaseDiagram } from "./usecase";
-import { applyUsecaseAction, normalizeUsecaseRelation } from "./usecaseActions";
+import { applyUsecaseAction, normalizeUsecaseRelation, usecaseNameRejection } from "./usecaseActions";
 
 const A = (s: string) => s as ActorId;
 const U = (s: string) => s as UseCaseId;
@@ -128,5 +128,20 @@ describe("applyUsecaseAction", () => {
     expect(applyUsecaseAction(ir, { type: "updateActor", id: A("Customer"), variant: "default" })).toBe(ir);
     expect(applyUsecaseAction(ir, { type: "removeRelation", id: R("nope") })).toBe(ir);
     expect(applyUsecaseAction(ir, { type: "setDirection", direction: "TB" })).not.toBe(ir);
+  });
+
+  // A declaration line is just the name, so a keyword name is read as that
+  // statement: `end` closes the boundary, `class` is dropped with its line.
+  it("refuses names the mermaid text claims for itself", () => {
+    const ir = base();
+    for (const name of ["end", "systemBoundary", "class", "style", "accTitle", "note", "actor"]) {
+      expect(usecaseNameRejection(name), name).toBeDefined();
+      expect(applyUsecaseAction(ir, { type: "renameNode", id: U("Checkout"), name }), name).toBe(ir);
+      expect(
+        applyUsecaseAction(ir, { type: "addUseCase", usecase: { id: U("x"), name, shape: "ellipse" } }),
+        name,
+      ).toBe(ir);
+    }
+    expect(usecaseNameRejection("Checkout2")).toBeUndefined();
   });
 });

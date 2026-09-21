@@ -141,7 +141,10 @@ describe("mermaid.js accepts generated flowcharts", () => {
       nodes: base.nodes.slice(0, 2),
       edges: [{ id: "e2" as EdgeId, from: N("a"), to: N("b"), line: "solid", headStart: "none", headEnd: "arrow", label: "min|max" }],
     };
-    await expectMermaidAccepts(flowchartToMermaid(ir));
+    const code = flowchartToMermaid(ir);
+    // a literal `|` would close the label slot, so it travels as an entity
+    expect(code).toContain('|"min#124;max"|');
+    await expectMermaidAccepts(code);
   });
 
   it("parses every `@{ shape: … }` name we emit", async () => {

@@ -126,7 +126,9 @@ export function PropertyWindow(props: PropertyWindowProps) {
           <label>
             Label
             <input
+              aria-label="Edge label"
               value={element.label ?? ""}
+              disabled={element.line === "invisible"}
               onFocus={onEditStart}
               onBlur={onEditEnd}
               onChange={(e) => props.onChangeEdgeLabel(e.target.value)}
@@ -186,11 +188,12 @@ export function PropertyWindow(props: PropertyWindowProps) {
               onChange={(e) => props.onChangeEdgeLength(Number(e.target.value))}
             />
           </label>
-          {/* the two selects are coupled: the reducer keeps the pair to what
-              mermaid can spell, so say which way the coupling will pull */}
+          {/* label and the two head selects are coupled to the line style: the
+              reducer keeps the edge to what mermaid can spell, so say which
+              way the coupling will pull before it pulls */}
           <div className="hint">
             {element.line === "invisible"
-              ? "非表示リンク(~~~)はマーカーを持てないため、両端とも None に固定されます"
+              ? "非表示リンク(~~~)はラベルもマーカーも持てないため、ラベルは消え、両端とも None に固定されます"
               : element.headStart === "none"
                 ? "始点マーカーを選ぶと、終点も同じ形に揃います(mermaid は <--> / o--o / x--x のみ)"
                 : "両端は同じ形に揃います。片方を変えるともう一方も追従します"}

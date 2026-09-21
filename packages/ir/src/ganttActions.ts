@@ -14,6 +14,42 @@ export function sanitizeGanttName(name: string): string {
   return name.replaceAll(/[:#;%]/g, " ").replaceAll(/\s+/g, " ").trim();
 }
 
+/** Statement keywords. A task line is `<name> :<meta>`, but mermaid reads a
+ * line opening with one of these as that statement instead — the task would
+ * be swallowed and would overwrite a chart option or open a section. */
+const GANTT_KEYWORD_RE = /^(title|dateFormat|axisFormat|tickInterval|excludes|todayMarker|weekend|section)(\s|$)/;
+
+/** Why `name` cannot be a task name, or undefined when it can. A nameless
+ * task emits a line starting with `:`, which mermaid cannot read at all.
+ * Shared by the reducer (reject) and the UI (show the reason). */
+export function ganttTaskNameRejection(name: string): string | undefined {
+  const clean = sanitizeGanttName(name);
+  if (clean === "") return "task name cannot be empty";
+  if (GANTT_KEYWORD_RE.test(clean)) return "a task name cannot start with a mermaid keyword (title, section, …)";
+  return undefined;
+}
+
+/** Chart options are written bare after their keyword, so `%%` would comment
+ * out the rest of the line and a line break would end the statement. */
+function normOption(v: string | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  const clean = v.replaceAll(/%%+/g, "").replaceAll(/[\r\n]+/g, " ").trim();
+  return clean === "" ? undefined : clean;
+}
+
+/** `excludes` is emitted space-joined and read back split on whitespace and
+ * commas, so each entry has to be a single token of its own. */
+function normExcludes(values: readonly string[]): readonly string[] | undefined {
+  const out: string[] = [];
+  for (const v of values) {
+    for (const token of v.split(/[\s,]+/)) {
+      const clean = normOption(token);
+      if (clean !== undefined && !out.includes(clean)) out.push(clean);
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 export function newTaskId(): TaskId {
   return newId("task");
 }
@@ -55,8 +91,6 @@ export type GanttAction =
   /** a key present with "" / [] / false clears that option */
   | { type: "setGanttOptions"; patch: GanttOptions };
 
-const norm = (v: string | undefined) => (v === undefined || v.trim() === "" ? undefined : v.trim());
-
 function move<T>(list: readonly T[], index: number, delta: -1 | 1): readonly T[] | undefined {
   const target = index + delta;
   if (index < 0 || target < 0 || target >= list.length) return undefined;
@@ -86,9 +120,13 @@ export function applyGanttAction(ir: GanttIR, action: GanttAction): GanttIR {
     }
 
     case "updateSection": {
-      const s = ir.sections.find((x) => x.id === action.id);
-      if (!s) return ir;
+      const index = ir.sections.findIndex((x) => x.id === action.id);
+      if (index < 0) return ir;
+      const s = ir.sections[index]!;
       const name = sanitizeGanttName(action.name);
+      // a nameless section emits no header, so only the first one — whose
+      // tasks sit before any `section` — survives the round trip
+      if (name === "" && index !== 0) return ir;
       if (name === s.name) return ir;
       return mapSection(ir, action.id, (x) => ({ ...x, name }));
     }
@@ -99,7 +137,12 @@ export function applyGanttAction(ir: GanttIR, action: GanttAction): GanttIR {
     }
 
     case "moveSection": {
-      const next = move(ir.sections, ir.sections.findIndex((s) => s.id === action.id), action.delta);
+      const from = ir.sections.findIndex((s) => s.id === action.id);
+      const to = from + action.delta;
+      // the nameless section can only ever be first (see updateSection)
+      if (from >= 0 && to >= 0 && to < ir.sections.length && (ir.sections[from]!.name === "" || ir.sections[to]!.name === ""))
+        return ir;
+      const next = move(ir.sections, from, action.delta);
       return next === undefined ? ir : { ...ir, sections: next };
     }
 
@@ -107,6 +150,7 @@ export function applyGanttAction(ir: GanttIR, action: GanttAction): GanttIR {
       const t = action.task;
       if (sectionOfTask(ir, t.id)) return ir;
       if (!ir.sections.some((s) => s.id === action.sectionId)) return ir;
+      if (ganttTaskNameRejection(t.name) !== undefined) return ir;
       const task = normalizeTask(t);
       return mapSection(ir, action.sectionId, (s) => ({ ...s, tasks: [...s.tasks, task] }));
     }
@@ -116,6 +160,7 @@ export function applyGanttAction(ir: GanttIR, action: GanttAction): GanttIR {
       if (!section) return ir;
       const t = section.tasks.find((x) => x.id === action.id)!;
       const p = action.patch;
+      if (p.name !== undefined && ganttTaskNameRejection(p.name) !== undefined) return ir;
       const next = normalizeTask({
         ...t,
         ...(p.name !== undefined ? { name: p.name } : {}),
@@ -145,13 +190,13 @@ export function applyGanttAction(ir: GanttIR, action: GanttAction): GanttIR {
       const p = action.patch;
       const next: GanttIR = omitUndefined({
         ...ir,
-        title: "title" in p ? norm(p.title) : ir.title,
-        dateFormat: "dateFormat" in p ? norm(p.dateFormat) : ir.dateFormat,
-        axisFormat: "axisFormat" in p ? norm(p.axisFormat) : ir.axisFormat,
-        tickInterval: "tickInterval" in p ? norm(p.tickInterval) : ir.tickInterval,
-        excludes: "excludes" in p ? (p.excludes && p.excludes.length > 0 ? p.excludes : undefined) : ir.excludes,
+        title: "title" in p ? normOption(p.title) : ir.title,
+        dateFormat: "dateFormat" in p ? normOption(p.dateFormat) : ir.dateFormat,
+        axisFormat: "axisFormat" in p ? normOption(p.axisFormat) : ir.axisFormat,
+        tickInterval: "tickInterval" in p ? normOption(p.tickInterval) : ir.tickInterval,
+        excludes: "excludes" in p ? (p.excludes ? normExcludes(p.excludes) : undefined) : ir.excludes,
         weekend: "weekend" in p ? p.weekend : ir.weekend,
-        todayMarker: "todayMarker" in p ? norm(p.todayMarker) : ir.todayMarker,
+        todayMarker: "todayMarker" in p ? normOption(p.todayMarker) : ir.todayMarker,
         inclusiveEndDates: "inclusiveEndDates" in p ? (p.inclusiveEndDates ? true : undefined) : ir.inclusiveEndDates,
       });
       return same(next, ir) ? ir : next;

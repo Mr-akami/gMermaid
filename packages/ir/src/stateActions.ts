@@ -38,6 +38,15 @@ const norm = (v: string | undefined) => (v === "" ? undefined : v);
 const regionOf = (s: { region?: number }): number => s.region ?? 0;
 const validRegion = (r: number | undefined): boolean => r === undefined || (Number.isInteger(r) && r >= 0);
 
+/** Why `state` cannot carry a note, or undefined when it can. A note names
+ * its target by id (`note right of X`), but a start/end pseudo-state is only
+ * ever written as `[*]` and never declared — the note would re-import as a
+ * brand-new normal state with that generated id. Shared by the reducer
+ * (reject) and the UI (disable + show the reason). */
+export function stateNoteRejection(state: StateNode): string | undefined {
+  return state.role === "start" || state.role === "end" ? "[*] has no name in the text, so it cannot carry a note" : undefined;
+}
+
 /** Why re-parenting `id` under `parent` (region `region`) is not allowed, or
  * undefined when it is. Shared by the reducer (reject) and the UI (disable +
  * show the reason — a silent no-op would read as "the button does nothing"). */
@@ -117,7 +126,12 @@ export function applyStateAction(ir: StateIR, action: StateAction): StateIR {
       ) {
         return ir;
       }
-      return { ...ir, states: compactRegions([...ir.states, s], s.parent) };
+      // only a normal state has a label slot in the text (`state "x" as id`).
+      // A `<<choice>>`/`<<fork>>`/`<<join>>` declaration re-reads with its id
+      // as the label and `[*]` has no name at all, so store what comes back.
+      const state =
+        s.role === "normal" ? s : { ...s, label: s.role === "start" || s.role === "end" ? "" : (s.id as string) };
+      return { ...ir, states: compactRegions([...ir.states, state], s.parent) };
     }
 
     case "removeState": {
@@ -204,7 +218,8 @@ export function applyStateAction(ir: StateIR, action: StateAction): StateIR {
     case "addStateNote": {
       const n = action.note;
       if (ir.notes.some((x) => x.id === n.id)) return ir;
-      if (!ir.states.some((s) => s.id === n.target)) return ir;
+      const target = ir.states.find((s) => s.id === n.target);
+      if (!target || stateNoteRejection(target) !== undefined) return ir;
       return { ...ir, notes: [...ir.notes, n] };
     }
 

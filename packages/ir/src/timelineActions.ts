@@ -5,15 +5,37 @@ import { omitUndefined } from "./omitUndefined";
 // Same contract as the other diagram actions: intent-carrying, immutable,
 // identity-preserving on no-ops.
 
+/** Statement keywords: a line opening with one of these is read as that
+ * statement, never as a period, so no period label may start with one. */
+const TIMELINE_KEYWORD_RE = /^(title|section)(\s|$)/;
+
+/** What no timeline text may contain, whatever slot it sits in: `%%` opens a
+ * mermaid comment and a line break ends the statement, and this format has
+ * an escape for neither. */
+function timelineTextCommonRejection(text: string): string | undefined {
+  if (text.includes("%%")) return "`%%` is not allowed (starts a mermaid comment)";
+  if (/[\r\n]/.test(text)) return "line breaks are not allowed here";
+  return undefined;
+}
+
 /** Why `text` cannot be a period label / event text / section name, or
  * undefined when it can. `:` separates period from events in mermaid text
  * (and crashes mermaid's parser inside a section name), so it has no escape;
- * an empty label would emit `: event`, which mermaid rejects. Shared by the
- * reducer (reject) and the UI (show the reason). */
+ * an empty label would emit `: event`, which mermaid rejects; a label opening
+ * with `title`/`section` would be read as that statement and take its events
+ * with it. Shared by the reducer (reject) and the UI (show the reason). */
 export function timelineTextRejection(text: string): string | undefined {
   if (text.trim() === "") return "text cannot be empty";
   if (text.includes(":")) return "`:` is not allowed (mermaid separator)";
-  return undefined;
+  if (TIMELINE_KEYWORD_RE.test(text.trim())) return "cannot start with `title` or `section` (mermaid keywords)";
+  return timelineTextCommonRejection(text);
+}
+
+/** The title is written as `title <text>` and swallows the rest of the line,
+ * so it may hold what a period label may not (`:`, a leading keyword) — but
+ * not a comment marker or a line break. */
+export function timelineTitleRejection(text: string): string | undefined {
+  return timelineTextCommonRejection(text);
 }
 
 export type TimelineAction =
@@ -49,6 +71,7 @@ const mapPeriods = (ir: TimelineIR, f: (p: TimelinePeriod) => TimelinePeriod): T
 export function applyTimelineAction(ir: TimelineIR, action: TimelineAction): TimelineIR {
   switch (action.type) {
     case "setTitle": {
+      if (timelineTitleRejection(action.title) !== undefined) return ir;
       const title = action.title.trim() === "" ? undefined : action.title;
       if (title === ir.title) return ir;
       return omitUndefined({ ...ir, title });

@@ -100,3 +100,22 @@ test("typing a new outline into the code pane redraws the canvas", async ({ page
   await expect(editor.locator("svg [data-element-id]")).toHaveCount(3);
   await expect(editor.locator("svg text", { hasText: "Second" }).first()).toBeVisible();
 });
+
+test("a label the outline cannot carry is refused with a reason", async ({ page }) => {
+  const editor = await openEditor(page, "Mindmap");
+  await setCode(editor, 'mindmap\n  root((mindmap))\n    Origins\n      Long history\n');
+
+  await element(editor, "mindmap-1").click();
+  const label = editor.getByLabel("Label");
+  await expect(label).toHaveValue("Origins");
+
+  // an empty label would leave nothing but indentation on the line: the node
+  // would vanish on re-import and "Long history" would climb to the root
+  await label.fill("");
+  await expect(editor.getByText("a node needs a label")).toBeVisible();
+  await expectCode(editor).toContain("Origins");
+
+  // a leading space would be read as deeper indentation, `:::` as a class
+  await label.fill("  Roots:::x");
+  await expectCode(editor).toContain("Rootsx");
+});

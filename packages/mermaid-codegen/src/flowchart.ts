@@ -118,8 +118,14 @@ export function flowchartToMermaid(ir: FlowchartIR): string {
 
   for (const edge of ir.edges) {
     const arrow = edgeToken(edge);
-    // invisible links cannot carry a label in mermaid
-    const label = edge.label !== undefined && edge.line !== "invisible" ? `|"${escapeLabel(edge.label)}"|` : "";
+    // `~~~` has no label slot; the reducer (normalizeFlowchartEdge) already
+    // dropped the label, so the line check is a belt-and-braces guard.
+    // `|` closes the slot — there is no quoting that survives it, so it goes
+    // out as the mermaid entity the parser decodes again.
+    const label =
+      edge.label !== undefined && edge.line !== "invisible"
+        ? `|"${escapeLabel(edge.label).replaceAll("|", "#124;")}"|`
+        : "";
     lines.push(`  ${edge.from} ${arrow}${label} ${edge.to}`);
   }
   return lines.join("\n") + "\n";

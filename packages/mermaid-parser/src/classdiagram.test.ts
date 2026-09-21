@@ -396,4 +396,48 @@ describe("namespace ids stay branded", () => {
     if (!result.ok) return;
     expect(result.ir.classes[0]!.namespace).toBe("N" as NamespaceId);
   });
+
+  // A relation is the one place the emitter wrote free text raw: the label
+  // and both cardinalities now travel as entities like every other label.
+  it("relation labels and cardinalities survive the characters that would close their slot", () => {
+    const ir: ClassIR = {
+      kind: "class",
+      classes: [
+        { id: C("A"), name: "A", attributes: [], methods: [], stereotypes: [] },
+        { id: C("B"), name: "B", attributes: [], methods: [], stereotypes: [] },
+      ],
+      relations: [
+        {
+          id: "relation-1" as RelationId,
+          from: C("A"),
+          to: C("B"),
+          line: "solid",
+          headFrom: "none",
+          headTo: "arrow",
+          label: 'says "hi" <now>',
+          fromCardinality: '1.."n"',
+          toCardinality: "0..*",
+        },
+      ],
+      notes: [],
+      namespaces: [],
+    };
+    expectRoundTrip(ir);
+  });
+
+  // `style Foo --> Bar` is thrown away whole as a styling statement, so a
+  // class called `style` would lose every relation it starts.
+  it("a class named after a dropped statement keyword keeps its relations", () => {
+    const ir: ClassIR = {
+      kind: "class",
+      classes: [
+        { id: C("style"), name: "style", attributes: [], methods: [], stereotypes: [] },
+        { id: C("B"), name: "B", attributes: [], methods: [], stereotypes: [] },
+      ],
+      relations: [{ id: "relation-1" as RelationId, from: C("style"), to: C("B"), line: "solid", headFrom: "none", headTo: "arrow" }],
+      notes: [],
+      namespaces: [],
+    };
+    expectRoundTrip(ir);
+  });
 });

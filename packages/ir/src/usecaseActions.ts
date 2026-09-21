@@ -21,6 +21,35 @@ import { omitUndefined } from "./omitUndefined";
 // across renames; codegen maps id → name on export.
 export const USECASE_NAME_RE = /^[A-Za-z0-9_]+$/;
 
+/** Names the mermaid text claims for itself. A declaration line is just the
+ * name, so `end` would close the enclosing systemBoundary, `systemBoundary`
+ * would open one, and the statements the parser drops (`class`, `style`, …)
+ * take their whole line — including any relation that starts with the name. */
+const USECASE_RESERVED = new Set([
+  "end",
+  "systemBoundary",
+  "actor",
+  "direction",
+  "note",
+  "title",
+  "classDef",
+  "class",
+  "cssClass",
+  "style",
+  "click",
+  "linkStyle",
+  "accTitle",
+  "accDescr",
+]);
+
+/** Why `name` cannot name an actor, use case or boundary, or undefined when
+ * it can. Shared by the reducer (reject) and the UI (show the reason). */
+export function usecaseNameRejection(name: string): string | undefined {
+  if (!USECASE_NAME_RE.test(name)) return "use letters, digits and `_` only";
+  if (USECASE_RESERVED.has(name)) return `\`${name}\` is a mermaid keyword`;
+  return undefined;
+}
+
 const norm = (v: string | undefined): string | undefined => (v === "" ? undefined : v);
 const flag = (v: boolean | undefined): true | undefined => (v === true ? true : undefined);
 
@@ -103,7 +132,7 @@ export function applyUsecaseAction(ir: UsecaseIR, action: UsecaseAction): Usecas
   switch (action.type) {
     case "addActor": {
       const a = action.actor;
-      if (idTaken(ir, a.id) || nameTaken(ir, a.name) || !USECASE_NAME_RE.test(a.name)) return ir;
+      if (idTaken(ir, a.id) || nameTaken(ir, a.name) || usecaseNameRejection(a.name) !== undefined) return ir;
       if (a.boundary !== undefined && !ir.boundaries.some((b) => b.id === a.boundary)) return ir;
       return {
         ...ir,
@@ -121,7 +150,7 @@ export function applyUsecaseAction(ir: UsecaseIR, action: UsecaseAction): Usecas
 
     case "addUseCase": {
       const u = action.usecase;
-      if (idTaken(ir, u.id) || nameTaken(ir, u.name) || !USECASE_NAME_RE.test(u.name)) return ir;
+      if (idTaken(ir, u.id) || nameTaken(ir, u.name) || usecaseNameRejection(u.name) !== undefined) return ir;
       if (u.boundary !== undefined && !ir.boundaries.some((b) => b.id === u.boundary)) return ir;
       return {
         ...ir,
@@ -139,7 +168,7 @@ export function applyUsecaseAction(ir: UsecaseIR, action: UsecaseAction): Usecas
 
     case "addBoundary": {
       const b = action.boundary;
-      if (idTaken(ir, b.id) || nameTaken(ir, b.name) || !USECASE_NAME_RE.test(b.name)) return ir;
+      if (idTaken(ir, b.id) || nameTaken(ir, b.name) || usecaseNameRejection(b.name) !== undefined) return ir;
       return { ...ir, boundaries: [...ir.boundaries, omitUndefined({ ...b, label: norm(b.label) })] };
     }
 
@@ -168,7 +197,7 @@ export function applyUsecaseAction(ir: UsecaseIR, action: UsecaseAction): Usecas
     case "renameNode": {
       const current = ir.actors.find((a) => a.id === action.id) ?? ir.usecases.find((u) => u.id === action.id);
       if (!current || current.name === action.name) return ir;
-      if (!USECASE_NAME_RE.test(action.name) || nameTaken(ir, action.name)) return ir;
+      if (usecaseNameRejection(action.name) !== undefined || nameTaken(ir, action.name)) return ir;
       return {
         ...ir,
         actors: ir.actors.map((a) => (a.id === action.id ? { ...a, name: action.name } : a)),
@@ -179,7 +208,7 @@ export function applyUsecaseAction(ir: UsecaseIR, action: UsecaseAction): Usecas
     case "renameBoundary": {
       const b = ir.boundaries.find((x) => x.id === action.id);
       if (!b || b.name === action.name) return ir;
-      if (!USECASE_NAME_RE.test(action.name) || nameTaken(ir, action.name)) return ir;
+      if (usecaseNameRejection(action.name) !== undefined || nameTaken(ir, action.name)) return ir;
       return { ...ir, boundaries: ir.boundaries.map((x) => (x.id === action.id ? { ...x, name: action.name } : x)) };
     }
 

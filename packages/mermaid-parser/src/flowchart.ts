@@ -279,7 +279,9 @@ function parseEdgeLine(line: string): { groups: NodeRef[][]; links: Link[] } | s
       const open = next + pipe[0].length;
       const close = line.indexOf("|", open);
       if (close < 0) return "unterminated edge label `|...|`";
-      label = unescapeLabel(unquote(line.slice(open, close)));
+      // `|` closes the slot, so codegen writes it as the entity `#124;`;
+      // decode it before unescapeLabel, whose `#35;` rule would eat the `#`
+      label = unescapeLabel(unquote(line.slice(open, close)).replaceAll("#124;", "|"));
       next = close + 1;
     }
     const err = takeGroup(line.slice(pos, hit.at));

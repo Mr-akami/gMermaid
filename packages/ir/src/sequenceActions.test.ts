@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BoxId, BranchId, FragmentId, LifecycleId, LifelineId, MessageId } from "./ids";
-import { applySequenceAction } from "./sequenceActions";
+import { applySequenceAction, normalizeSequenceNote } from "./sequenceActions";
 import type { Message, SequenceIR as SeqIR } from "./sequence";
 
 const L = (s: string) => s as LifelineId;
@@ -50,7 +50,9 @@ describe("fragment property edits", () => {
   });
 
   it("updateBranch sets, keeps and clears structured loop bounds (B-2)", () => {
-    const withBounds = applySequenceAction(base, {
+    // only a `loop` header has a `(min,max)` slot, so the bounds live there
+    const asLoop = applySequenceAction(base, { type: "updateFragment", id: F("f1"), fragmentKind: "loop" });
+    const withBounds = applySequenceAction(asLoop, {
       type: "updateBranch",
       id: B("br1"),
       loopBounds: { min: "1", max: "3" },
@@ -75,6 +77,24 @@ describe("fragment property edits", () => {
     const frag3 = cleared.events[1]!;
     if (frag3.kind !== "fragment") throw new Error("expected fragment");
     expect("loopBounds" in frag3.branches[0]!).toBe(false);
+  });
+
+  it("loop bounds cannot outlive the loop: nothing else has a `(min,max)` slot", () => {
+    const asLoop = applySequenceAction(base, { type: "updateFragment", id: F("f1"), fragmentKind: "loop" });
+    const withBounds = applySequenceAction(asLoop, { type: "updateBranch", id: B("br1"), loopBounds: { min: "1", max: "3" } });
+
+    // changing the kind drops them — otherwise `(1,3) ok` would come back as
+    // condition text and double itself on the next save
+    const asAlt = applySequenceAction(withBounds, { type: "updateFragment", id: F("f1"), fragmentKind: "alt" });
+    const frag = asAlt.events[1]!;
+    if (frag.kind !== "fragment") throw new Error("expected fragment");
+    expect("loopBounds" in frag.branches[0]!).toBe(false);
+
+    // and only the FIRST branch of a loop has the slot at all
+    const onSecond = applySequenceAction(asLoop, { type: "updateBranch", id: B("br2"), loopBounds: { min: "1", max: "3" } });
+    const frag2 = onSecond.events[1]!;
+    if (frag2.kind !== "fragment") throw new Error("expected fragment");
+    expect("loopBounds" in frag2.branches[1]!).toBe(false);
   });
 
   it("updateFragment changes the kind, identity-preserving on no-op", () => {
@@ -319,5 +339,24 @@ describe("setLifecycle", () => {
   it("is a no-op without a message to attach to", () => {
     const lonely: SeqIR = { ...base, lifelines: [...base.lifelines, { id: L("c"), name: "C", kind: "participant" }] };
     expect(applySequenceAction(lonely, { type: "setLifecycle", lifeline: L("c"), which: "create", eventId: E("c1"), on: true })).toBe(lonely);
+  });
+
+  // mermaid spans a pair of lifelines with `over` only: `Note left of a,b`
+  // is not a line it can read back.
+  it("a note keeps only the lifelines its position can spell", () => {
+    const withNote = applySequenceAction(base, {
+      type: "addEventAt",
+      event: { kind: "note", id: N("n1"), position: "over", lifelines: [L("a"), L("b")], text: "hi" },
+      container: { kind: "root" },
+      index: 0,
+    });
+    const moved = applySequenceAction(withNote, { type: "updateNote", id: N("n1"), position: "leftOf" });
+    const note = moved.events[0]!;
+    if (note.kind !== "note") throw new Error("expected note");
+    expect(note.lifelines).toEqual([L("a")]);
+    // and a third lifeline never gets in, whatever the position
+    expect(
+      normalizeSequenceNote({ kind: "note", id: N("n2"), position: "over", lifelines: [L("a"), L("b"), L("c")], text: "x" }).lifelines,
+    ).toEqual([L("a"), L("b")]);
   });
 });

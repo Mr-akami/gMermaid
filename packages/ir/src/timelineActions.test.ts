@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EventId, PeriodId, SectionId } from "./ids";
 import type { TimelineIR } from "./timeline";
 import { periodOfEvent, sectionOfPeriod } from "./timeline";
-import { applyTimelineAction, timelineTextRejection } from "./timelineActions";
+import { applyTimelineAction, timelineTextRejection, timelineTitleRejection } from "./timelineActions";
 
 const S = (s: string) => s as SectionId;
 const P = (s: string) => s as PeriodId;
@@ -86,5 +86,22 @@ describe("applyTimelineAction", () => {
     const noEvent = applyTimelineAction(base, { type: "removeEvent", id: E("e2") });
     expect(noEvent.sections[0]!.periods[1]!.events.map((e) => e.id)).toEqual(["e3"]);
     expect(applyTimelineAction(base, { type: "removeEvent", id: E("zz") })).toBe(base);
+  });
+
+  // `%%` and a leading statement keyword are the two ways a period label can
+  // swallow its own line in the mermaid text, taking its events with it.
+  it("refuses `%%`, line breaks and statement keywords, with a reason", () => {
+    for (const text of ["50%% off", "a\nb", "title X", "title", "section X"]) {
+      expect(timelineTextRejection(text), text).toBeDefined();
+      expect(applyTimelineAction(base, { type: "updatePeriod", id: P("p1"), label: text }), text).toBe(base);
+      expect(applyTimelineAction(base, { type: "updateEvent", id: E("e1"), text }), text).toBe(base);
+      expect(applyTimelineAction(base, { type: "updateSection", id: S("s2"), name: text }), text).toBe(base);
+    }
+    // the title swallows the rest of its line, so `:` and keywords are fine
+    // there — a comment marker and a line break still are not
+    expect(timelineTitleRejection("My : Title")).toBeUndefined();
+    expect(timelineTitleRejection("100%% sure")).toBeDefined();
+    expect(applyTimelineAction(base, { type: "setTitle", title: "100%% sure" })).toBe(base);
+    expect(applyTimelineAction(base, { type: "setTitle", title: "My : Title" }).title).toBe("My : Title");
   });
 });

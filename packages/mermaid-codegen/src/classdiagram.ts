@@ -39,9 +39,13 @@ function escapeLabel(label: string): string {
     .replaceAll(/\r?\n/g, "<br/>");
 }
 
+/** Statement keywords the parser strips before it ever looks for a relation:
+ * a bare name here would take the whole line with it. */
+const RESERVED = new Set(["style", "classDef", "cssClass", "class", "link", "click", "callback", "note", "direction", "namespace", "accTitle", "accDescr"]);
+
 /** Bare identifiers stay bare; anything else (spaces, `-`, punctuation) needs backticks. */
 function ref(name: string): string {
-  return /^[\p{L}\p{N}_.]+$/u.test(name) ? name : `\`${name}\``;
+  return /^[\p{L}\p{N}_.]+$/u.test(name) && !RESERVED.has(name) ? name : `\`${name}\``;
 }
 
 export function relationToken(r: ClassRelation): string {
@@ -91,9 +95,12 @@ export function classToMermaid(ir: ClassIR): string {
   for (const r of ir.relations) {
     const from = nameOf.get(r.from) ?? r.from;
     const to = nameOf.get(r.to) ?? r.to;
-    const fromCard = r.fromCardinality !== undefined ? ` "${r.fromCardinality}"` : "";
-    const toCard = r.toCardinality !== undefined ? `"${r.toCardinality}" ` : "";
-    const label = r.label !== undefined ? ` : ${r.label}` : "";
+    // cardinalities and the label are free text: a `"` would close the
+    // cardinality slot and a newline would end the statement, so they travel
+    // as entities like every other label in this file
+    const fromCard = r.fromCardinality !== undefined ? ` "${escapeLabel(r.fromCardinality)}"` : "";
+    const toCard = r.toCardinality !== undefined ? `"${escapeLabel(r.toCardinality)}" ` : "";
+    const label = r.label !== undefined ? ` : ${escapeLabel(r.label)}` : "";
     lines.push(`  ${ref(from)}${fromCard} ${relationToken(r)} ${toCard}${ref(to)}${label}`);
   }
 

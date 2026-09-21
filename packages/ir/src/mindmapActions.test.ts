@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MindmapNodeId } from "./ids";
 import { mindmapChildren, mindmapDepth, mindmapRoot, type MindmapIR } from "./mindmap";
+import { mindmapLabelRejection, sanitizeMindmapLabel } from "./mindmap";
 import { applyMindmapAction, mindmapMoveRejection } from "./mindmapActions";
 
 const M = (s: string) => s as MindmapNodeId;
@@ -81,5 +82,17 @@ describe("applyMindmapAction", () => {
     expect(mindmapChildren(down, M("a")).map((n) => n.id)).toEqual(["a1"]);
     expect(applyMindmapAction(base, { type: "reorderNode", id: M("a"), delta: -1 })).toBe(base);
     expect(applyMindmapAction(base, { type: "reorderNode", id: M("root"), delta: 1 })).toBe(base);
+  });
+
+  // the outline line carries the tree, so the label may not fake indentation,
+  // a class suffix, a comment or a statement terminator
+  it("strips what a label cannot hold, and refuses one that leaves the line blank", () => {
+    expect(sanitizeMindmapLabel("  a:::b %% c;  ")).toBe("ab  c");
+    const next = applyMindmapAction(base, { type: "updateNode", id: M("a"), label: "  leading" });
+    expect(next.nodes.find((n) => n.id === "a")!.label).toBe("leading");
+    for (const bad of ["", "   ", ":::", "%%"]) {
+      expect(mindmapLabelRejection(bad), bad).toBeDefined();
+      expect(applyMindmapAction(base, { type: "updateNode", id: M("a"), label: bad }), bad).toBe(base);
+    }
   });
 });

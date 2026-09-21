@@ -452,21 +452,25 @@ describe("parseFlowchart id-less subgraphs", () => {
 describe("every normalized edge survives the round trip", () => {
   const lines = ["solid", "dotted", "thick", "invisible"] as const;
   const heads = ["none", "arrow", "circle", "cross"] as const;
+  const labels = [undefined, "go"] as const;
   const cases = lines.flatMap((line) =>
     heads.flatMap((headStart) =>
       heads.flatMap((headEnd) =>
-        [1, 2, 3].map((length) => ({
-          edge: normalizeFlowchartEdge({
-            id: "edge-1" as EdgeId,
-            from: "a" as NodeId,
-            to: "b" as NodeId,
-            line,
-            headStart,
-            headEnd,
-            ...(length > 1 ? { length } : {}),
-          }),
-          name: `${line}/${headStart}/${headEnd}/${length}`,
-        })),
+        [1, 2, 3].flatMap((length) =>
+          labels.map((label) => ({
+            edge: normalizeFlowchartEdge({
+              id: "edge-1" as EdgeId,
+              from: "a" as NodeId,
+              to: "b" as NodeId,
+              line,
+              headStart,
+              headEnd,
+              ...(length > 1 ? { length } : {}),
+              ...(label !== undefined ? { label } : {}),
+            }),
+            name: `${line}/${headStart}/${headEnd}/${length}/${label ?? "nolabel"}`,
+          })),
+        ),
       ),
     ),
   );

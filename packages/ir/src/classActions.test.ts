@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClassId, NamespaceId, NoteId, RelationId } from "./ids";
 import type { ClassIR } from "./classdiagram";
-import { applyClassAction } from "./classActions";
+import { applyClassAction, CLASS_NAME_RE } from "./classActions";
 
 const C = (s: string) => s as ClassId;
 const R = (s: string) => s as RelationId;
@@ -171,5 +171,14 @@ describe("class namespaces", () => {
 
   it("rejects an unknown namespace on a class", () => {
     expect(applyClassAction(withNs, { type: "setClassNamespace", id: C("Other"), namespace: NS("ghost") })).toBe(withNs);
+  });
+
+  // backticks quote a name with spaces or punctuation, but they do not stop
+  // `%%` from commenting out the rest of the line, nor `:::` from being read
+  // as a css class and truncating the name
+  it("refuses a class name backticks cannot protect", () => {
+    for (const bad of ["a%%b", "a:::b", "a`b", "a~b", " "]) expect(CLASS_NAME_RE.test(bad), bad).toBe(false);
+    for (const ok of ["Tree Node", "a:b", "a-b", "100% pure"]) expect(CLASS_NAME_RE.test(ok), ok).toBe(true);
+    expect(applyClassAction(base, { type: "renameClass", id: C("Other"), name: "a%%b" })).toBe(base);
   });
 });
