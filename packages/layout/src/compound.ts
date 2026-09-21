@@ -4,6 +4,33 @@ import type { Point, Rect } from "./result";
 // edge to a cluster, so edges targeting a composite/subgraph are routed to a
 // REPRESENTATIVE LEAF inside it, then visually cut off at the cluster border.
 
+// Self-edge detour geometry (right side of the box). dagre drops self-edges
+// entirely, so every diagram kind that allows them synthesizes the path after
+// layout; the numbers mirror the class diagram's self-relations so a loop
+// looks the same wherever it appears.
+const SELF_LOOP_W = 30;
+const SELF_LOOP_H = 26;
+const SELF_LOOP_STEP = 14;
+
+/** How far right the `index`-th stacked loop on one box reaches. */
+export function SELF_LOOP_REACH(index: number): number {
+  return SELF_LOOP_W + index * SELF_LOOP_STEP;
+}
+
+/** Rectangular detour off the right side of `rect`; stacked loops on the same
+ * box fan outward by `index`. */
+export function selfLoopPoints(rect: Rect, index = 0): Point[] {
+  const right = rect.x + rect.w;
+  const reach = right + SELF_LOOP_REACH(index);
+  const cy = rect.y + Math.min(rect.h / 2, SELF_LOOP_H * (index + 1.5));
+  return [
+    { x: right, y: cy - SELF_LOOP_H / 2 },
+    { x: reach, y: cy - SELF_LOOP_H / 2 },
+    { x: reach, y: cy + SELF_LOOP_H / 2 },
+    { x: right, y: cy + SELF_LOOP_H / 2 },
+  ];
+}
+
 /** First point of segment [a,b] crossing the rect boundary, or null. */
 function segmentRectIntersection(a: Point, b: Point, r: Rect): Point | null {
   // walk parametrically from a (outside) to b (inside) — smallest t entering the rect

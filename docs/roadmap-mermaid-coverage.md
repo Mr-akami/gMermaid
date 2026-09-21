@@ -32,9 +32,12 @@ auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
 - Activation (`+`/`-` suffix and `activate`/`deactivate`), `box`, `rect`,
   `create`/`destroy`, participant types `@{ type: … }`, multi-line notes
   (tspan + textarea), `autonumber start step` fields, `title`.
-### State
+### State (done)
 - Concurrency `--` regions, per-block `direction`, multi-line notes,
   self-transitions, `state X <<choice>>` etc. already ok.
+- Per-block `direction` round-trips but is not honored by layout: dagre has
+  one rankdir per graph. An empty region is not expressible in mermaid text,
+  so the GUI splits an existing member into a new region instead.
 ### Class
 - Reversed / two-way relation tokens, `direction TD`, `classDiagram-v2`,
   `class X["label"]` + relaxed names, `*`/`$` classifiers, type-first

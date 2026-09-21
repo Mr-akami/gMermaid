@@ -40,6 +40,13 @@ export async function setCode(editor: Locator, text: string): Promise<void> {
   await cm.blur();
 }
 
+/** Assert on the code pane after a GUI edit. The pane defers external value
+ * updates for ~200ms after a local edit, so a single `codeText` read right
+ * after a click or keystroke races that sync — poll instead. */
+export function expectCode(editor: Locator) {
+  return expect.poll(() => codeText(editor), { timeout: 5_000 });
+}
+
 export function element(editor: Locator, id: string): Locator {
   return editor.locator(`[data-element-id="${id}"]`);
 }
