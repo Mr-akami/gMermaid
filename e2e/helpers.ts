@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type Kind = "Flowchart" | "Sequence" | "Class" | "State";
+export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement";
 
 /** Open the app fresh (no autosave) and switch to a diagram tab. */
 export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
@@ -29,7 +29,11 @@ export async function setCode(editor: Locator, text: string): Promise<void> {
   await cm.press("Delete");
   // insertText avoids CodeMirror auto-indent interfering with pasted lines
   await cm.evaluate((el, t) => {
-    const view = (el as unknown as { cmView?: { view: { dispatch: (tr: unknown) => void; state: { doc: { length: number } } } } }).cmView?.view;
+    // CodeMirror hangs its content view off .cm-content: `cmView` before the
+    // tiled renderer, `cmTile` since. Both expose the EditorView as `.view`.
+    type Holder = { view: { dispatch: (tr: unknown) => void; state: { doc: { length: number } } } };
+    const content = el as unknown as { cmView?: Holder; cmTile?: Holder };
+    const view = content.cmView?.view ?? content.cmTile?.view;
     if (!view) throw new Error("CodeMirror view not found");
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: t } });
   }, text);

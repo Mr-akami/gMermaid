@@ -12,6 +12,7 @@ import type {
   NodeId,
   NoteId,
   RelationId,
+  RequirementIR,
   SequenceIR,
   StateIR,
   TransitionId,
@@ -19,6 +20,7 @@ import type {
 import mermaid from "mermaid";
 import { flowchartToMermaid } from "./flowchart";
 import { classToMermaid } from "./classdiagram";
+import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
 
@@ -37,6 +39,8 @@ async function expectMermaidAccepts(code: string): Promise<void> {
 const N = (s: string) => s as NodeId;
 const L = (s: string) => s as LifelineId;
 const S = (s: string) => s as import("@gmermaid/ir").StateId;
+const Q = (s: string) => s as import("@gmermaid/ir").RequirementId;
+const EL = (s: string) => s as import("@gmermaid/ir").ElementId;
 const G = (s: string) => s as import("@gmermaid/ir").SubgraphId;
 
 describe("mermaid.js accepts generated flowcharts", () => {
@@ -270,6 +274,55 @@ describe("mermaid.js accepts generated state diagrams", () => {
       ],
     };
     await expectMermaidAccepts(stateToMermaid(ir));
+  });
+});
+
+describe("mermaid.js accepts generated requirement diagrams", () => {
+  it("parses every requirement type, risk, verify method and relation type", async () => {
+    const ir: RequirementIR = {
+      kind: "requirement",
+      requirements: [
+        { id: Q("test_req"), name: "test_req", type: "requirement", reqId: "1", text: "the test text.", risk: "High", verifyMethod: "Test" },
+        { id: Q("r2"), name: "r2", type: "functionalRequirement", reqId: "1.1", risk: "Low", verifyMethod: "Inspection" },
+        { id: Q("r3"), name: "r3", type: "performanceRequirement", risk: "Medium", verifyMethod: "Demonstration" },
+        { id: Q("r4"), name: "r4", type: "interfaceRequirement", verifyMethod: "Analysis" },
+        { id: Q("r5"), name: "r5", type: "physicalRequirement" },
+        { id: Q("r6"), name: "r6", type: "designConstraint" },
+      ],
+      elements: [
+        { id: EL("test_entity"), name: "test_entity", type: "simulation" },
+        { id: EL("e2"), name: "e2", type: "word doc", docRef: "reqs/test_entity" },
+      ],
+      relations: [
+        { id: "x1" as RelationId, from: EL("test_entity"), to: Q("r2"), type: "satisfies" },
+        { id: "x2" as RelationId, from: Q("test_req"), to: Q("r2"), type: "traces" },
+        { id: "x3" as RelationId, from: Q("test_req"), to: Q("r3"), type: "contains" },
+        { id: "x4" as RelationId, from: Q("r3"), to: Q("r4"), type: "derives" },
+        { id: "x5" as RelationId, from: Q("r4"), to: Q("r5"), type: "refines" },
+        { id: "x6" as RelationId, from: EL("e2"), to: Q("r6"), type: "copies" },
+        { id: "x7" as RelationId, from: EL("e2"), to: Q("r5"), type: "verifies" },
+      ],
+    };
+    await expectMermaidAccepts(requirementToMermaid(ir));
+  });
+
+  it("parses direction plus names and free text that must be quoted", async () => {
+    const ir: RequirementIR = {
+      kind: "requirement",
+      direction: "LR",
+      requirements: [
+        // a name with spaces, and text carrying every character codegen escapes
+        { id: Q("my req"), name: "my req", type: "requirement", reqId: "1.2, a", text: 'a: "quoted" > text & #hash\nsecond line', risk: "Low" },
+        // a name that collides with a mermaid keyword must be quoted too
+        { id: Q("element"), name: "element", type: "designConstraint" },
+      ],
+      elements: [{ id: EL("an entity"), name: "an entity", type: "test suite", docRef: "github.com/all_the_tests" }],
+      relations: [
+        { id: "x1" as RelationId, from: EL("an entity"), to: Q("my req"), type: "satisfies" },
+        { id: "x2" as RelationId, from: Q("element"), to: Q("element"), type: "traces" },
+      ],
+    };
+    await expectMermaidAccepts(requirementToMermaid(ir));
   });
 });
 

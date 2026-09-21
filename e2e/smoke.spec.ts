@@ -6,6 +6,7 @@ const kinds = [
   ["Sequence", /^sequenceDiagram/],
   ["Class", /^classDiagram/],
   ["State", /^stateDiagram-v2/],
+  ["Requirement", /^requirementDiagram/],
 ] as const;
 
 for (const [kind, head] of kinds) {
