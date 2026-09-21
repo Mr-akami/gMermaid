@@ -92,3 +92,125 @@ exports[`layoutFlowchart > matches the committed golden layout 1`] = `
   "subgraphs": [],
 }
 `;
+
+exports[`nested subgraphs > matches the committed golden layout three levels deep 1`] = `
+{
+  "edges": [
+    {
+      "headEnd": "arrow",
+      "headStart": "none",
+      "id": "ab",
+      "line": "solid",
+      "points": [
+        {
+          "x": 44,
+          "y": 135.6,
+        },
+        {
+          "x": 44,
+          "y": 160.6,
+        },
+        {
+          "x": 44,
+          "y": 185.6,
+        },
+      ],
+    },
+    {
+      "headEnd": "arrow",
+      "headStart": "none",
+      "id": "bc",
+      "line": "solid",
+      "points": [
+        {
+          "x": 44,
+          "y": 225.2,
+        },
+        {
+          "x": 44,
+          "y": 250.2,
+        },
+        {
+          "x": 44,
+          "y": 275.2,
+        },
+      ],
+    },
+  ],
+  "kind": "flowchart",
+  "nodes": [
+    {
+      "id": "a",
+      "label": "A",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 40,
+        "x": 24,
+        "y": 96,
+      },
+      "shape": "rect",
+    },
+    {
+      "id": "b",
+      "label": "B",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 40,
+        "x": 24,
+        "y": 185.6,
+      },
+      "shape": "rect",
+    },
+    {
+      "id": "c",
+      "label": "C",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 40,
+        "x": 24,
+        "y": 275.2,
+      },
+      "shape": "rect",
+    },
+  ],
+  "size": {
+    "h": 338.79999999999995,
+    "w": 88,
+  },
+  "subgraphs": [
+    {
+      "depth": 0,
+      "id": "g0",
+      "label": "G0",
+      "rect": {
+        "h": 338.79999999999995,
+        "w": 88,
+        "x": 0,
+        "y": 0,
+      },
+    },
+    {
+      "depth": 1,
+      "id": "g1",
+      "label": "G1",
+      "rect": {
+        "h": 298.79999999999995,
+        "w": 72,
+        "x": 8,
+        "y": 32,
+      },
+    },
+    {
+      "depth": 2,
+      "id": "g2",
+      "label": "G2",
+      "rect": {
+        "h": 258.79999999999995,
+        "w": 56,
+        "x": 16,
+        "y": 64,
+      },
+    },
+  ],
+}
+`;

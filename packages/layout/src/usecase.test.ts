@@ -84,3 +84,44 @@ describe("layoutUsecase", () => {
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
 });
+
+const pair = (boundary?: BoundaryId): UsecaseIR => ({
+  kind: "usecase",
+  direction: "TB",
+  actors: [{ id: A("Cust"), name: "Cust", variant: "default", ...(boundary !== undefined ? { boundary } : {}) }],
+  usecases: [{ id: U("Buy"), name: "Buy", shape: "ellipse", ...(boundary !== undefined ? { boundary } : {}) }],
+  boundaries: boundary !== undefined ? [{ id: boundary, name: "sb", type: "default" }] : [],
+  relations: [{ id: R("r1"), from: A("Cust"), to: U("Buy"), line: "solid", headFrom: "none", headTo: "arrow" }],
+  notes: [],
+});
+
+/** Distance dagre left between the actor and the use case it points at. */
+const actorGap = (source: UsecaseIR): number => {
+  const l = layoutUsecase(source, fixedWidthMeasurer());
+  return l.usecases[0]!.rect.y - (l.actors[0]!.rect.y + l.actors[0]!.rect.h);
+};
+
+describe("a boundary frame costs nothing outside itself", () => {
+  it("keeps the rank gap the same inside a frame as outside one", () => {
+    // a dagre cluster adds border ranks: the same two nodes used to sit 3x
+    // further apart once a systemBoundary was drawn around them
+    expect(actorGap(pair(B("sb")))).toBe(actorGap(pair()));
+  });
+
+  it("carries a relation that crosses the frame on to the node it names", () => {
+    const crossing: UsecaseIR = {
+      kind: "usecase",
+      direction: "TB",
+      actors: [{ id: A("Cust"), name: "Cust", variant: "default" }],
+      usecases: [{ id: U("Buy"), name: "Buy", shape: "ellipse", boundary: B("sb") }],
+      boundaries: [{ id: B("sb"), name: "sb", type: "default" }],
+      relations: [{ id: R("r1"), from: A("Cust"), to: U("Buy"), line: "solid", headFrom: "none", headTo: "arrow" }],
+      notes: [],
+    };
+    const l = layoutUsecase(crossing, fixedWidthMeasurer());
+    const target = l.usecases[0]!.rect;
+    const last = l.edges[0]!.points.at(-1)!;
+    expect(last.y).toBeCloseTo(target.y, 3);
+    expect(JSON.parse(JSON.stringify(l))).toEqual(l);
+  });
+});

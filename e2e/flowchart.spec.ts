@@ -129,3 +129,47 @@ test("an invisible link visibly gives up its label", async ({ page }) => {
   await expect(editor.getByLabel("Edge label")).toBeDisabled();
   await expect(editor.getByLabel("Edge label")).toHaveValue("");
 });
+
+// Three subgraphs inside each other: every dagre cluster adds border ranks, so
+// the whole diagram used to stretch with the nesting depth.
+const NESTED_SAMPLE = `flowchart TB
+  subgraph g0["Outer"]
+    subgraph g1["Middle"]
+      subgraph g2["Inner"]
+        a["A"] --> b["B"]
+        b --> c["C"]
+      end
+    end
+  end
+`;
+
+test("nested subgraph frames are drawn inside one another", async ({ page }) => {
+  const editor = await openEditor(page, "Flowchart");
+  await setCode(editor, NESTED_SAMPLE);
+
+  const frame = async (id: string) => {
+    const box = await element(editor, id).locator("rect").first().boundingBox();
+    if (!box) throw new Error(`no frame for ${id}`);
+    return box;
+  };
+  const outer = await frame("g0");
+  const middle = await frame("g1");
+  const inner = await frame("g2");
+  for (const [parent, child] of [
+    [outer, middle],
+    [middle, inner],
+  ] as const) {
+    expect(child.x).toBeGreaterThan(parent.x);
+    expect(child.y).toBeGreaterThan(parent.y);
+    expect(child.x + child.width).toBeLessThan(parent.x + parent.width);
+    expect(child.y + child.height).toBeLessThan(parent.y + parent.height);
+  }
+  // the three nodes sit one rank apart whatever the depth: the compound layout
+  // this replaced stretched the innermost frame to ~700px for the same three
+  expect(inner.height).toBeLessThan(400);
+
+  // an edge inside the innermost frame stays inside it
+  const a = (await element(editor, "a").locator("rect").first().boundingBox())!;
+  const b = (await element(editor, "b").locator("rect").first().boundingBox())!;
+  expect(b.y - (a.y + a.height)).toBeLessThan(120);
+});

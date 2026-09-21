@@ -1,9 +1,10 @@
 import { inflate, labelAnchor, type CollisionIndex } from "./collision";
 import type { Point, Rect } from "./result";
 
-// Shared geometry for compound (cluster) layouts: dagre cannot attach an
-// edge to a cluster, so edges targeting a composite/subgraph are routed to a
-// REPRESENTATIVE LEAF inside it, then visually cut off at the cluster border.
+// Shared geometry for container layouts: a composite/subgraph is laid out in
+// a dagre graph of its own and enters its parent as one node, so what is left
+// to do by hand is the geometry dagre never sees — self-loop detours, their
+// labels, and the leg from a frame border on to an endpoint inside it.
 
 // Self-edge detour geometry (right side of the box). dagre drops self-edges
 // entirely, so every diagram kind that allows them synthesizes the path after
@@ -12,6 +13,18 @@ import type { Point, Rect } from "./result";
 const SELF_LOOP_W = 30;
 const SELF_LOOP_H = 26;
 const SELF_LOOP_STEP = 14;
+
+/** Smallest rect covering them all; a zero-size rect is a bare point. */
+export function bboxOf(rects: readonly Rect[]): Rect {
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  return {
+    x,
+    y,
+    w: Math.max(...rects.map((r) => r.x + r.w)) - x,
+    h: Math.max(...rects.map((r) => r.y + r.h)) - y,
+  };
+}
 
 /** How far right the `index`-th stacked loop on one box reaches. */
 export function SELF_LOOP_REACH(index: number): number {
@@ -86,20 +99,10 @@ function segmentRectIntersection(a: Point, b: Point, r: Rect): Point | null {
 }
 
 /**
- * Trim a polyline so it stops at the border of `rect` instead of running to
- * a leaf inside it. `end: "to"` trims the tail (arrow into the cluster),
- * `end: "from"` trims the head (edge leaving the cluster).
+ * Where the line from `outside` to `inside` crosses the border of `rect` — the
+ * spot an edge should enter (or leave) a frame at. `null` when the two points
+ * are on the same side of the border, which leaves the caller's own point.
  */
-export function clipPolylineAtRect(points: readonly Point[], rect: Rect, end: "from" | "to"): Point[] {
-  const pts = end === "from" ? points.toReversed() : [...points];
-  const inside = (p: Point) => p.x >= rect.x && p.x <= rect.x + rect.w && p.y >= rect.y && p.y <= rect.y + rect.h;
-  // walk from the tail toward the head, dropping points inside the rect
-  let cut = pts.length;
-  while (cut > 0 && inside(pts[cut - 1]!)) cut -= 1;
-  if (cut === pts.length || cut === 0) return [...points]; // nothing to trim / fully inside
-  const outsideP = pts[cut - 1]!;
-  const insideP = pts[cut]!;
-  const hit = segmentRectIntersection(outsideP, insideP, rect) ?? insideP;
-  const trimmed = [...pts.slice(0, cut), hit];
-  return end === "from" ? trimmed.toReversed() : trimmed;
+export function borderCrossing(outside: Point, inside: Point, rect: Rect): Point | null {
+  return segmentRectIntersection(outside, inside, rect);
 }
