@@ -1,0 +1,168 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutUsecase > matches the committed golden layout 1`] = `
+{
+  "actors": [
+    {
+      "business": false,
+      "glyphBottom": 72.5,
+      "id": "Customer",
+      "label": "Customer",
+      "rect": {
+        "h": 74.2,
+        "w": 72,
+        "x": 0,
+        "y": 20.499999999999993,
+      },
+      "variant": "default",
+    },
+  ],
+  "boundaries": [
+    {
+      "id": "sb",
+      "label": "Order system",
+      "rect": {
+        "h": 151.2,
+        "w": 470,
+        "x": 199.5,
+        "y": -26,
+      },
+      "type": "package",
+    },
+  ],
+  "edges": [
+    {
+      "headFrom": "none",
+      "headTo": "arrow",
+      "id": "r1",
+      "label": "buys",
+      "labelPos": {
+        "x": 154.5,
+        "y": 51.599999999999994,
+      },
+      "line": "solid",
+      "points": [
+        {
+          "x": 72,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 99.5,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 127,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 154.5,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 182,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 209.5,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 237,
+          "y": 57.599999999999994,
+        },
+      ],
+    },
+    {
+      "headFrom": "none",
+      "headTo": "none",
+      "id": "r2",
+      "kind": "include",
+      "label": "«include»",
+      "labelPos": {
+        "x": 459.5,
+        "y": 51.599999999999994,
+      },
+      "line": "dashed",
+      "points": [
+        {
+          "x": 377,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 404.5,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 432,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 459.5,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 487,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 514.5,
+          "y": 57.599999999999994,
+        },
+        {
+          "x": 542,
+          "y": 57.599999999999994,
+        },
+      ],
+    },
+  ],
+  "kind": "usecase",
+  "notes": [
+    {
+      "anchor": {
+        "x1": 393,
+        "x2": 377,
+        "y1": 57.599999999999994,
+        "y2": 57.599999999999994,
+      },
+      "id": "note-1",
+      "rect": {
+        "h": 31.4,
+        "w": 160,
+        "x": 393,
+        "y": 41.89999999999999,
+      },
+      "text": "validates the cart",
+    },
+  ],
+  "size": {
+    "h": 125.19999999999999,
+    "w": 669.5,
+  },
+  "usecases": [
+    {
+      "business": false,
+      "id": "Checkout",
+      "label": "Place order",
+      "rect": {
+        "h": 50.2,
+        "w": 140,
+        "x": 237,
+        "y": 32.49999999999999,
+      },
+      "shape": "ellipse",
+    },
+    {
+      "business": false,
+      "id": "Receipt",
+      "label": "Receipt",
+      "rect": {
+        "h": 44,
+        "w": 90,
+        "x": 542,
+        "y": 35.599999999999994,
+      },
+      "shape": "rect",
+    },
+  ],
+}
+`;

@@ -68,6 +68,20 @@ still pass).
 Each: IR + actions, parser, codegen, layout, renderer, editor + property
 window, registry entry, mermaid.js integration test, e2e spec.
 
+### Usecase (done)
+- Actors (default / hollow / awesome, business slash, stereotypes), ellipse
+  and rectangular use cases, `systemBoundary` blocks (`@{ type: package }`,
+  quoted titles with mermaid's derived identifier), every association
+  operator (`-->`, `<--`, `--`, `--o`, `o--`, `--x`, `x--`, `--|>`),
+  labelled associations, `..> : include|extend`, `note for`, `direction`.
+- The relation IR is `line` + a head per end plus an optional include/extend
+  `kind`; the reducer normalizes it to what mermaid can actually spell (one
+  marker per relation, generalization only in the `--|>` direction,
+  include/extend dashed, unlabelled and markerless).
+- Left out (tolerated on import, dropped): `json` tables (the whole block is
+  skipped), icon actors, explicit edge ids and their `animation` / `animate`
+  metadata, extra-dash edge length, `classDef` / `class` / `style` / `:::`.
+
 ## Phase 4 — polish
 - Cross-kind: shared `<br/>` multi-line text rendering, README/coverage
   table, homework cleanup.

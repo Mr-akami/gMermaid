@@ -25,6 +25,10 @@ export type EventId = Id<"event">;
 export type TaskId = Id<"task">;
 export type RequirementId = Id<"requirement">;
 export type ElementId = Id<"element">;
+export type ActorId = Id<"actor">;
+export type UseCaseId = Id<"usecase">;
+export type BoundaryId = Id<"boundary">;
+export type UsecaseRelationId = Id<"usecaseRelation">;
 export type MindmapNodeId = Id<"mindmapNode">;
 
 export type AnyId =
@@ -50,6 +54,10 @@ export type AnyId =
   | TaskId
   | RequirementId
   | ElementId
+  | ActorId
+  | UseCaseId
+  | BoundaryId
+  | UsecaseRelationId
   | MindmapNodeId;
 
 /**

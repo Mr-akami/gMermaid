@@ -6,5 +6,6 @@ export * from "./TimelineView";
 export * from "./JourneyView";
 export * from "./usePointerGestures";
 export * from "./RequirementView";
+export * from "./UsecaseView";
 export * from "./MindmapView";
 export * from "./GanttView";
