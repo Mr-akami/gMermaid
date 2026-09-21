@@ -15,6 +15,8 @@ import type {
   LifecycleId,
   LifelineId,
   MessageId,
+  MindmapIR,
+  MindmapNodeId,
   NamespaceId,
   NodeId,
   NoteId,
@@ -33,6 +35,7 @@ import { flowchartToMermaid } from "./flowchart";
 import { classToMermaid } from "./classdiagram";
 import { ganttToMermaid } from "./gantt";
 import { journeyToMermaid } from "./journey";
+import { mindmapToMermaid } from "./mindmap";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
@@ -59,6 +62,7 @@ const G = (s: string) => s as import("@gmermaid/ir").SubgraphId;
 const TS = (s: string) => s as SectionId;
 const TP = (s: string) => s as import("@gmermaid/ir").PeriodId;
 const TE = (s: string) => s as import("@gmermaid/ir").EventId;
+const MM = (s: string) => s as MindmapNodeId;
 
 describe("mermaid.js accepts generated flowcharts", () => {
   const base: FlowchartIR = {
@@ -604,6 +608,34 @@ describe("mermaid.js accepts generated timelines", () => {
   it("parses a bare timeline and a title-only timeline", async () => {
     await expectMermaidAccepts(timelineToMermaid({ kind: "timeline", sections: [] }));
     await expectMermaidAccepts(timelineToMermaid({ kind: "timeline", title: "Just a title", sections: [] }));
+  });
+});
+
+describe("mermaid.js accepts generated mindmaps", () => {
+  it("parses every shape, icons, classes and awkward label characters", async () => {
+    const ir: MindmapIR = {
+      kind: "mindmap",
+      nodes: [
+        { id: MM("root"), label: "mindmap", shape: "circle" },
+        { id: MM("sq"), label: "f(x) [y] {z}", shape: "square", parent: MM("root"), icon: "fa fa-book" },
+        { id: MM("ro"), label: 'say "hi" & <b>#1</b>', shape: "rounded", parent: MM("sq") },
+        { id: MM("ci"), label: "multi\nline", shape: "circle", parent: MM("root") },
+        { id: MM("ba"), label: "bang", shape: "bang", parent: MM("ci") },
+        { id: MM("cl"), label: "cloud", shape: "cloud", parent: MM("root"), classes: ["urgent", "large"] },
+        { id: MM("hx"), label: "hexagon", shape: "hexagon", parent: MM("cl") },
+        // the default shape is bare text, where mermaid's lexer stops at any
+        // bracket: those have to travel as numeric entities
+        { id: MM("df"), label: "plain (paren) [text]", shape: "default", parent: MM("root") },
+        { id: MM("uni"), label: "日本語", shape: "default", parent: MM("df") },
+      ],
+    };
+    await expectMermaidAccepts(mindmapToMermaid(ir));
+  });
+
+  it("parses a root-only mindmap", async () => {
+    await expectMermaidAccepts(
+      mindmapToMermaid({ kind: "mindmap", nodes: [{ id: MM("only"), label: "only idea", shape: "default" }] }),
+    );
   });
 });
 

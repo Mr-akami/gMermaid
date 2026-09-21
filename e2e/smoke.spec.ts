@@ -9,6 +9,7 @@ const kinds = [
   ["Timeline", /^timeline/],
   ["Journey", /^journey/],
   ["Requirement", /^requirementDiagram/],
+  ["Mindmap", /^mindmap/],
   ["Gantt", /^gantt/],
 ] as const;
 

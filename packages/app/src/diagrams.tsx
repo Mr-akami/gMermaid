@@ -5,6 +5,7 @@ import type { EditorRuntimeProps } from "./editorRuntime";
 import { FlowchartEditor } from "./FlowchartEditor";
 import { GanttEditor } from "./GanttEditor";
 import { JourneyEditor } from "./JourneyEditor";
+import { MindmapEditor } from "./MindmapEditor";
 import { RequirementEditor } from "./RequirementEditor";
 import { SequenceEditor } from "./SequenceEditor";
 import { StateEditor } from "./StateEditor";
@@ -38,5 +39,6 @@ export const DIAGRAMS: readonly DiagramDef[] = [
   { kind: "timeline", label: "Timeline", Editor: TimelineEditor },
   { kind: "journey", label: "Journey", Editor: JourneyEditor },
   { kind: "requirement", label: "Requirement", Editor: RequirementEditor },
+  { kind: "mindmap", label: "Mindmap", Editor: MindmapEditor },
   { kind: "gantt", label: "Gantt", Editor: GanttEditor },
 ];

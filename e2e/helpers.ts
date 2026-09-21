@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement" | "Journey" | "Timeline" | "Gantt";
+export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement" | "Journey" | "Timeline" | "Gantt" | "Mindmap";
 
 /** Open the app fresh (no autosave) and switch to a diagram tab. */
 export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
