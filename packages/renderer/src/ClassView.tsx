@@ -1,4 +1,6 @@
 import type { ClassBox, ClassLayout, ClassNoteBox, NamespaceFrame, RelationPath } from "@gmermaid/layout";
+import { NAMESPACE_TITLE_BAND } from "@gmermaid/layout";
+import { edgePath } from "./edgePath";
 import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 export interface ClassViewState {
@@ -114,7 +116,7 @@ function NamespaceView({ n, selected }: { n: NamespaceFrame; selected: boolean }
       <rect x={x} y={y} width={w} height={h} rx={6} fill="var(--gm-frag-fill, rgba(120,140,180,0.06))" style={{ pointerEvents: "none" }} />
       <g data-element-id={n.id} style={{ cursor: "pointer" }}>
         <rect x={x} y={y} width={w} height={h} rx={6} fill="none" stroke={stroke} strokeWidth={selected ? 2 : 1.2} strokeDasharray="4 3" pointerEvents="stroke" />
-        <text x={x + 10} y={y + 16} fontSize={12} fontWeight={600} fontFamily="sans-serif" fill="var(--gm-text, #333)" style={{ userSelect: "none" }}>
+        <text x={x + 10} y={y + NAMESPACE_TITLE_BAND - 8} fontSize={12} fontWeight={600} fontFamily="sans-serif" fill="var(--gm-text, #333)" style={{ userSelect: "none" }}>
           {n.name}
         </text>
       </g>
@@ -213,7 +215,7 @@ const MARKER: Record<RelationPath["headFrom"], string | undefined> = {
 };
 
 function RelationView({ r, selected }: { r: RelationPath; selected: boolean }) {
-  const d = r.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const d = edgePath(r.points);
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
   return (
     <g data-element-id={r.id} style={{ cursor: "pointer" }}>

@@ -68,7 +68,12 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
   const code = useMemo(() => journeyToMermaid(ir), [ir]);
   const [codeValid, setCodeValid] = useState(initial.recoveredText === undefined);
   useAutosave(STORAGE_KEY, code, mode === "standalone" && codeValid);
+  // autosave follows OUR parser alone: a diagram the IR already holds is real
+  // work, and must keep being saved even while mermaid refuses its text.
+  // Mermaid's verdict travels separately, and only gates the review submit.
+  const [mermaidValid, setMermaidValid] = useState(true);
   useEffect(() => onCodeChange?.(code), [code, onCodeChange]);
+  useEffect(() => onValidityChange?.(codeValid && mermaidValid), [codeValid, mermaidValid, onValidityChange]);
 
   useEffect(() => {
     if (!loadRequest) return;
@@ -222,10 +227,8 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
         onEditEnd={h.endEdit}
         initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
         loadWarnings={load.warnings}
-        onValidityChange={(valid) => {
-          setCodeValid(valid);
-          onValidityChange?.(valid);
-        }}
+        onValidityChange={setCodeValid}
+        onMermaidValidityChange={setMermaidValid}
       />
     </>
   );

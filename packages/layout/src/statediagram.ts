@@ -21,7 +21,12 @@ const NOTE_PAD = 8;
 const NOTE_GAP = 14;
 // visual breathing room around a composite; the extra top holds the title
 const COMP_PAD = 8;
-const COMP_TITLE_H = 24;
+/** Height of the title band itself — where the separator line is drawn. */
+export const COMPOSITE_TITLE_BAND = 24;
+/** What the frame reserves above its members: the band plus the same
+ * breathing room the other three sides get, so a child never sits against
+ * the title. */
+const COMP_TITLE_H = COMPOSITE_TITLE_BAND + COMP_PAD;
 /** breathing room around a concurrency region band inside its composite */
 const REGION_PAD = 6;
 /** gap between two stacked concurrency regions */
@@ -295,7 +300,7 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
         parent,
         index,
         rect: horizontal
-          ? { x: band.x, y: frame.y + COMP_TITLE_H, w: band.w, h: frame.y + frame.h - (frame.y + COMP_TITLE_H) }
+          ? { x: band.x, y: frame.y + COMPOSITE_TITLE_BAND, w: band.w, h: frame.y + frame.h - (frame.y + COMPOSITE_TITLE_BAND) }
           : { x: frame.x, y: band.y, w: frame.w, h: band.h },
       },
     ];
@@ -310,7 +315,7 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
       const next = bands[i]!.rect;
       if (horizontal) {
         const x = (prev.x + prev.w + next.x) / 2;
-        regionSeparators.push({ parent: s.id, x1: x, y1: frame.y + COMP_TITLE_H, x2: x, y2: frame.y + frame.h });
+        regionSeparators.push({ parent: s.id, x1: x, y1: frame.y + COMPOSITE_TITLE_BAND, x2: x, y2: frame.y + frame.h });
       } else {
         const y = (prev.y + prev.h + next.y) / 2;
         regionSeparators.push({ parent: s.id, x1: frame.x, y1: y, x2: frame.x + frame.w, y2: y });
