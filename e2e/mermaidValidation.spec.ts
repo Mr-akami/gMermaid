@@ -15,6 +15,13 @@ test("text our parser accepts but mermaid rejects is reported in the pane", asyn
   await expect(rejection).toContainText("Mermaid.js");
   // it is not a gMermaid parse error: that pane stays empty
   await expect(editor.locator(".code-errors")).toHaveCount(0);
+
+  // …and mermaid's opinion must not stop the work being saved: our own parser
+  // accepted it, so it is in the IR and has to survive a reload
+  await page.waitForTimeout(1_000); // autosave debounce
+  await page.reload();
+  await page.getByRole("button", { name: "Flowchart", exact: true }).click();
+  await expect(page.locator(".editor:not(.hidden) .cm-content")).toContainText("subgraph-1");
 });
 
 test("a diagram mermaid understands shows no rejection", async ({ page }) => {
