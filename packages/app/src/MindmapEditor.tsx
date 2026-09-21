@@ -13,13 +13,14 @@ import {
 import { layoutMindmap } from "@gmermaid/layout";
 import { mindmapToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseMindmap } from "@gmermaid/mermaid-parser";
-import { MindmapView, type Viewport } from "@gmermaid/renderer";
+import { MindmapView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { MindmapPropertyWindow } from "./MindmapPropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): MindmapIR {
@@ -63,8 +64,6 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyMindmapAction);
   const [view, setView] = useState<ViewState>({});
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // drag-to-reparent rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   // reducer rejections must be visible, not silent no-ops (L2)
@@ -86,6 +85,8 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -101,6 +102,7 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
     if (text === null) return;
     const opened = load.accept(parseMindmap(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -169,6 +171,16 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
     setView({ selectedId: fromId });
   }
 
+  const shell = useEditorShell({
+    ...(selected !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
+
   return (
     <>
       <div className="toolbar">
@@ -187,16 +199,19 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
         <button onClick={h.redo} disabled={!h.canRedo}>
           Redo
         </button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         <span className="hint">drag a node onto another to re-parent it</span>
         {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <MindmapView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={(id) => {
               setRejectHint(undefined);
               setView({ selectedId: id });

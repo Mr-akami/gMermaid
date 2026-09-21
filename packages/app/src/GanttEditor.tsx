@@ -11,13 +11,14 @@ import {
 import { layoutGantt } from "@gmermaid/layout";
 import { ganttToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseGantt } from "@gmermaid/mermaid-parser";
-import { GanttView, type Viewport } from "@gmermaid/renderer";
+import { GanttView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GanttPropertyWindow, type GanttSelection } from "./GanttPropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): GanttIR {
@@ -59,8 +60,6 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
   const [view, setView] = useState<ViewState>({});
   // reducer rejections must be visible, not silent no-ops (L2)
   const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   const ir = h.ir;
 
   const layout = useMemo(() => layoutGantt(ir, measurer), [ir]);
@@ -76,6 +75,8 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -91,6 +92,7 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
     if (text === null) return;
     const opened = load.accept(parseGantt(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -160,6 +162,16 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
     h.dispatch({ type: "updateTask", id: selectedTask.id, patch: { tags } });
   }
 
+  const shell = useEditorShell({
+    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
+
   return (
     <>
       <div className="toolbar">
@@ -177,6 +189,9 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
         </button>
         <button onClick={h.redo} disabled={!h.canRedo}>
           Redo
+        </button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
         </button>
         <label className="toolbar-field">
           Title
@@ -206,13 +221,13 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
           />
         </label>
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <GanttView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={(id) => setView({ selectedId: id })}
             onBackgroundClick={() => setView({})}
           />

@@ -74,7 +74,7 @@ export function FlowchartView({
           <path d="M 1 1 L 9 9 M 9 1 L 1 9" fill="none" stroke="var(--gm-stroke, #333)" strokeWidth="1.8" />
         </marker>
       </defs>
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {/* subgraph frames go under everything, outermost first */}
         {[...layout.subgraphs]
           .toSorted((a, b) => a.depth - b.depth)

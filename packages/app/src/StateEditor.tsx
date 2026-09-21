@@ -17,13 +17,14 @@ import { layoutStateDiagram } from "@gmermaid/layout";
 import { stateToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseStateDiagram } from "@gmermaid/mermaid-parser";
 import { parseXStateMachine, stateToXState, XSTATE_SUBSET } from "@gmermaid/xstate";
-import { StateView, type Viewport } from "@gmermaid/renderer";
+import { StateView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, readStoredCode, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodeTabs } from "./CodeTabs";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { StatePropertyWindow, type StateSelection } from "./StatePropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): StateIR {
@@ -100,8 +101,6 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyStateAction);
   const [view, setView] = useState<ViewState>({});
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // drag-to-connect rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   const ir = h.ir;
@@ -126,6 +125,8 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -141,6 +142,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
     if (text === null) return;
     const opened = load.accept(parseStateDiagram(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -344,6 +346,17 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
     setView({ selectedId: id, moveMode: view.moveMode === true });
   }
 
+  /** One delete path for the toolbar button, the property window and the
+   * Delete/Backspace key — they must agree on what "the selection" is. */
+  function deleteSelected() {
+    if (selectedState) h.dispatch({ type: "removeState", id: selectedState.id });
+    else if (selectedTransition) h.dispatch({ type: "removeTransition", id: selectedTransition.id });
+    else if (selectedNote) h.dispatch({ type: "removeStateNote", id: selectedNote.id });
+    else return;
+    setRejectHint(undefined);
+    setView({ moveMode: view.moveMode === true });
+  }
+
   function handleBackgroundClick() {
     // in move mode the background means "take it out to the top level"
     if (view.moveInto !== undefined) {
@@ -352,6 +365,17 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
     }
     setView({ moveMode: view.moveMode === true });
   }
+
+  const shell = useEditorShell({
+    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    // Escape drops every pending mode, move mode included
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
 
   return (
     <>
@@ -396,8 +420,14 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         >
           ⇱ Move mode
         </button>
+        <button disabled={selection === undefined} onClick={deleteSelected}>
+          Delete
+        </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         <select
           value={ir.direction ?? "TB"}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<StateIR["direction"]> })}
@@ -414,13 +444,13 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         {view.moveInto !== undefined && <span className="hint">click the container state (background = top level)…</span>}
         {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <StateView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={handleBackgroundClick}
             dragMode={view.moveMode === true ? "move" : "connect"}
@@ -452,12 +482,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
             onChangeNotePosition={(position) =>
               selectedNote && h.dispatch({ type: "updateStateNote", id: selectedNote.id, position })
             }
-            onDelete={() => {
-              if (selectedState) h.dispatch({ type: "removeState", id: selectedState.id });
-              if (selectedTransition) h.dispatch({ type: "removeTransition", id: selectedTransition.id });
-              if (selectedNote) h.dispatch({ type: "removeStateNote", id: selectedNote.id });
-              setView({ moveMode: view.moveMode === true });
-            }}
+            onDelete={deleteSelected}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />

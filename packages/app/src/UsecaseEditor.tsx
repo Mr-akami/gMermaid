@@ -11,13 +11,14 @@ import {
 import { layoutUsecase } from "@gmermaid/layout";
 import { usecaseToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseUsecase } from "@gmermaid/mermaid-parser";
-import { UsecaseView, type Viewport } from "@gmermaid/renderer";
+import { UsecaseView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { UsecasePropertyWindow, type UsecaseSelection } from "./UsecasePropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): UsecaseIR {
@@ -66,8 +67,6 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
   const [view, setView] = useState<ViewState>({});
   // reducer rejections must be visible, not silent no-ops (L2)
   const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // drag-to-connect rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   const ir = h.ir;
@@ -86,6 +85,8 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -101,6 +102,7 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
     if (text === null) return;
     const opened = load.accept(parseUsecase(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -163,6 +165,8 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
     else if (selectedBoundary) h.dispatch({ type: "removeBoundary", id: selectedBoundary.id });
     else if (selectedRelation) h.dispatch({ type: "removeRelation", id: selectedRelation.id });
     else if (selectedNote) h.dispatch({ type: "removeNote", id: selectedNote.id });
+    else return;
+    setRejectHint(undefined);
     setView({});
   }
 
@@ -201,6 +205,16 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
     setView({ selectedId: id });
   }
 
+  const shell = useEditorShell({
+    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
+
   return (
     <>
       <div className="toolbar">
@@ -227,6 +241,9 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
         <button onClick={h.redo} disabled={!h.canRedo}>
           Redo
         </button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         <select
           value={ir.direction ?? "TB"}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<UsecaseIR["direction"]> })}
@@ -239,13 +256,13 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
         {view.relateFrom !== undefined && <span className="hint">click the target actor or use case…</span>}
         {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <UsecaseView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={() => setView({})}
             onConnectDrag={handleConnectDrag}

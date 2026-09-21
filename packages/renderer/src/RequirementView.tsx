@@ -67,7 +67,7 @@ export function RequirementView({
         </marker>
       </defs>
 
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {layout.edges.map((e) => (
           <RequirementEdgeView key={e.id} e={e} selected={viewState.selectedId === e.id} />
         ))}

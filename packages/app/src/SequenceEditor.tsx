@@ -17,13 +17,14 @@ import {
 import { layoutSequence, type DropSlot, type SequenceLayout } from "@gmermaid/layout";
 import { sequenceToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseSequence } from "@gmermaid/mermaid-parser";
-import { SequenceView, type Viewport } from "@gmermaid/renderer";
+import { SequenceView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SequencePropertyWindow, type BoxChoice, type SequenceSelection } from "./SequencePropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 // A composite sample showing alt / opt / loop nesting and a note.
@@ -88,8 +89,8 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applySequenceAction);
   const [view, setView] = useState<ViewState>({});
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
+  // reducer rejections must be visible, not silent no-ops (L2)
+  const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
   // drag feedback is view-transient (ADR 0001): the IR changes once, on drop
   const [dropY, setDropY] = useState<number | undefined>(undefined);
   const [dropX, setDropX] = useState<number | undefined>(undefined);
@@ -112,6 +113,8 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -127,6 +130,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
     if (text === null) return;
     const opened = load.accept(parseSequence(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -344,6 +348,34 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
 
   const selectedLifeline = selection?.kind === "lifeline" ? selection.lifeline : undefined;
 
+  /** One delete path for the toolbar button, the property window and the
+   * Delete/Backspace key — they must agree on what "the selection" is. */
+  function deleteSelected() {
+    if (!selection) return;
+    if (selection.kind === "branch") {
+      // an `else` arm only exists inside its fragment — there is nothing to
+      // remove on its own, and a silent no-op would read as a broken key
+      setRejectHint("a branch cannot be deleted on its own — delete the fragment");
+      return;
+    }
+    if (selection.kind === "lifeline") h.dispatch({ type: "removeLifeline", id: selection.lifeline.id });
+    if (selection.kind === "message") h.dispatch({ type: "removeEvent", id: selection.message.id });
+    if (selection.kind === "fragment") h.dispatch({ type: "removeEvent", id: selection.fragment.id });
+    if (selection.kind === "note") h.dispatch({ type: "removeEvent", id: selection.note.id });
+    setRejectHint(undefined);
+    setView({});
+  }
+
+  const shell = useEditorShell({
+    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
+
   return (
     <>
       <div className="toolbar">
@@ -406,17 +438,24 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
             </label>
           </>
         )}
+        <button disabled={selection === undefined} onClick={deleteSelected}>
+          Delete
+        </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         {view.messageFrom !== undefined && <span className="hint">click a target lifeline…</span>}
+        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <SequenceView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={() => setView({})}
             onMessageDrag={(_, y) => setDropY(nearestSlot(y)?.y)}
@@ -524,13 +563,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
               selection.kind === "fragment" &&
               h.dispatch({ type: "addBranch", fragmentId: selection.fragment.id, branchId: newId("branch"), condition: "" })
             }
-            onDelete={() => {
-              if (selection.kind === "lifeline") h.dispatch({ type: "removeLifeline", id: selection.lifeline.id });
-              if (selection.kind === "message") h.dispatch({ type: "removeEvent", id: selection.message.id });
-              if (selection.kind === "fragment") h.dispatch({ type: "removeEvent", id: selection.fragment.id });
-              if (selection.kind === "note") h.dispatch({ type: "removeEvent", id: selection.note.id });
-              setView({});
-            }}
+            onDelete={deleteSelected}
             deleteWarning={
               selection.kind === "lifeline" && messagesTouching(ir.events, selection.lifeline.id)
                 ? "also deletes its messages and notes"

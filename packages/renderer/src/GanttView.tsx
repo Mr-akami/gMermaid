@@ -63,7 +63,7 @@ export function GanttView({
       onPointerCancel={g.onPointerCancel}
       style={g.style}
     >
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {layout.title !== undefined && (
           <text
             x={(layout.chartX + chartRight) / 2}

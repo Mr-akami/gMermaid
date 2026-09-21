@@ -11,6 +11,12 @@ export interface Viewport {
 export const MIN_SCALE = 0.25;
 export const MAX_SCALE = 4;
 
+/** Every view wraps its content in ONE group carrying this attribute and the
+ * viewport transform. Measuring that group (getBBox, in diagram coordinates)
+ * is how the editor frames a diagram: the layout's `size` misses whatever a
+ * view draws outside it, such as a boundary title above its frame. */
+export const DIAGRAM_ROOT_ATTR = "data-gm-root";
+
 // Shared pointer rules for all three diagram views: 5px Chebyshev threshold,
 // click resolved on pointerup from the ORIGINAL press target (pointer capture
 // retargets native clicks to the svg root), always capture so pointerup

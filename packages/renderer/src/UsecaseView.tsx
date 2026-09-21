@@ -91,7 +91,7 @@ export function UsecaseView({
         </marker>
       </defs>
 
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {/* frames go under everything they contain */}
         {layout.boundaries.map((b) => (
           <BoundaryView key={b.id} b={b} selected={viewState.selectedId === b.id} />
