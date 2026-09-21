@@ -15,6 +15,8 @@ export type RelationId = Id<"relation">;
 export type StateId = Id<"state">;
 export type TransitionId = Id<"transition">;
 export type SubgraphId = Id<"subgraph">;
+export type SectionId = Id<"section">;
+export type TaskId = Id<"task">;
 
 export type AnyId =
   | NodeId
@@ -28,7 +30,9 @@ export type AnyId =
   | RelationId
   | StateId
   | TransitionId
-  | SubgraphId;
+  | SubgraphId
+  | SectionId
+  | TaskId;
 
 /**
  * Collision-proof id generation. Parser-imported diagrams carry their own

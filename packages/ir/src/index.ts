@@ -11,10 +11,13 @@ export * from "./history";
 export * from "./omitUndefined";
 export * from "./statediagram";
 export * from "./stateActions";
+export * from "./journey";
+export * from "./journeyActions";
 
 import type { ClassIR } from "./classdiagram";
 import type { FlowchartIR } from "./flowchart";
 import type { SequenceIR } from "./sequence";
 import type { StateIR } from "./statediagram";
+import type { JourneyIR } from "./journey";
 
-export type DiagramIR = FlowchartIR | SequenceIR | ClassIR | StateIR;
+export type DiagramIR = FlowchartIR | SequenceIR | ClassIR | StateIR | JourneyIR;

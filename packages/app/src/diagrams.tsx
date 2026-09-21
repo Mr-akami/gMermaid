@@ -3,6 +3,7 @@ import { DIAGRAM_KINDS, type DiagramKind } from "@gmermaid/mermaid-parser";
 import { ClassEditor } from "./ClassEditor";
 import type { EditorRuntimeProps } from "./editorRuntime";
 import { FlowchartEditor } from "./FlowchartEditor";
+import { JourneyEditor } from "./JourneyEditor";
 import { SequenceEditor } from "./SequenceEditor";
 import { StateEditor } from "./StateEditor";
 
@@ -31,4 +32,5 @@ export const DIAGRAMS: readonly DiagramDef[] = [
   { kind: "sequence", label: "Sequence", Editor: SequenceEditor },
   { kind: "class", label: "Class", Editor: ClassEditor },
   { kind: "state", label: "State", Editor: StateEditor },
+  { kind: "journey", label: "Journey", Editor: JourneyEditor },
 ];
