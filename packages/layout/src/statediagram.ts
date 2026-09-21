@@ -1,9 +1,9 @@
 import dagre from "@dagrejs/dagre";
-import type { NoteId, StateIR, StateId, StateRole, TransitionId } from "@gmermaid/ir";
+import type { NoteId, StateDirection, StateIR, StateId, StateNode, StateRole, TransitionId } from "@gmermaid/ir";
 import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
-import { clipPolylineAtRect, placeSelfLoopLabel, selfLoopPoints, SELF_LOOP_REACH } from "./compound";
+import { placeSelfLoopLabel, selfLoopPoints, SELF_LOOP_REACH } from "./compound";
 import { collisionIndex } from "./collision";
 
 const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
@@ -19,6 +19,8 @@ const BAR_LONG = 56;
 const BAR_SHORT = 8;
 const NOTE_PAD = 8;
 const NOTE_GAP = 14;
+const NODE_SEP = 40;
+const RANK_SEP = 50;
 // visual breathing room around a composite; the extra top holds the title
 const COMP_PAD = 8;
 /** Height of the title band itself — where the separator line is drawn. */
@@ -36,6 +38,8 @@ const regionOf = (s: { region?: number }): number => s.region ?? 0;
 /** Synthetic cluster id for a region — layout-only, in a namespace the IR
  * cannot collide with (state ids reject `-`). */
 const regionClusterId = (parent: StateId, index: number): string => `region-${parent}-${index}`;
+/** Map key for "no parent" — state ids are never empty. */
+const ROOT = "";
 
 export interface StateBox {
   readonly id: StateId;
@@ -89,195 +93,304 @@ export interface StateLayout {
   readonly regionSeparators: readonly RegionSeparator[];
 }
 
+/** A routed path in the coordinates of the container that produced it. */
+interface RoutedEdge {
+  points: Point[];
+  labelPos?: Point;
+}
+
+/**
+ * One container laid out on its own — the root diagram, or the inside of one
+ * composite. Coordinates are local: the container's frame sits at (0,0).
+ */
+interface SubLayout {
+  readonly w: number;
+  readonly h: number;
+  /** every descendant, not the container itself */
+  readonly rects: Map<StateId, Rect>;
+  readonly paths: Map<TransitionId, RoutedEdge>;
+  readonly regions: StateRegionBand[];
+  readonly separators: RegionSeparator[];
+}
+
+const bboxOf = (rects: readonly Rect[]): Rect => {
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  return {
+    x,
+    y,
+    w: Math.max(...rects.map((r) => r.x + r.w)) - x,
+    h: Math.max(...rects.map((r) => r.y + r.h)) - y,
+  };
+};
+
 export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLayout {
-  const g = new dagre.graphlib.Graph({ multigraph: true, compound: true });
-  const horizontal = ir.direction === "LR" || ir.direction === "RL";
-  // Per-block `direction` (StateNode.direction) is round-trip-only: dagre has
-  // one rankdir for the whole graph and no per-cluster override, so honoring
-  // it would mean laying each composite out in its own sub-graph and pasting
-  // the result back. Kept in the IR, emitted by codegen, ignored here.
-  g.setGraph({ rankdir: ir.direction ?? "TB", nodesep: 40, ranksep: 50 });
-  g.setDefaultEdgeLabel(() => ({}));
-
-  const childCount = new Map<StateId, number>();
-  for (const s of ir.states) if (s.parent !== undefined) childCount.set(s.parent, (childCount.get(s.parent) ?? 0) + 1);
-  const isComposite = (id: StateId): boolean => (childCount.get(id) ?? 0) > 0;
-  /** Region indices actually used inside a composite, ascending. */
-  const regionsOf = (id: StateId): number[] =>
-    [...new Set(ir.states.filter((s) => s.parent === id).map(regionOf))].toSorted((a, b) => a - b);
-
+  const byId = new Map<StateId, StateNode>(ir.states.map((s) => [s.id, s]));
+  const childrenOf = new Map<string, StateNode[]>();
   for (const s of ir.states) {
-    if (isComposite(s.id)) {
-      g.setNode(s.id, {});
-      continue;
-    }
-    if (s.role === "start" || s.role === "end") {
-      g.setNode(s.id, { width: PSEUDO_SIZE, height: PSEUDO_SIZE });
-    } else if (s.role === "choice") {
-      g.setNode(s.id, { width: CHOICE_SIZE, height: CHOICE_SIZE });
-    } else if (s.role === "fork" || s.role === "join") {
-      g.setNode(s.id, {
-        width: horizontal ? BAR_SHORT : BAR_LONG,
-        height: horizontal ? BAR_LONG : BAR_SHORT,
-      });
-    } else {
-      const m = measure.measure(s.label, LABEL_STYLE);
-      g.setNode(s.id, { width: Math.max(MIN_W, m.w + PAD_X * 2), height: m.h + PAD_Y * 2 });
-    }
+    const key = s.parent ?? ROOT;
+    childrenOf.set(key, [...(childrenOf.get(key) ?? []), s]);
   }
+  const isComposite = (id: StateId): boolean => (childrenOf.get(id)?.length ?? 0) > 0;
 
-  // A concurrency region becomes a synthetic dagre cluster nested in the
-  // composite. A composite with a single region gets none: the extra cluster
-  // would only add padding.
-  const regionClusters: { parent: StateId; index: number; id: string }[] = [];
-  for (const s of ir.states) {
-    if (!isComposite(s.id)) continue;
-    const regions = regionsOf(s.id);
-    if (regions.length < 2) continue;
-    for (const index of regions) {
-      const id = regionClusterId(s.id, index);
-      g.setNode(id, {});
-      g.setParent(id, s.id);
-      regionClusters.push({ parent: s.id, index, id });
-    }
-  }
-  const containerOf = (s: { id: StateId; parent?: StateId; region?: number }): string | undefined => {
-    if (s.parent === undefined) return undefined;
-    const cluster = regionClusterId(s.parent, regionOf(s));
-    return g.hasNode(cluster) ? cluster : s.parent;
-  };
-  for (const s of ir.states) {
-    const container = containerOf(s);
-    if (container !== undefined) g.setParent(s.id, container);
-  }
-
-  // dagre cannot attach edges to clusters: route them to a representative
-  // leaf inside, and clip the drawn path at the composite border afterwards
-  const representative = (id: StateId): StateId => {
-    const start = ir.states.find((s) => s.parent === id && s.role === "start");
-    const child = start ?? ir.states.find((s) => s.parent === id);
-    if (!child) throw new Error(`layoutStateDiagram: composite ${id} has no members`);
-    return isComposite(child.id) ? representative(child.id) : child.id;
-  };
-  const anchor = (id: StateId): StateId => (isComposite(id) ? representative(id) : id);
-
-  for (const t of ir.transitions) {
-    if (!g.hasNode(t.from) || !g.hasNode(t.to)) {
-      throw new Error(`layoutStateDiagram: transition ${t.id} references a missing state`);
-    }
-    // dagre cannot route self-edges — synthesized after layout as a detour
-    // off the box's right side (same geometry as class self-relations)
-    if (t.from !== t.to) g.setEdge(anchor(t.from), anchor(t.to), edgeLabelSize(t.label, measure, LABEL_STYLE), t.id);
-  }
-
-  // Regions stack along the flow axis: an invisible, zero-weight edge between
-  // consecutive region representatives is the only lever dagre offers for
-  // ordering sibling clusters.
-  const regionRep = (parent: StateId, index: number): StateId | undefined => {
-    const member = ir.states.find((s) => s.parent === parent && regionOf(s) === index);
-    if (!member) return undefined;
-    return isComposite(member.id) ? representative(member.id) : member.id;
-  };
-  for (const s of ir.states) {
-    if (!isComposite(s.id)) continue;
-    const regions = regionsOf(s.id);
-    for (let i = 1; i < regions.length; i++) {
-      const a = regionRep(s.id, regions[i - 1]!);
-      const b = regionRep(s.id, regions[i]!);
-      if (a !== undefined && b !== undefined) g.setEdge(a, b, { weight: 0 }, `region-order-${s.id}-${i}`);
-    }
-  }
-
-  dagre.layout(g);
-
-  const depth = (s: { parent?: StateId }): number => {
+  const depth = (s: StateNode): number => {
     let d = 0;
     let cur = s.parent;
     while (cur !== undefined) {
       d += 1;
-      cur = ir.states.find((x) => x.id === cur)?.parent;
+      cur = byId.get(cur)?.parent;
     }
     return d;
   };
 
-  // Leaf boxes come straight from dagre; composite frames are rebuilt from
-  // their members below, because the region pass moves those members.
-  const leafRect = new Map<StateId, Rect>();
-  for (const s of ir.states) {
-    if (isComposite(s.id)) continue;
-    const pos = g.node(s.id);
-    leafRect.set(s.id, { x: pos.x - pos.width / 2, y: pos.y - pos.height / 2, w: pos.width, h: pos.height });
-  }
-
-  const childrenOf = new Map<StateId, StateId[]>();
-  for (const s of ir.states) {
-    if (s.parent === undefined) continue;
-    childrenOf.set(s.parent, [...(childrenOf.get(s.parent) ?? []), s.id]);
-  }
-  const leavesUnder = (id: StateId): StateId[] =>
-    isComposite(id) ? (childrenOf.get(id) ?? []).flatMap(leavesUnder) : [id];
-  const bboxOf = (ids: readonly StateId[]): Rect | undefined => {
-    const rects = ids.flatMap(leavesUnder).map((x) => leafRect.get(x)!);
-    if (rects.length === 0) return undefined;
-    const x = Math.min(...rects.map((r) => r.x));
-    const y = Math.min(...rects.map((r) => r.y));
-    return {
-      x,
-      y,
-      w: Math.max(...rects.map((r) => r.x + r.w)) - x,
-      h: Math.max(...rects.map((r) => r.y + r.h)) - y,
-    };
-  };
-
-  // Dagre ranks sibling clusters freely, so two regions of one composite can
-  // land side by side and overlap. Push them apart along the flow axis
-  // (innermost composite first, so an outer pass sees final inner geometry)
-  // and remember the delta, which the edge paths need too.
-  const moved = new Map<StateId, Point>();
-  const shiftSubtree = (root: StateId, dx: number, dy: number): void => {
-    for (const leaf of leavesUnder(root)) {
-      const r = leafRect.get(leaf)!;
-      leafRect.set(leaf, { ...r, x: r.x + dx, y: r.y + dy });
-      const prev = moved.get(leaf) ?? { x: 0, y: 0 };
-      moved.set(leaf, { x: prev.x + dx, y: prev.y + dy });
-    }
-  };
-  const composites = ir.states.filter((s) => isComposite(s.id)).toSorted((a, b) => depth(b) - depth(a));
-  for (const comp of composites) {
-    const regions = regionsOf(comp.id);
-    if (regions.length < 2) continue;
-    const membersOf = (index: number) => ir.states.filter((x) => x.parent === comp.id && regionOf(x) === index).map((x) => x.id);
-    for (let i = 1; i < regions.length; i++) {
-      const prev = bboxOf(membersOf(regions[i - 1]!));
-      const cur = bboxOf(membersOf(regions[i]!));
-      if (!prev || !cur) continue;
-      const delta = horizontal ? prev.x + prev.w + REGION_GAP - cur.x : prev.y + prev.h + REGION_GAP - cur.y;
-      if (delta <= 0) continue;
-      for (const id of membersOf(regions[i]!)) shiftSubtree(id, horizontal ? delta : 0, horizontal ? 0 : delta);
+  for (const t of ir.transitions) {
+    if (!byId.has(t.from) || !byId.has(t.to)) {
+      throw new Error(`layoutStateDiagram: transition ${t.id} references a missing state`);
     }
   }
 
-  const rectOf = new Map<StateId, Rect>();
-  const frameOf = (id: StateId): Rect => {
-    const cached = rectOf.get(id);
-    if (cached) return cached;
-    const leaf = leafRect.get(id);
-    const rect =
-      leaf ??
-      (() => {
-        // a frame wraps its members, with extra room on top for the title
-        const inner = bboxOf(childrenOf.get(id) ?? [])!;
-        return {
-          x: inner.x - COMP_PAD,
-          y: inner.y - COMP_TITLE_H,
-          w: inner.w + COMP_PAD * 2,
-          h: inner.h + COMP_TITLE_H + COMP_PAD,
-        };
-      })();
-    rectOf.set(id, rect);
-    return rect;
+  // Which container a transition belongs to: the deepest composite (or the
+  // root) that holds both ends. Inside it the edge runs between the two DIRECT
+  // children that contain the ends, so an edge reaching into a composite ends
+  // on that composite's box — dagre does the clipping by itself, because the
+  // box is a real node here rather than a cluster.
+  const containersOf = (id: StateId): (StateId | undefined)[] => {
+    const chain: (StateId | undefined)[] = [];
+    let cur = byId.get(id)?.parent;
+    while (cur !== undefined) {
+      chain.push(cur);
+      cur = byId.get(cur)?.parent;
+    }
+    chain.push(undefined);
+    return chain;
   };
-  for (const s of ir.states) frameOf(s.id);
+  const liftTo = (id: StateId, container: StateId | undefined): StateId => {
+    let cur = id;
+    while (byId.get(cur)?.parent !== container) cur = byId.get(cur)!.parent!;
+    return cur;
+  };
+
+  interface PlacedEdge {
+    readonly id: TransitionId;
+    readonly label?: string;
+    readonly from: StateId;
+    readonly to: StateId;
+  }
+  const edgesIn = new Map<string, PlacedEdge[]>();
+  /** Transitions between a composite and something inside it: there is no
+   * container where the two are siblings, so they are drawn by hand.
+   * `outward` = the edge leaves the enclosing frame for a box inside it. */
+  const nested = new Map<TransitionId, boolean>();
+  for (const t of ir.transitions) {
+    if (t.from === t.to) continue; // self-transition: a detour drawn afterwards
+    const outer = containersOf(t.to);
+    const container = containersOf(t.from).find((c) => outer.includes(c));
+    const from = liftTo(t.from, container);
+    const to = liftTo(t.to, container);
+    if (from === to) {
+      nested.set(t.id, containersOf(t.to).includes(t.from));
+      continue;
+    }
+    const key = container ?? ROOT;
+    edgesIn.set(key, [...(edgesIn.get(key) ?? []), { id: t.id, from, to, ...(t.label !== undefined ? { label: t.label } : {}) }]);
+  }
+
+  const leafSize = (s: StateNode, horizontal: boolean): { width: number; height: number } => {
+    if (s.role === "start" || s.role === "end") return { width: PSEUDO_SIZE, height: PSEUDO_SIZE };
+    if (s.role === "choice") return { width: CHOICE_SIZE, height: CHOICE_SIZE };
+    if (s.role === "fork" || s.role === "join") {
+      return { width: horizontal ? BAR_SHORT : BAR_LONG, height: horizontal ? BAR_LONG : BAR_SHORT };
+    }
+    const m = measure.measure(s.label, LABEL_STYLE);
+    return { width: Math.max(MIN_W, m.w + PAD_X * 2), height: m.h + PAD_Y * 2 };
+  };
+
+  /**
+   * Lay out everything directly inside `container` (undefined = the diagram)
+   * in a dagre graph of its own, innermost first. A composite child enters as
+   * a single node the size of its finished contents, so dagre never sees a
+   * cluster more than one level deep and the rank separation stops growing
+   * with nesting depth. The private graph is also what lets a composite honour
+   * its own `direction`.
+   */
+  const layoutContainer = (container: StateId | undefined, dir: StateDirection): SubLayout => {
+    const kids = childrenOf.get(container ?? ROOT) ?? [];
+    const horizontal = dir === "LR" || dir === "RL";
+    const g = new dagre.graphlib.Graph({ multigraph: true, compound: true });
+    g.setGraph({ rankdir: dir, nodesep: NODE_SEP, ranksep: RANK_SEP });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    const subs = new Map<StateId, SubLayout>();
+    for (const k of kids) {
+      if (isComposite(k.id)) {
+        const sub = layoutContainer(k.id, k.direction ?? dir);
+        subs.set(k.id, sub);
+        g.setNode(k.id, { width: sub.w, height: sub.h });
+      } else {
+        g.setNode(k.id, leafSize(k, horizontal));
+      }
+    }
+
+    // A concurrency region becomes a synthetic dagre cluster. It is the only
+    // cluster this graph ever has: composites are plain nodes here.
+    const regionIndices = [...new Set(kids.map(regionOf))].toSorted((a, b) => a - b);
+    const banded = container !== undefined && regionIndices.length > 1;
+    if (banded) {
+      for (const index of regionIndices) {
+        g.setNode(regionClusterId(container, index), {});
+      }
+      for (const k of kids) g.setParent(k.id, regionClusterId(container, regionOf(k)));
+    }
+
+    const edges = edgesIn.get(container ?? ROOT) ?? [];
+    for (const e of edges) g.setEdge(e.from, e.to, edgeLabelSize(e.label, measure, LABEL_STYLE), e.id);
+
+    // Regions stack along the flow axis: an invisible, zero-weight edge between
+    // consecutive region members is the only lever dagre offers for ordering
+    // sibling clusters.
+    if (banded) {
+      for (let i = 1; i < regionIndices.length; i++) {
+        const a = kids.find((k) => regionOf(k) === regionIndices[i - 1]);
+        const b = kids.find((k) => regionOf(k) === regionIndices[i]);
+        if (a && b) g.setEdge(a.id, b.id, { weight: 0 }, `region-order-${container}-${i}`);
+      }
+    }
+
+    dagre.layout(g);
+
+    const local = new Map<StateId, Rect>();
+    for (const k of kids) {
+      const p = g.node(k.id);
+      local.set(k.id, { x: p.x - p.width / 2, y: p.y - p.height / 2, w: p.width, h: p.height });
+    }
+
+    // Dagre ranks sibling clusters freely, so two regions of one composite can
+    // land side by side and overlap. Push them apart along the flow axis and
+    // remember the delta, which the edge paths need too.
+    const moved = new Map<StateId, Point>();
+    if (banded) {
+      const membersOf = (index: number) => kids.filter((k) => regionOf(k) === index).map((k) => k.id);
+      for (let i = 1; i < regionIndices.length; i++) {
+        const prev = bboxOf(membersOf(regionIndices[i - 1]!).map((id) => local.get(id)!));
+        const cur = bboxOf(membersOf(regionIndices[i]!).map((id) => local.get(id)!));
+        const delta = horizontal ? prev.x + prev.w + REGION_GAP - cur.x : prev.y + prev.h + REGION_GAP - cur.y;
+        if (delta <= 0) continue;
+        for (const id of membersOf(regionIndices[i]!)) {
+          const r = local.get(id)!;
+          const d = horizontal ? { x: delta, y: 0 } : { x: 0, y: delta };
+          local.set(id, { ...r, x: r.x + d.x, y: r.y + d.y });
+          moved.set(id, d);
+        }
+      }
+    }
+
+    const paths = new Map<TransitionId, RoutedEdge>();
+    for (const e of edges) {
+      const dagreEdge = g.edge(e.from, e.to, e.id);
+      let points: Point[] = dagreEdge.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
+      // a region shift moved the endpoints out from under dagre's route: carry
+      // the whole path when both ends moved together, otherwise just re-attach
+      // the moved end (the elbow in between stays where dagre put it)
+      const fromShift = moved.get(e.from);
+      const toShift = moved.get(e.to);
+      const same = fromShift !== undefined && toShift !== undefined && fromShift.x === toShift.x && fromShift.y === toShift.y;
+      if (same) points = points.map((p) => ({ x: p.x + fromShift.x, y: p.y + fromShift.y }));
+      else {
+        if (fromShift) points[0] = { x: points[0]!.x + fromShift.x, y: points[0]!.y + fromShift.y };
+        if (toShift) points[points.length - 1] = { x: points.at(-1)!.x + toShift.x, y: points.at(-1)!.y + toShift.y };
+      }
+      const mid = points[Math.floor(points.length / 2)]!;
+      const labelPos =
+        typeof dagreEdge.x === "number" && typeof dagreEdge.y === "number"
+          ? { x: dagreEdge.x + (same && fromShift ? fromShift.x : 0), y: dagreEdge.y + (same && fromShift ? fromShift.y : 0) }
+          : { x: mid.x, y: mid.y - 6 };
+      paths.set(e.id, { points, ...(e.label !== undefined ? { labelPos } : {}) });
+    }
+
+    // The frame wraps its DIRECT children — a composite child by its finished
+    // box, not by the leaves inside it — so every level insets by its own
+    // padding and its title band stays clear.
+    const graph = g.graph();
+    const boxes = kids.map((k) => local.get(k.id)!);
+    const inner = boxes.length > 0 ? bboxOf(boxes) : { x: 0, y: 0, w: 0, h: 0 };
+    const framed = container !== undefined;
+    const offX = framed ? COMP_PAD - inner.x : 0;
+    const offY = framed ? COMP_TITLE_H - inner.y : 0;
+    const w = framed
+      ? inner.w + COMP_PAD * 2
+      : graph.width !== undefined && Number.isFinite(graph.width)
+        ? graph.width
+        : 200;
+    const h = framed
+      ? inner.h + COMP_TITLE_H + COMP_PAD
+      : graph.height !== undefined && Number.isFinite(graph.height)
+        ? graph.height
+        : 100;
+
+    const rects = new Map<StateId, Rect>();
+    const regions: StateRegionBand[] = [];
+    const separators: RegionSeparator[] = [];
+    const placed = new Map<StateId, Rect>();
+    for (const k of kids) {
+      const r = local.get(k.id)!;
+      placed.set(k.id, { ...r, x: r.x + offX, y: r.y + offY });
+    }
+
+    if (banded) {
+      const bands = regionIndices.map((index) => {
+        const box = bboxOf(kids.filter((k) => regionOf(k) === index).map((k) => placed.get(k.id)!));
+        // the band spans the frame across the flow axis, so the `--` divider
+        // reaches both borders the way mermaid draws it
+        const rect = horizontal
+          ? { x: box.x - REGION_PAD, y: COMPOSITE_TITLE_BAND, w: box.w + REGION_PAD * 2, h: h - COMPOSITE_TITLE_BAND }
+          : { x: 0, y: box.y - REGION_PAD, w, h: box.h + REGION_PAD * 2 };
+        return { parent: container!, index, rect };
+      });
+      regions.push(...bands);
+      for (let i = 1; i < bands.length; i++) {
+        const prev = bands[i - 1]!.rect;
+        const next = bands[i]!.rect;
+        if (horizontal) {
+          const x = (prev.x + prev.w + next.x) / 2;
+          separators.push({ parent: container!, x1: x, y1: COMPOSITE_TITLE_BAND, x2: x, y2: h });
+        } else {
+          const y = (prev.y + prev.h + next.y) / 2;
+          separators.push({ parent: container!, x1: 0, y1: y, x2: w, y2: y });
+        }
+      }
+    }
+
+    for (const [id, p] of paths) {
+      paths.set(id, {
+        points: p.points.map((q) => ({ x: q.x + offX, y: q.y + offY })),
+        ...(p.labelPos ? { labelPos: { x: p.labelPos.x + offX, y: p.labelPos.y + offY } } : {}),
+      });
+    }
+
+    // paste each composite child's own layout in behind its box
+    for (const k of kids) {
+      const box = placed.get(k.id)!;
+      rects.set(k.id, box);
+      const sub = subs.get(k.id);
+      if (!sub) continue;
+      for (const [id, r] of sub.rects) rects.set(id, { ...r, x: r.x + box.x, y: r.y + box.y });
+      for (const [id, p] of sub.paths) {
+        paths.set(id, {
+          points: p.points.map((q) => ({ x: q.x + box.x, y: q.y + box.y })),
+          ...(p.labelPos ? { labelPos: { x: p.labelPos.x + box.x, y: p.labelPos.y + box.y } } : {}),
+        });
+      }
+      for (const b of sub.regions) regions.push({ ...b, rect: { ...b.rect, x: b.rect.x + box.x, y: b.rect.y + box.y } });
+      for (const s of sub.separators) {
+        separators.push({ ...s, x1: s.x1 + box.x, y1: s.y1 + box.y, x2: s.x2 + box.x, y2: s.y2 + box.y });
+      }
+    }
+
+    return { w, h, rects, paths, regions, separators };
+  };
+
+  const root = layoutContainer(undefined, ir.direction ?? "TB");
+  const rectOf = root.rects;
 
   const states: StateBox[] = ir.states.map((s) => ({
     id: s.id,
@@ -287,41 +400,6 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
     composite: isComposite(s.id),
     depth: depth(s),
   }));
-
-  // region bands: the members' bbox, widened across the flow axis to the
-  // composite frame so the `--` divider spans it like mermaid draws it
-  const regions: StateRegionBand[] = regionClusters.flatMap(({ parent, index }) => {
-    const inner = bboxOf(ir.states.filter((x) => x.parent === parent && regionOf(x) === index).map((x) => x.id));
-    if (!inner) return [];
-    const frame = rectOf.get(parent)!;
-    const band = { x: inner.x - REGION_PAD, y: inner.y - REGION_PAD, w: inner.w + REGION_PAD * 2, h: inner.h + REGION_PAD * 2 };
-    return [
-      {
-        parent,
-        index,
-        rect: horizontal
-          ? { x: band.x, y: frame.y + COMPOSITE_TITLE_BAND, w: band.w, h: frame.y + frame.h - (frame.y + COMPOSITE_TITLE_BAND) }
-          : { x: frame.x, y: band.y, w: frame.w, h: band.h },
-      },
-    ];
-  });
-
-  const regionSeparators: RegionSeparator[] = [];
-  for (const s of ir.states) {
-    const bands = regions.filter((r) => r.parent === s.id).toSorted((a, b) => a.index - b.index);
-    const frame = rectOf.get(s.id)!;
-    for (let i = 1; i < bands.length; i++) {
-      const prev = bands[i - 1]!.rect;
-      const next = bands[i]!.rect;
-      if (horizontal) {
-        const x = (prev.x + prev.w + next.x) / 2;
-        regionSeparators.push({ parent: s.id, x1: x, y1: frame.y + COMPOSITE_TITLE_BAND, x2: x, y2: frame.y + frame.h });
-      } else {
-        const y = (prev.y + prev.h + next.y) / 2;
-        regionSeparators.push({ parent: s.id, x1: frame.x, y1: y, x2: frame.x + frame.w, y2: y });
-      }
-    }
-  }
 
   // notes sit beside their target, outside the dagre graph
   const notes: StateNoteBox[] = [];
@@ -374,40 +452,35 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
       selfMaxRight = Math.max(selfMaxRight, spot.right + 6);
       return { id: t.id, points, label: t.label, labelPos: spot.labelPos };
     }
-    const e = g.edge(anchor(t.from), anchor(t.to), t.id);
-    let points: Point[] = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
-    // a region shift moved the endpoints out from under dagre's route: carry
-    // the whole path when both ends moved together, otherwise just re-attach
-    // the moved end (the elbow in between stays where dagre put it)
-    const fromShift = moved.get(anchor(t.from));
-    const toShift = moved.get(anchor(t.to));
-    const same = fromShift !== undefined && toShift !== undefined && fromShift.x === toShift.x && fromShift.y === toShift.y;
-    if (same) points = points.map((p) => ({ x: p.x + fromShift.x, y: p.y + fromShift.y }));
-    else {
-      if (fromShift) points[0] = { x: points[0]!.x + fromShift.x, y: points[0]!.y + fromShift.y };
-      if (toShift) points[points.length - 1] = { x: points.at(-1)!.x + toShift.x, y: points.at(-1)!.y + toShift.y };
+    // a composite reaching into itself has no container where the two ends are
+    // siblings: drop a straight connector down the inner box's centre line
+    if (nested.has(t.id)) {
+      const from = rectOf.get(t.from)!;
+      const to = rectOf.get(t.to)!;
+      const outward = nested.get(t.id)!;
+      const x = outward ? to.x + to.w / 2 : from.x + from.w / 2;
+      const points = outward
+        ? [
+            { x, y: from.y },
+            { x, y: to.y },
+          ]
+        : [
+            { x, y: from.y + from.h },
+            { x, y: to.y + to.h },
+          ];
+      return { id: t.id, points, ...(t.label !== undefined ? { label: t.label, labelPos: { x: x + 6, y: (points[0]!.y + points[1]!.y) / 2 } } : {}) };
     }
-    if (isComposite(t.to)) points = clipPolylineAtRect(points, rectOf.get(t.to)!, "to");
-    if (isComposite(t.from)) points = clipPolylineAtRect(points, rectOf.get(t.from)!, "from");
-    const mid = points[Math.floor(points.length / 2)]!;
+    const routed = root.paths.get(t.id)!;
     return {
       id: t.id,
-      points,
-      ...(t.label !== undefined
-        ? {
-            label: t.label,
-            labelPos: typeof e.x === "number" && typeof e.y === "number" ? { x: e.x, y: e.y } : { x: mid.x, y: mid.y - 6 },
-          }
-        : {}),
+      points: routed.points,
+      ...(t.label !== undefined ? { label: t.label, labelPos: routed.labelPos! } : {}),
     };
   });
 
-  const graph = g.graph();
-  // dagre reports -Infinity for an empty graph — clamp to a sane empty canvas
-  let w = graph.width !== undefined && Number.isFinite(graph.width) ? graph.width : 200;
-  let h = graph.height !== undefined && Number.isFinite(graph.height) ? graph.height : 100;
   // self-loop detours (and their labels) stick out past dagre's extent
-  w = Math.max(w, selfMaxRight);
+  let w = Math.max(root.w, selfMaxRight);
+  let h = root.h;
   for (const s of states) {
     w = Math.max(w, s.rect.x + s.rect.w);
     h = Math.max(h, s.rect.y + s.rect.h);
@@ -416,5 +489,5 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
     w = Math.max(w, n.rect.x + n.rect.w);
     h = Math.max(h, n.rect.y + n.rect.h);
   }
-  return { kind: "state", size: { w, h }, states, transitions, notes, regions, regionSeparators };
+  return { kind: "state", size: { w, h }, states, transitions, notes, regions: root.regions, regionSeparators: root.separators };
 }
