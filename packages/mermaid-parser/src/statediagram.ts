@@ -11,9 +11,10 @@ import type {
 import { prepareLines, unescapeLabel, type ParseError, type ParseResult } from "./common";
 
 // stateDiagram-v2 subset: simple states, `state "desc" as id`, `id : desc`,
-// [*] start/end (scoped per composite block), composite `state X { … }`,
-// <<choice>>/<<fork>>/<<join>>, and notes. Concurrency (`--` regions) is not
-// recognized. Dialect the IR cannot hold is DISCARDED by design, same as `%%`
+// [*] start/end (scoped per composite block AND per `--` region), composite
+// `state X { … }` with concurrency regions and a per-block `direction`,
+// <<choice>>/<<fork>>/<<join>>, self-transitions, and notes (inline or block
+// form). Dialect the IR cannot hold is DISCARDED by design, same as `%%`
 // comments: frontmatter, `%%{init}%%` directives, `style` / `classDef` /
 // `class` statements, `hide empty description`, `accTitle` / `accDescr`,
 // trailing `;`, and `:::className` suffixes on state ids.
@@ -39,20 +40,21 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
   let direction: StateIR["direction"];
 
   // composite nesting: declarations and [*] resolve against the open block
-  const stack: { id: StateId; openedAt: number }[] = [];
+  // and its current `--` region
+  const stack: { id: StateId; openedAt: number; region: number }[] = [];
   const currentParent = (): StateId | undefined => stack[stack.length - 1]?.id;
+  const currentRegion = (): number => stack[stack.length - 1]?.region ?? 0;
+  const membership = (): Pick<StateNode, "parent" | "region"> => {
+    const parent = currentParent();
+    const region = currentRegion();
+    return { ...(parent !== undefined ? { parent } : {}), ...(region > 0 ? { region } : {}) };
+  };
 
   const declare = (id: string, label?: string, role: StateRole = "normal"): void => {
     const existing = states.get(id);
     if (!existing) {
       order.push(id);
-      const parent = currentParent();
-      states.set(id, {
-        id: id as StateId,
-        label: label ?? id,
-        role,
-        ...(parent !== undefined ? { parent } : {}),
-      });
+      states.set(id, { id: id as StateId, label: label ?? id, role, ...membership() });
       return;
     }
     // a later explicit label or role decl refines the state in place;
@@ -63,13 +65,15 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
   };
 
   // [*] is start on the left of an arrow, end on the right; one shared
-  // pseudo-state per role PER CONTAINER, created on demand.
+  // pseudo-state per role PER CONTAINER REGION, created on demand.
   const pseudo = (role: "start" | "end"): StateId => {
     const parent = currentParent();
-    const id = parent !== undefined ? `state_${role}_${parent}` : `state_${role}`;
+    const region = currentRegion();
+    const id =
+      parent === undefined ? `state_${role}` : region > 0 ? `state_${role}_${parent}_r${region}` : `state_${role}_${parent}`;
     if (!states.has(id)) {
       order.push(id);
-      states.set(id, { id: id as StateId, label: "", role, ...(parent !== undefined ? { parent } : {}) });
+      states.set(id, { id: id as StateId, label: "", role, ...membership() });
     }
     return id as StateId;
   };
@@ -88,14 +92,23 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
 
     const dir = line.match(/^direction\s+(TB|LR|BT|RL)$/);
     if (dir) {
-      if (stack.length === 0) direction = dir[1] as NonNullable<StateIR["direction"]>;
-      // direction inside a composite: accepted, but the layout engine cannot
-      // honor per-block direction — silently dropped
+      const d = dir[1] as NonNullable<StateIR["direction"]>;
+      const parent = currentParent();
+      if (parent === undefined) direction = d;
+      else states.set(parent, { ...states.get(parent)!, direction: d });
       continue;
     }
 
     if (line === "}") {
       if (stack.pop() === undefined) errors.push({ line: lineNo, message: "`}` without an open state block" });
+      continue;
+    }
+
+    // `--` opens the next concurrency region of the enclosing block
+    if (line === "--") {
+      const top = stack[stack.length - 1];
+      if (top === undefined) errors.push({ line: lineNo, message: "`--` outside a state block" });
+      else top.region += 1;
       continue;
     }
 
@@ -162,7 +175,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     const aliased = line.match(new RegExp(`^state\\s+"([^"]*)"\\s+as\\s+(${ID})\\s*(\\{)?$`, "u"));
     if (aliased) {
       declare(aliased[2]!, unescapeLabel(aliased[1]!));
-      if (aliased[3] !== undefined) stack.push({ id: aliased[2] as StateId, openedAt: lineNo });
+      if (aliased[3] !== undefined) stack.push({ id: aliased[2] as StateId, openedAt: lineNo, region: 0 });
       continue;
     }
 
@@ -170,7 +183,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     const decl = line.match(new RegExp(`^state\\s+(${ID})\\s*(\\{)?$`, "u"));
     if (decl) {
       declare(decl[1]!);
-      if (decl[2] !== undefined) stack.push({ id: decl[1] as StateId, openedAt: lineNo });
+      if (decl[2] !== undefined) stack.push({ id: decl[1] as StateId, openedAt: lineNo, region: 0 });
       continue;
     }
 

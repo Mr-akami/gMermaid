@@ -284,6 +284,36 @@ describe("mermaid.js accepts generated state diagrams", () => {
     };
     await expectMermaidAccepts(stateToMermaid(ir));
   });
+
+  it("parses `--` regions with per-region [*], block direction, block notes and self-transitions", async () => {
+    const ir: StateIR = {
+      kind: "state",
+      states: [
+        { id: S("state_start"), label: "", role: "start" },
+        { id: S("Active"), label: "Active", role: "normal", direction: "LR" },
+        { id: S("state_start_Active"), label: "", role: "start", parent: S("Active") },
+        { id: S("NumOff"), label: "NumOff", role: "normal", parent: S("Active") },
+        { id: S("NumOn"), label: "Num & <on> #", role: "normal", parent: S("Active") },
+        { id: S("state_start_Active_r1"), label: "", role: "start", parent: S("Active"), region: 1 },
+        { id: S("CapsOff"), label: "CapsOff", role: "normal", parent: S("Active"), region: 1 },
+        { id: S("state_end_Active_r1"), label: "", role: "end", parent: S("Active"), region: 1 },
+        { id: S("Scroll"), label: "Scroll", role: "normal", parent: S("Active"), region: 2 },
+      ],
+      transitions: [
+        { id: "t1" as TransitionId, from: S("state_start"), to: S("Active") },
+        { id: "t2" as TransitionId, from: S("state_start_Active"), to: S("NumOff") },
+        { id: "t3" as TransitionId, from: S("NumOff"), to: S("NumOn"), label: "press" },
+        { id: "t4" as TransitionId, from: S("state_start_Active_r1"), to: S("CapsOff") },
+        { id: "t5" as TransitionId, from: S("CapsOff"), to: S("state_end_Active_r1") },
+        { id: "t6" as TransitionId, from: S("Scroll"), to: S("Scroll"), label: "tick" },
+      ],
+      notes: [{ id: "n1" as NoteId, target: S("Active"), position: "rightOf", text: 'line <1> #\nline "2"' }],
+    };
+    const code = stateToMermaid(ir);
+    expect(code).toContain("    --\n");
+    expect(code).toContain("  end note\n");
+    await expectMermaidAccepts(code);
+  });
 });
 
 describe("mermaid.js accepts generated user journeys", () => {

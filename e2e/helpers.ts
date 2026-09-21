@@ -45,8 +45,9 @@ export async function setCode(editor: Locator, text: string): Promise<void> {
   await cm.blur();
 }
 
-/** Poll the code pane until it settles, then assert on its text. Use this
- * for anything read after an edit — see the latch note on `codeText`. */
+/** Assert on the code pane after a GUI edit. The pane defers external value
+ * updates for ~200ms after a local edit, so a single `codeText` read right
+ * after a click or keystroke races that sync — poll instead. */
 export function expectCode(editor: Locator) {
   return expect.poll(() => codeText(editor), { timeout: 5_000 });
 }

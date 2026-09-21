@@ -4,6 +4,8 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
 {
   "kind": "state",
   "notes": [],
+  "regionSeparators": [],
+  "regions": [],
   "size": {
     "h": 171.6,
     "w": 72,
