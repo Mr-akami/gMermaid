@@ -25,8 +25,8 @@ describe("parseSequence", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.ir.lifelines).toEqual([
-      { id: "a", name: "Alice", isActor: true },
-      { id: "b", name: "Bob", isActor: false },
+      { id: "a", name: "Alice", kind: "actor" },
+      { id: "b", name: "Bob", kind: "participant" },
     ]);
     expect(result.ir.events).toHaveLength(2);
     const frag = result.ir.events[1]!;
@@ -72,7 +72,7 @@ describe("parseSequence", () => {
     const result = parseSequence(`sequenceDiagram\n  participant solo\n`);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.ir.lifelines[0]).toEqual({ id: "solo", name: "solo", isActor: false });
+    expect(result.ir.lifelines[0]).toEqual({ id: "solo", name: "solo", kind: "participant" });
   });
 
   it("points unclosed-fragment errors at the opening line", () => {
@@ -106,9 +106,10 @@ describe("parseSequence", () => {
   it("round-trips: parse(gen(ir)) == ir, and gen is stable", () => {
     const ir: SequenceIR = {
       kind: "sequence",
+      boxes: [],
       lifelines: [
-        { id: L("a"), name: "Alice", isActor: true },
-        { id: L("b"), name: "Bob & <co>", isActor: false },
+        { id: L("a"), name: "Alice", kind: "actor" },
+        { id: L("b"), name: "Bob & <co>", kind: "participant" },
       ],
       events: [
         { kind: "message", id: "message-1" as MessageId, from: L("a"), to: L("b"), label: "hi #1", arrow: "solid" },
@@ -211,7 +212,8 @@ describe("parseSequence", () => {
     // by Min/Max: the IR keeps it verbatim; only the parser decomposes.
     const ir: SequenceIR = {
       kind: "sequence",
-      lifelines: [{ id: "a" as LifelineId, name: "a", isActor: false }],
+      boxes: [],
+      lifelines: [{ id: "a" as LifelineId, name: "a", kind: "participant" }],
       events: [
         {
           kind: "fragment",
@@ -282,5 +284,177 @@ sequenceDiagram;
   Note over A.svc,ユーザ: n
 `);
     expect(ir.lifelines.map((l) => l.id)).toEqual(["ユーザ", "A.svc"]);
+  });
+});
+
+describe("parseSequence activation", () => {
+  it("reads the `+`/`-` suffix form and the standalone keywords", () => {
+    const ir = roundTripLenient(`sequenceDiagram
+  A->>+B: open
+  activate C
+  B-->>-A: close
+  deactivate C
+`);
+    expect(ir.events.map((e) =>
+        e.kind === "message" ? `${e.id}:${e.activate ?? "-"}` : e.kind === "activation" ? `activation:${e.lifeline}` : e.kind,
+      )).toEqual([
+      "message-1:start",
+      "activation:C",
+      "message-2:end",
+      "activation:C",
+    ]);
+    const on = ir.events[1]!;
+    expect(on.kind === "activation" && on.on).toBe(true);
+    const off = ir.events[3]!;
+    expect(off.kind === "activation" && off.on).toBe(false);
+  });
+
+  it("keeps a `-` that belongs to the target id out of the activation flag", () => {
+    // ids may contain `-`, so only a leading one directly after the arrow counts
+    const ir = roundTripLenient(`sequenceDiagram\n  a->>b-svc: x\n`);
+    expect(ir.lifelines.map((l) => l.id)).toEqual(["a", "b-svc"]);
+    expect(ir.events[0]!.kind === "message" && "activate" in ir.events[0]!).toBe(false);
+  });
+});
+
+describe("parseSequence boxes", () => {
+  it("groups participants, splitting the color prefix like mermaid does", () => {
+    const ir = roundTripLenient(`sequenceDiagram
+  box rgb(200, 220, 255) Front end
+    participant web as Web
+    actor user
+  end
+  box Back end
+    participant api
+  end
+  user->>web: click
+  web->>api: call
+`);
+    expect(ir.boxes).toEqual([
+      { id: "box-1", name: "Front end", color: "rgb(200,220,255)", lifelines: ["web", "user"] },
+      { id: "box-2", name: "Back end", lifelines: ["api"] },
+    ]);
+  });
+
+  it("treats an unknown leading word as title text and a color word as color", () => {
+    const named = parseSequence(`sequenceDiagram\n  box Aqua Team\n    participant a\n  end\n  a->>a: x\n`);
+    expect(named.ok).toBe(true);
+    if (!named.ok) return;
+    expect(named.ir.boxes[0]).toMatchObject({ color: "Aqua", name: "Team" });
+    // a title whose first word reads as a color round-trips via `transparent`
+    const guarded = sequenceToMermaid({ ...named.ir, boxes: [{ id: named.ir.boxes[0]!.id, lifelines: named.ir.boxes[0]!.lifelines, name: "Aqua Team" }] });
+    expect(guarded).toContain("box transparent Aqua Team");
+    const back = parseSequence(guarded);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir.boxes[0]).toMatchObject({ color: "transparent", name: "Aqua Team" });
+  });
+
+  it("closes boxes and fragments with the same `end`, in order", () => {
+    const ir = roundTripLenient(`sequenceDiagram
+  box Group
+    participant a
+    participant b
+  end
+  alt ok
+    a->>b: x
+  end
+`);
+    expect(ir.boxes[0]!.lifelines).toEqual(["a", "b"]);
+    expect(ir.events.map((e) => e.kind)).toEqual(["fragment"]);
+  });
+
+  it("reports an unclosed box", () => {
+    const bad = parseSequence(`sequenceDiagram\n  box Group\n    participant a\n`);
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.errors[0]!.message).toContain("unclosed `box`");
+  });
+});
+
+describe("parseSequence rect", () => {
+  it("models `rect rgb(…)` as a fragment whose branch carries the color", () => {
+    const ir = roundTripLenient(`sequenceDiagram
+  a->>b: before
+  rect rgba(0, 0, 255, .1)
+    a->>b: inside
+  end
+`);
+    const frag = ir.events[1]!;
+    if (frag.kind !== "fragment") throw new Error("expected fragment");
+    expect(frag.fragmentKind).toBe("rect");
+    expect(frag.branches).toHaveLength(1);
+    expect(frag.branches[0]!.condition).toBe("rgba(0, 0, 255, .1)");
+  });
+
+  it("keeps a `#rrggbb` rect color unescaped through codegen", () => {
+    const ir = roundTripLenient(`sequenceDiagram\n  rect #ff0000\n    a->>b: x\n  end\n`);
+    expect(sequenceToMermaid(ir)).toContain("rect #ff0000");
+  });
+});
+
+describe("parseSequence create / destroy", () => {
+  it("keeps create and destroy events where they sit, at any depth", () => {
+    const ir = roundTripLenient(`sequenceDiagram
+  participant a
+  a->>a: start
+  create participant b as Worker
+  a->>b: spawn
+  alt done
+    destroy b
+    b-->>a: bye
+  end
+`);
+    expect(ir.lifelines.map((l) => [l.id, l.name])).toEqual([
+      ["a", "a"],
+      ["b", "Worker"],
+    ]);
+    expect(ir.events.map((e) => e.kind)).toEqual(["message", "create", "message", "fragment"]);
+    const frag = ir.events[3]!;
+    if (frag.kind !== "fragment") throw new Error("expected fragment");
+    expect(frag.branches[0]!.events.map((e) => e.kind)).toEqual(["destroy", "message"]);
+  });
+
+  it("reads `create actor X` and never re-declares a created participant", () => {
+    const ir = roundTripLenient(`sequenceDiagram\n  a->>a: x\n  create actor d as Dan\n  a->>d: y\n`);
+    expect(ir.lifelines[1]).toEqual({ id: "d", name: "Dan", kind: "actor" });
+    const code = sequenceToMermaid(ir);
+    expect(code).toContain("create actor d as Dan");
+    expect(code.split("\n").filter((l) => l.includes("actor d"))).toHaveLength(1);
+  });
+});
+
+describe("parseSequence participant types", () => {
+  it("reads `@{ type: … }` in quoted and bare form, and the `db` alias", () => {
+    const ir = roundTripLenient(`sequenceDiagram
+  participant a@{ "type": "database" } as Store
+  participant b@{ type: db }
+  participant c@{ "type": "queue" }
+  actor d
+  a->>b: x
+  c->>d: y
+`);
+    expect(ir.lifelines.map((l) => l.kind)).toEqual(["database", "database", "queue", "actor"]);
+    const code = sequenceToMermaid(ir);
+    expect(code).toContain('participant a@{ "type": "database" } as Store');
+    expect(code).toContain("actor d");
+  });
+
+  it("falls back to the keyword for unknown types and drops other metadata", () => {
+    const result = parseSequence(`sequenceDiagram\n  actor a@{ "type": "zzz" }\n  participant b@{ "other": 1 }\n  a->>b: x\n`);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.lifelines.map((l) => l.kind)).toEqual(["actor", "participant"]);
+  });
+});
+
+describe("parseSequence multi-line text", () => {
+  it("turns `<br/>` into newlines in notes and message labels, both ways", () => {
+    const ir = roundTripLenient(`sequenceDiagram\n  a->>b: first<br/>second\n  Note over a,b: one<br/>two\n`);
+    const msg = ir.events[0]!;
+    expect(msg.kind === "message" && msg.label).toBe("first\nsecond");
+    const note = ir.events[1]!;
+    expect(note.kind === "note" && note.text).toBe("one\ntwo");
+    expect(sequenceToMermaid(ir)).toContain("a->>b: first<br/>second");
   });
 });

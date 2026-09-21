@@ -1,4 +1,5 @@
-import type { FragmentFrame, MessageRow, SequenceLayout } from "@gmermaid/layout";
+import type { SVGProps } from "react";
+import type { FragmentFrame, LifelineColumn, MessageRow, NoteBox, SequenceLayout } from "@gmermaid/layout";
 import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 // Fragment frames draw UNDER the messages with a transparent fill; only
@@ -43,6 +44,77 @@ export interface SequenceViewProps {
 }
 
 const PADDING = 10;
+
+/** `<br/>`-separated text renders as one <tspan> per line, centred on the
+ * anchor — layout already reserved the height for the extra lines. */
+function TextLines({
+  text,
+  x,
+  y,
+  lineHeight = 14,
+  ...rest
+}: { text: string; x: number; y: number; lineHeight?: number } & SVGProps<SVGTextElement>) {
+  const lines = text.split("\n");
+  return (
+    <text x={x} y={y} {...rest}>
+      {lines.map((line, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? 0 : lineHeight}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+}
+
+/** Head glyph per participant type: simple shapes, but each recognisable
+ * on its own (mermaid's own icons are far heavier than this canvas needs). */
+function HeadShape({ l, stroke, selected }: { l: LifelineColumn; stroke: string; selected: boolean }) {
+  const { x, y, w, h } = l.headRect;
+  const common = {
+    fill: "var(--gm-node-fill, #eef3fb)",
+    stroke,
+    strokeWidth: selected ? 2.5 : 1.2,
+    "data-drag": "lifeline",
+  } as const;
+  switch (l.kind) {
+    case "actor":
+      return <rect {...common} x={x} y={y} width={w} height={h} rx={h / 2} />;
+    case "database":
+      return (
+        <path
+          {...common}
+          d={`M ${x} ${y + 7} a ${w / 2} 7 0 0 1 ${w} 0 v ${h - 14} a ${w / 2} 7 0 0 1 ${-w} 0 z M ${x} ${y + 7} a ${w / 2} 7 0 0 0 ${w} 0`}
+        />
+      );
+    case "queue":
+      return <rect {...common} x={x} y={y} width={w} height={h} rx={h / 2} ry={h / 2} />;
+    case "collections":
+      return (
+        <>
+          <rect {...common} x={x + 5} y={y - 4} width={w - 5} height={h} />
+          <rect {...common} x={x} y={y + 4} width={w - 5} height={h - 8} />
+        </>
+      );
+    case "boundary":
+      return (
+        <>
+          <line {...common} x1={x + 3} y1={y} x2={x + 3} y2={y + h} />
+          <rect {...common} x={x + 8} y={y} width={w - 8} height={h} rx={3} />
+        </>
+      );
+    case "control":
+      return <ellipse {...common} cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} />;
+    case "entity":
+      return (
+        <>
+          <rect {...common} x={x} y={y} width={w} height={h} rx={3} />
+          <line {...common} x1={x + 6} y1={y + h - 3} x2={x + w - 6} y2={y + h - 3} strokeWidth={2.5} fill="none" />
+        </>
+      );
+    default:
+      return <rect {...common} x={x} y={y} width={w} height={h} rx={3} />;
+  }
+}
 
 export function SequenceView({
   layout,
@@ -116,24 +188,48 @@ export function SequenceView({
       </defs>
 
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      {/* participant boxes sit behind the heads they group */}
+      {layout.boxes.map((b) => (
+        <g key={b.id} data-element-id={b.id} style={{ pointerEvents: "none" }}>
+          <rect
+            x={b.rect.x}
+            y={b.rect.y}
+            width={b.rect.w}
+            height={b.rect.h}
+            rx={4}
+            fill={b.color !== undefined && b.color !== "transparent" ? b.color : "var(--gm-box-fill, rgba(140,150,170,0.10))"}
+            stroke="var(--gm-stroke, #888)"
+            strokeWidth={1}
+          />
+          <text
+            x={b.labelPos.x}
+            y={b.labelPos.y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={12}
+            fontWeight={600}
+            fontFamily="sans-serif"
+            fill="var(--gm-text, #111)"
+            style={{ userSelect: "none" }}
+          >
+            {b.name}
+          </text>
+        </g>
+      ))}
+
       {/* lifeline spines + heads */}
       {layout.lifelines.map((l) => (
-        <g key={l.id} data-element-id={l.id} style={{ cursor: "pointer" }}>
+        <g key={l.id} data-element-id={l.id} data-kind={l.kind} style={{ cursor: "pointer" }}>
           {/* wide grip on the spine: drag = draw a new message */}
           <line x1={l.x} y1={l.spineTop} x2={l.x} y2={l.spineBottom} stroke="transparent" strokeWidth={14} data-drag="spine" style={{ cursor: "crosshair" }} />
           <line x1={l.x} y1={l.spineTop} x2={l.x} y2={l.spineBottom} stroke="var(--gm-stroke, #999)" strokeDasharray="4 4" style={{ pointerEvents: "none" }} />
-          <rect
-            data-drag="lifeline"
-            x={l.headRect.x}
-            y={l.headRect.y}
-            width={l.headRect.w}
-            height={l.headRect.h}
-            rx={l.isActor ? l.headRect.h / 2 : 3}
-            fill="var(--gm-node-fill, #eef3fb)"
+          <HeadShape
+            l={l}
             stroke={viewState.selectedId === l.id ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)"}
-            strokeWidth={viewState.selectedId === l.id ? 2.5 : 1.2}
+            selected={viewState.selectedId === l.id}
           />
-          <text
+          <TextLines
+            text={l.name}
             x={l.x}
             y={l.headRect.y + l.headRect.h / 2}
             textAnchor="middle"
@@ -142,10 +238,34 @@ export function SequenceView({
             fontFamily="sans-serif"
             fill="var(--gm-text, #111)"
             style={{ pointerEvents: "none", userSelect: "none" }}
-          >
-            {l.name}
-          </text>
+          />
+          {l.destroyed === true && (
+            <path
+              d={`M ${l.x - 7} ${l.spineBottom - 7} l 14 14 M ${l.x + 7} ${l.spineBottom - 7} l -14 14`}
+              stroke="var(--gm-stroke, #333)"
+              strokeWidth={2}
+              fill="none"
+              data-destroy="true"
+              style={{ pointerEvents: "none" }}
+            />
+          )}
         </g>
+      ))}
+
+      {/* activation bars ride on the spine, nested bars shifted right */}
+      {layout.activations.map((a, i) => (
+        <rect
+          key={`${a.lifeline}-${i}`}
+          data-activation={a.lifeline}
+          x={a.rect.x}
+          y={a.rect.y}
+          width={a.rect.w}
+          height={a.rect.h}
+          fill="var(--gm-activation-fill, #e8eef8)"
+          stroke="var(--gm-stroke, #666)"
+          strokeWidth={1}
+          style={{ pointerEvents: "none" }}
+        />
       ))}
 
       {/* fragment frames go under the messages */}
@@ -163,9 +283,7 @@ export function SequenceView({
             <line x1={n.anchor.x1} y1={n.anchor.y1} x2={n.anchor.x2} y2={n.anchor.y2} stroke="var(--gm-note-line, #b59a2e)" strokeWidth={1} strokeDasharray="3 3" style={{ pointerEvents: "none" }} />
           )}
           <rect x={n.rect.x} y={n.rect.y} width={n.rect.w} height={n.rect.h} rx={3} fill="var(--gm-note-fill, #fdf6d3)" stroke="var(--gm-note-stroke, #c8b25a)" strokeWidth={1} />
-          <text x={n.rect.x + n.rect.w / 2} y={n.rect.y + n.rect.h / 2} textAnchor="middle" dominantBaseline="central" fontSize={12} fontFamily="sans-serif" fill="var(--gm-text, #333)" style={{ pointerEvents: "none", userSelect: "none" }}>
-            {n.text}
-          </text>
+          <NoteText n={n} />
         </g>
       ))}
 
@@ -192,9 +310,38 @@ export function SequenceView({
   );
 }
 
+function NoteText({ n }: { n: NoteBox }) {
+  const lines = n.text.split("\n");
+  // multi-line notes grow downwards from a top-aligned first line
+  const first = n.rect.y + n.rect.h / 2 - ((lines.length - 1) * 14) / 2;
+  return (
+    <TextLines
+      text={n.text}
+      x={n.rect.x + n.rect.w / 2}
+      y={first}
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={12}
+      fontFamily="sans-serif"
+      fill="var(--gm-text, #333)"
+      style={{ pointerEvents: "none", userSelect: "none" }}
+    />
+  );
+}
+
 function FragmentView({ f, selected, selectedId }: { f: FragmentFrame; selected: boolean; selectedId?: string | undefined }) {
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #555)";
   const { x, y, w, h } = f.rect;
+  if (f.fill !== undefined) {
+    // `rect`: a translucent background band, no label tab and no condition
+    return (
+      <g data-element-id={f.id} data-rect-fill={f.fill} style={{ cursor: "pointer" }}>
+        <rect x={x} y={y} width={w} height={h} fill={f.fill === "" ? "var(--gm-frag-fill, rgba(120,140,180,0.12))" : f.fill} style={{ pointerEvents: "none" }} />
+        <rect x={x} y={y} width={w} height={h} fill="none" stroke={stroke} strokeWidth={selected ? 2 : 1} strokeDasharray={selected ? undefined : "4 3"} pointerEvents="stroke" />
+        <rect x={x} y={y + h - 5} width={w} height={10} fill="transparent" data-drag="fragment-bottom" style={{ cursor: "ns-resize" }} />
+      </g>
+    );
+  }
   return (
     <g>
       {/* translucent body: visible but never clickable */}
@@ -283,7 +430,8 @@ function MessageView({ m, selected }: { m: MessageRow; selected: boolean }) {
       <path d={d} fill="none" stroke="transparent" strokeWidth={12} />
       <path d={d} fill="none" stroke={stroke} strokeWidth={selected ? 2.2 : 1.4} strokeDasharray={dash} markerEnd={marker} markerStart={bidir ? marker : undefined} />
       {label !== "" && (
-        <text
+        <TextLines
+          text={label}
           x={isSelf ? m.fromX + 44 : m.labelPos.x}
           y={isSelf ? m.y + 9 : m.labelPos.y}
           textAnchor={isSelf ? "start" : "middle"}
@@ -291,9 +439,7 @@ function MessageView({ m, selected }: { m: MessageRow; selected: boolean }) {
           fontFamily="sans-serif"
           fill="var(--gm-text, #111)"
           style={{ paintOrder: "stroke", stroke: "var(--gm-bg, #fff)", strokeWidth: 4, userSelect: "none" }}
-        >
-          {label}
-        </text>
+        />
       )}
     </g>
   );

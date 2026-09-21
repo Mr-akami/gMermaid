@@ -10,6 +10,9 @@ export type MessageId = Id<"message">;
 export type FragmentId = Id<"fragment">;
 export type BranchId = Id<"branch">;
 export type NoteId = Id<"note">;
+export type ActivationId = Id<"activation">;
+export type LifecycleId = Id<"lifecycle">;
+export type BoxId = Id<"box">;
 export type ClassId = Id<"class">;
 export type RelationId = Id<"relation">;
 export type StateId = Id<"state">;
@@ -30,6 +33,9 @@ export type AnyId =
   | FragmentId
   | BranchId
   | NoteId
+  | ActivationId
+  | LifecycleId
+  | BoxId
   | ClassId
   | RelationId
   | StateId

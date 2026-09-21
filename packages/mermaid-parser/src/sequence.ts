@@ -1,9 +1,15 @@
 import type {
+  Activation,
+  ActivationId,
+  Box,
+  BoxId,
   Branch,
   BranchId,
   Fragment,
   FragmentId,
   FragmentKind,
+  Lifecycle,
+  LifecycleId,
   Lifeline,
   LifelineId,
   LoopBounds,
@@ -12,14 +18,16 @@ import type {
   MessageId,
   Note,
   NoteId,
+  ParticipantKind,
   SequenceEvent,
   SequenceIR,
 } from "@gmermaid/ir";
+import { isColorToken, PARTICIPANT_KINDS } from "@gmermaid/ir";
 import { prepareLines, unescapeLabel, type ParseError, type ParseResult } from "./common";
 
 // Dialect the IR cannot hold is DISCARDED by design, same as `%%` comments:
 // frontmatter, `%%{init}%%` directives, `title`, `accTitle` / `accDescr`,
-// trailing `;` terminators.
+// trailing `;` terminators, `links`/`properties` metadata other than `type`.
 
 const DROPPED = ["title", "accTitle", "accDescr"];
 
@@ -42,7 +50,17 @@ const ARROWS: readonly { token: string; arrow: MessageArrowType }[] = [
   { token: "-x", arrow: "cross" },
 ];
 
-const FRAGMENT_KINDS: readonly FragmentKind[] = ["alt", "opt", "loop", "par", "break", "critical"];
+const FRAGMENT_KINDS: readonly FragmentKind[] = ["alt", "opt", "loop", "par", "break", "critical", "rect"];
+
+/** `rgb(1, 2, 3) Title` / `Aqua Title` / `Title` → color + title, mirroring
+ * mermaid's parseBoxData (an unrecognised leading word is part of the title). */
+function splitColorPrefix(raw: string): { color?: string; rest: string } {
+  const fn = raw.match(/^((?:rgba?|hsla?)\s*\([^)]*\))\s*(.*)$/i);
+  if (fn) return { color: fn[1]!.replaceAll(/\s+/g, ""), rest: fn[2]!.trim() };
+  const word = raw.match(/^(\S+)\s*(.*)$/);
+  if (word && isColorToken(word[1]!)) return { color: word[1]!, rest: word[2]!.trim() };
+  return { rest: raw.trim() };
+}
 
 /** `(min,max) exit` → structured bounds + exit text. A bare `(,)` prefix
  * with both fields empty is left alone — codegen never emits it. */
@@ -51,6 +69,21 @@ function splitLoopSpec(raw: string): { condition: string; loopBounds?: LoopBound
   if (!m || (m[1] === "" && m[2] === "")) return { condition: raw };
   return { condition: m[3]!, loopBounds: { min: m[1]!, max: m[2]! } };
 }
+
+/** `@{ "type": "database" }` / `@{ type: db }` — only `type` has an IR home;
+ * every other metadata key is dropped like styling is. */
+function participantKindOf(metadata: string | undefined): ParticipantKind | undefined {
+  if (metadata === undefined) return undefined;
+  const m = metadata.match(/["']?type["']?\s*:\s*["']?([\w-]+)["']?/);
+  if (!m) return undefined;
+  const raw = m[1]!.toLowerCase();
+  const normalized = raw === "db" ? "database" : raw;
+  return (PARTICIPANT_KINDS as readonly string[]).includes(normalized) ? (normalized as ParticipantKind) : undefined;
+}
+
+// `participant X@{ … } as Alias` — metadata sits BEFORE `as`, which is the
+// only order mermaid 11.16 reads as metadata (after `as` it is alias text).
+const DECL_TAIL = `(${ID})(?:@\\{([^}]*)\\})?(?:\\s+as\\s+(.+))?`;
 
 export function parseSequence(code: string): ParseResult<SequenceIR> {
   const errors: ParseError[] = [];
@@ -62,18 +95,23 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
   let fragSeq = 0;
   let branchSeq = 0;
   let noteSeq = 0;
+  let actSeq = 0;
+  let lifeSeq = 0;
+  let boxSeq = 0;
 
-  const declareLifeline = (id: string, name?: string, isActor = false, explicit = false): void => {
-    if (seen.has(id)) {
+  const boxes: Box[] = [];
+  let openBox: { id: BoxId; name: string; color?: string; lifelines: LifelineId[] } | undefined;
+
+  const declareLifeline = (id: string, name?: string, kind: ParticipantKind = "participant", explicit = false): void => {
+    if (!seen.has(id)) {
+      seen.add(id);
+      lifelines.push({ id: id as LifelineId, name: name ?? id, kind });
+    } else if (explicit) {
       // a later explicit `participant X as Alias` still applies its alias
-      if (explicit) {
-        const i = lifelines.findIndex((l) => l.id === id);
-        if (i >= 0) lifelines[i] = { id: id as LifelineId, name: name ?? id, isActor };
-      }
-      return;
+      const i = lifelines.findIndex((l) => l.id === id);
+      if (i >= 0) lifelines[i] = { id: id as LifelineId, name: name ?? id, kind };
     }
-    seen.add(id);
-    lifelines.push({ id: id as LifelineId, name: name ?? id, isActor });
+    if (openBox && !openBox.lifelines.includes(id as LifelineId)) openBox.lifelines.push(id as LifelineId);
   };
 
   // Stack of open fragments; events append to the current branch.
@@ -86,6 +124,9 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
     openedAt: number;
   }
   const stack: OpenFragment[] = [];
+  // `box` and fragments both close with `end`, so one block stack decides
+  // which of the two an `end` belongs to.
+  const blocks: ("box" | "fragment")[] = [];
   const currentEvents = (): SequenceEvent[] => {
     const top = stack[stack.length - 1];
     return top ? top.branches[top.branches.length - 1]!.events : root;
@@ -110,9 +151,61 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
       continue;
     }
 
-    const part = line.match(new RegExp(`^(participant|actor)\\s+(${ID})(?:\\s+as\\s+(.+))?$`, "u"));
+    const box = line.match(/^box(?:\s+(.*))?$/);
+    if (box) {
+      if (openBox) {
+        errors.push({ line: lineNo, message: "nested `box`" });
+        continue;
+      }
+      const spec = splitColorPrefix(box[1] ?? "");
+      boxSeq += 1;
+      openBox = {
+        id: `box-${boxSeq}` as BoxId,
+        name: unescapeLabel(spec.rest),
+        ...(spec.color !== undefined ? { color: spec.color } : {}),
+        lifelines: [],
+      };
+      blocks.push("box");
+      continue;
+    }
+
+    const part = line.match(new RegExp(`^(participant|actor)\\s+${DECL_TAIL}$`, "u"));
     if (part) {
-      declareLifeline(part[2]!, part[3] !== undefined ? unescapeLabel(part[3]) : undefined, part[1] === "actor", true);
+      const kind = participantKindOf(part[3]) ?? (part[1] === "actor" ? "actor" : "participant");
+      declareLifeline(part[2]!, part[4] !== undefined ? unescapeLabel(part[4].trim()) : undefined, kind, true);
+      continue;
+    }
+
+    const created = line.match(new RegExp(`^create\\s+(?:(participant|actor)\\s+)?${DECL_TAIL}$`, "u"));
+    if (created) {
+      const kind = participantKindOf(created[3]) ?? (created[1] === "actor" ? "actor" : "participant");
+      declareLifeline(created[2]!, created[4] !== undefined ? unescapeLabel(created[4].trim()) : undefined, kind, true);
+      lifeSeq += 1;
+      const ev: Lifecycle = { kind: "create", id: `lifecycle-${lifeSeq}` as LifecycleId, lifeline: created[2]! as LifelineId };
+      currentEvents().push(ev);
+      continue;
+    }
+
+    const destroyed = line.match(new RegExp(`^destroy\\s+(${ID})$`, "u"));
+    if (destroyed) {
+      declareLifeline(destroyed[1]!);
+      lifeSeq += 1;
+      const ev: Lifecycle = { kind: "destroy", id: `lifecycle-${lifeSeq}` as LifecycleId, lifeline: destroyed[1]! as LifelineId };
+      currentEvents().push(ev);
+      continue;
+    }
+
+    const act = line.match(new RegExp(`^(activate|deactivate)\\s+(${ID})$`, "u"));
+    if (act) {
+      declareLifeline(act[2]!);
+      actSeq += 1;
+      const ev: Activation = {
+        kind: "activation",
+        id: `activation-${actSeq}` as ActivationId,
+        lifeline: act[2]! as LifelineId,
+        on: act[1] === "activate",
+      };
+      currentEvents().push(ev);
       continue;
     }
 
@@ -139,6 +232,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
       const raw = frag[2] !== undefined ? unescapeLabel(frag[2]) : "";
       // The ONLY place the ambiguous `(min,max) exit` text form is decomposed
       // (B-2): everywhere else loop bounds live structurally on the branch.
+      // For `rect` the same slot carries the fill color, verbatim.
       const spec = kind === "loop" ? splitLoopSpec(raw) : { condition: raw };
       fragSeq += 1;
       branchSeq += 1;
@@ -156,6 +250,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
         parent: currentEvents(),
         openedAt: lineNo,
       });
+      blocks.push("fragment");
       continue;
     }
 
@@ -176,11 +271,17 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
     }
 
     if (line === "end") {
-      const top = stack.pop();
-      if (!top) {
+      const block = blocks.pop();
+      if (block === undefined) {
         errors.push({ line: lineNo, message: "`end` without an open fragment" });
         continue;
       }
+      if (block === "box") {
+        if (openBox) boxes.push({ ...openBox, lifelines: openBox.lifelines });
+        openBox = undefined;
+        continue;
+      }
+      const top = stack.pop()!;
       const fragment: Fragment = {
         kind: "fragment",
         id: top.id,
@@ -191,13 +292,21 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
       continue;
     }
 
-    // message: A->>B: label
+    // message: A->>B: label, with optional `+`/`-` activation suffix
     const arrowHit = ARROWS.map((a) => ({ a, idx: line.indexOf(a.token) }))
       .filter((x) => x.idx > 0)
       .toSorted((x, y) => x.idx - y.idx)[0];
     if (arrowHit) {
       const from = line.slice(0, arrowHit.idx).trim();
-      const rest = line.slice(arrowHit.idx + arrowHit.a.token.length);
+      let rest = line.slice(arrowHit.idx + arrowHit.a.token.length);
+      let activate: "start" | "end" | undefined;
+      if (rest.startsWith("+")) {
+        activate = "start";
+        rest = rest.slice(1);
+      } else if (rest.startsWith("-")) {
+        activate = "end";
+        rest = rest.slice(1);
+      }
       const colon = rest.indexOf(":");
       const to = (colon >= 0 ? rest.slice(0, colon) : rest).trim();
       const label = colon >= 0 ? unescapeLabel(rest.slice(colon + 1).trim()) : "";
@@ -215,6 +324,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
         to: to as LifelineId,
         label,
         arrow: arrowHit.a.arrow,
+        ...(activate !== undefined ? { activate } : {}),
       };
       currentEvents().push(message);
       continue;
@@ -227,10 +337,17 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
   for (const open of stack) {
     errors.push({ line: open.openedAt, message: `unclosed \`${open.kind}\` fragment` });
   }
+  if (openBox) errors.push({ line: lines[lines.length - 1]?.line ?? 1, message: "unclosed `box`" });
   if (errors.length > 0) return { ok: false, errors };
 
   return {
     ok: true,
-    ir: { kind: "sequence", lifelines, events: root, ...(autonumber !== undefined ? { autonumber } : {}) },
+    ir: {
+      kind: "sequence",
+      lifelines,
+      boxes: boxes.filter((b) => b.lifelines.length > 0),
+      events: root,
+      ...(autonumber !== undefined ? { autonumber } : {}),
+    },
   };
 }

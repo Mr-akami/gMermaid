@@ -1,6 +1,8 @@
 import type { LifelineId, SequenceEvent, SequenceIR } from "@gmermaid/ir";
 import type { TextMeasurer } from "./measurer";
 import type {
+  ActivationBar,
+  BoxFrame,
   BranchBand,
   DropSlot,
   FragmentFrame,
@@ -21,6 +23,8 @@ const FIRST_ROW_GAP = 28;
 // The first branch condition sits BESIDE the label tab (top of the frame),
 // so the first message row only needs to clear that single header line.
 const FRAG_TOP = 40;
+// `rect` has no label tab or condition row, so its body starts higher.
+const RECT_TOP = 14;
 const NOTE_PAD = 8;
 const NOTE_GAP = 12;
 const FRAG_BOTTOM = 10;
@@ -31,6 +35,13 @@ const FRAG_NEST_PAD = 12; // extra margin a parent keeps around child frames
 const SELF_MSG_EXTRA = 14;
 const MIN_GAP = 60;
 const BOTTOM_MARGIN = 24;
+const BAR_W = 10;
+const BAR_NEST = 5; // x shift per nesting level of the activation stack
+const BAR_MIN_H = 16;
+const ACT_ROW = 14; // vertical room a standalone activate/deactivate takes
+const BOX_PAD = 10;
+const BOX_LABEL_H = 22;
+const DESTROY_ROW = 20;
 
 function eachMessage(
   events: readonly SequenceEvent[],
@@ -42,11 +53,42 @@ function eachMessage(
   }
 }
 
+/** Every lifeline an event subtree touches — what a fragment frame spans. */
+function lifelinesOf(events: readonly SequenceEvent[]): Set<LifelineId> {
+  const out = new Set<LifelineId>();
+  const walk = (list: readonly SequenceEvent[]): void => {
+    for (const e of list) {
+      if (e.kind === "message") {
+        out.add(e.from);
+        out.add(e.to);
+      } else if (e.kind === "note") for (const id of e.lifelines) out.add(id);
+      else if (e.kind === "fragment") for (const b of e.branches) walk(b.events);
+      else out.add(e.lifeline);
+    }
+  };
+  walk(events);
+  return out;
+}
+
 export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceLayout {
+  // Multi-line text (`<br/>` in the mermaid source) measures line by line:
+  // the renderer draws one <tspan> per line, so height grows with the count.
+  const block = (text: string): { w: number; h: number; lines: number } => {
+    const parts = text.split("\n");
+    let w = 0;
+    let h = 0;
+    for (const part of parts) {
+      const m = measure.measure(part, FONT);
+      w = Math.max(w, m.w);
+      h += m.h;
+    }
+    return { w, h, lines: parts.length };
+  };
+
   // --- horizontal: lifeline columns -------------------------------------
   const headW = new Map<LifelineId, number>();
   for (const l of ir.lifelines) {
-    const w = measure.measure(l.name, FONT).w + HEAD_PAD_X * 2;
+    const w = block(l.name).w + HEAD_PAD_X * 2;
     headW.set(l.id, Math.max(HEAD_MIN_W, w));
   }
 
@@ -59,7 +101,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
     if (a === undefined || b === undefined || a === b) return;
     const [lo, hi] = a < b ? [a, b] : [b, a];
     const span = hi - lo;
-    const need = (measure.measure(m.label, FONT).w + 24) / span;
+    const need = (block(m.label).w + 24) / span;
     for (let g = lo; g < hi; g++) gaps[g] = Math.max(gaps[g]!, need);
   });
 
@@ -77,21 +119,38 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
   }
   const colX = new Map<LifelineId, number>(ir.lifelines.map((l, i) => [l.id, xs[i]!]));
 
+  // boxes need a title band above the heads, so everything moves down
+  const headTop = TOP_MARGIN + (ir.boxes.length > 0 ? BOX_LABEL_H : 0);
+
   // --- vertical: walk events --------------------------------------------
   const messages: MessageRow[] = [];
   const fragments: FragmentFrame[] = [];
   const notes: NoteBox[] = [];
   const slots: DropSlot[] = [];
-  let y = TOP_MARGIN + HEAD_H + FIRST_ROW_GAP;
+  const activations: ActivationBar[] = [];
+  // open activation bars per lifeline: the stack depth IS the nesting offset
+  const openBars = new Map<LifelineId, number[]>();
+  const createdAt = new Map<LifelineId, number>();
+  const destroyedAt = new Map<LifelineId, number>();
+  let y = headTop + HEAD_H + FIRST_ROW_GAP;
   let msgCount = 0; // autonumber walks messages in document order
 
-  const lifelinesOf = (events: readonly SequenceEvent[]): Set<LifelineId> => {
-    const s = new Set<LifelineId>();
-    eachMessage(events, (m) => {
-      s.add(m.from);
-      s.add(m.to);
+  const pushBar = (id: LifelineId, at: number): void => {
+    const stack = openBars.get(id) ?? [];
+    stack.push(at);
+    openBars.set(id, stack);
+  };
+  const popBar = (id: LifelineId, at: number): void => {
+    const stack = openBars.get(id);
+    const from = stack?.pop();
+    if (from === undefined) return;
+    const cx = colX.get(id) ?? 0;
+    const depth = stack!.length;
+    activations.push({
+      lifeline: id,
+      rect: { x: cx - BAR_W / 2 + depth * BAR_NEST, y: from, w: BAR_W, h: Math.max(BAR_MIN_H, at - from) },
+      depth,
     });
-    return s;
   };
 
   const walk = (
@@ -109,23 +168,51 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
       if (e.kind === "message") {
         const fromX = colX.get(e.from) ?? 0;
         const toX = colX.get(e.to) ?? 0;
+        const label = block(e.label);
+        const lineH = label.h / label.lines;
+        const extra = (label.lines - 1) * lineH; // extra lines grow upwards
+        if (e.activate === "start") pushBar(e.to, y);
         messages.push({
           id: e.id,
           fromX,
           toX,
           y,
           label: e.label,
-          labelPos: { x: (fromX + toX) / 2, y: y - 8 },
+          labelPos: { x: (fromX + toX) / 2, y: y - 8 - extra },
           arrow: e.arrow,
           ...(ir.autonumber !== undefined ? { seq: ir.autonumber.start + msgCount++ * ir.autonumber.step } : {}),
         });
-        y += ROW_H + (e.from === e.to ? SELF_MSG_EXTRA : 0);
+        if (e.activate === "end") popBar(e.from, y);
+        y += ROW_H + (e.from === e.to ? SELF_MSG_EXTRA : 0) + extra;
         lastMessage = { x: (fromX + toX) / 2, y: messages[messages.length - 1]!.y };
         continue;
       }
 
+      if (e.kind === "activation") {
+        if (e.on) pushBar(e.lifeline, y);
+        else popBar(e.lifeline, y);
+        y += ACT_ROW;
+        lastMessage = null;
+        continue;
+      }
+
+      if (e.kind === "create") {
+        // the head is drawn at this row; the rows below must clear it
+        createdAt.set(e.lifeline, y);
+        y += HEAD_H + 10;
+        lastMessage = null;
+        continue;
+      }
+
+      if (e.kind === "destroy") {
+        destroyedAt.set(e.lifeline, y);
+        y += DESTROY_ROW;
+        lastMessage = null;
+        continue;
+      }
+
       if (e.kind === "note") {
-        const m = measure.measure(e.text, FONT);
+        const m = block(e.text);
         const w = m.w + NOTE_PAD * 2;
         const noteH = Math.max(26, m.h + NOTE_PAD * 2);
         const refXs = e.lifelines.map((id) => colX.get(id) ?? SIDE_MARGIN);
@@ -155,8 +242,9 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
       // parent hugs its involved lifelines AND encloses every child frame
       // with a small nesting margin — so nested fragments never poke out,
       // and a frame stays narrow enough not to cover uninvolved lifelines.
+      const isRect = e.fragmentKind === "rect";
       const top = y;
-      y += FRAG_TOP;
+      y += isRect ? RECT_TOP : FRAG_TOP;
       const childStart = fragments.length;
       const branchMeta: { id: BranchBand["id"]; condition: string; dividerY?: number; condY: number }[] = [];
       e.branches.forEach((branch, bi) => {
@@ -169,7 +257,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
         }
         walk(branch.events, depth + 1, { kind: "branch", branchId: branch.id });
       });
-      y += FRAG_BOTTOM;
+      y += isRect ? RECT_TOP : FRAG_BOTTOM;
 
       const involved = lifelinesOf(e.branches.flatMap((b) => [...b.events]));
       const involvedXs =
@@ -200,7 +288,9 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
         fragmentKind: e.fragmentKind,
         rect: { x: left, y: top, w: right - left, h: y - top },
         labelTab: { x: left, y: top, w: 44, h: 20 },
-        branches,
+        // the rect's fill color rides on its single branch (see IR docs)
+        ...(isRect ? { fill: e.branches[0]?.condition ?? "" } : {}),
+        branches: isRect ? [] : branches,
         depth,
       });
       y += FRAG_GAP_AFTER; // keep the next row clear of the closing border
@@ -211,27 +301,55 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
   walk(ir.events, 0, { kind: "root" });
 
   const spineBottom = y + 6;
+  // bars still open at the end run to the spine's end (mermaid does the same)
+  for (const [id, stack] of openBars) {
+    while (stack.length > 0) popBar(id, destroyedAt.get(id) ?? spineBottom);
+  }
+
   const lifelines: LifelineColumn[] = ir.lifelines.map((l) => {
     const w = headW.get(l.id)!;
     const cx = colX.get(l.id)!;
+    const created = createdAt.get(l.id);
+    const destroyed = destroyedAt.get(l.id);
+    const top = created ?? headTop;
     return {
       id: l.id,
       name: l.name,
-      isActor: l.isActor,
+      kind: l.kind,
       x: cx,
-      headRect: { x: cx - w / 2, y: TOP_MARGIN, w, h: HEAD_H },
-      spineTop: TOP_MARGIN + HEAD_H,
-      spineBottom,
+      headRect: { x: cx - w / 2, y: top, w, h: HEAD_H },
+      spineTop: top + HEAD_H,
+      spineBottom: destroyed ?? spineBottom,
+      ...(created !== undefined ? { created: true } : {}),
+      ...(destroyed !== undefined ? { destroyed: true } : {}),
     };
   });
+
+  const boxes: BoxFrame[] = [];
+  for (const b of ir.boxes) {
+    const cols = lifelines.filter((l) => b.lifelines.includes(l.id));
+    if (cols.length === 0) continue;
+    const left = Math.min(...cols.map((c) => c.headRect.x)) - BOX_PAD;
+    const right = Math.max(...cols.map((c) => c.headRect.x + c.headRect.w)) + BOX_PAD;
+    boxes.push({
+      id: b.id,
+      name: b.name,
+      ...(b.color !== undefined ? { color: b.color } : {}),
+      rect: { x: left, y: TOP_MARGIN, w: right - left, h: BOX_LABEL_H + HEAD_H + BOX_PAD },
+      labelPos: { x: (left + right) / 2, y: TOP_MARGIN + BOX_LABEL_H / 2 },
+    });
+  }
 
   const lastX = ir.lifelines.length > 0 ? xs[xs.length - 1]! + headW.get(ir.lifelines[ir.lifelines.length - 1]!.id)! / 2 : 200;
   const fragRight = fragments.reduce((m, f) => Math.max(m, f.rect.x + f.rect.w), 0);
   const noteRight = notes.reduce((m, n) => Math.max(m, n.rect.x + n.rect.w), 0);
+  const boxRight = boxes.reduce((m, b) => Math.max(m, b.rect.x + b.rect.w), 0);
   return {
     kind: "sequence",
-    size: { w: Math.max(lastX, fragRight, noteRight) + SIDE_MARGIN, h: spineBottom + BOTTOM_MARGIN },
+    size: { w: Math.max(lastX, fragRight, noteRight, boxRight) + SIDE_MARGIN, h: spineBottom + BOTTOM_MARGIN },
     lifelines,
+    boxes,
+    activations,
     messages,
     fragments,
     notes,
