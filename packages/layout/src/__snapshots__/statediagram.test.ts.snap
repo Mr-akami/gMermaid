@@ -7,7 +7,7 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
   "regionSeparators": [],
   "regions": [],
   "size": {
-    "h": 171.6,
+    "h": 199.2,
     "w": 72,
   },
   "states": [
@@ -46,7 +46,7 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
         "h": 16,
         "w": 16,
         "x": 28,
-        "y": 155.6,
+        "y": 183.2,
       },
       "role": "end",
     },
@@ -74,7 +74,7 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
       "label": "done",
       "labelPos": {
         "x": 36,
-        "y": 124.6,
+        "y": 144.4,
       },
       "points": [
         {
@@ -83,11 +83,11 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
         },
         {
           "x": 36,
-          "y": 130.6,
+          "y": 144.4,
         },
         {
           "x": 36,
-          "y": 155.6,
+          "y": 183.2,
         },
       ],
     },
