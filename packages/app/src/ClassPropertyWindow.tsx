@@ -1,33 +1,64 @@
-import type { ClassNode, ClassRelation, RelationType } from "@gmermaid/ir";
+import type {
+  ClassId,
+  ClassNamespace,
+  ClassNode,
+  ClassNote,
+  ClassRelation,
+  NamespaceId,
+  RelationHead,
+  RelationLine,
+} from "@gmermaid/ir";
 
 export type ClassSelection =
   | { kind: "class"; node: ClassNode }
-  | { kind: "relation"; relation: ClassRelation };
+  | { kind: "relation"; relation: ClassRelation }
+  | { kind: "note"; note: ClassNote }
+  | { kind: "namespace"; namespace: ClassNamespace };
 
 export interface ClassPropertyWindowProps {
   readonly selection: ClassSelection;
-  /** Raw text drafts: one member per line (e.g. `+name : Type`, `+run(x)`). */
+  /** Raw text drafts: one member per line (e.g. `+String name`, `+run(x)*`). */
   readonly attributesText: string;
   readonly methodsText: string;
   readonly membersError?: string | undefined;
+  /** Every namespace / class in the diagram, for the target pickers. */
+  readonly namespaces: readonly ClassNamespace[];
+  readonly classes: readonly ClassNode[];
   readonly onChangeName: (name: string) => void;
-  readonly onChangeStereotype: (stereotype: string) => void;
+  readonly onChangeLabel: (label: string) => void;
+  readonly onChangeGeneric: (generic: string) => void;
+  readonly onChangeStereotypes: (text: string) => void;
+  readonly onChangeNamespace: (id: NamespaceId | undefined) => void;
   readonly onChangeAttributesText: (text: string) => void;
   readonly onChangeMethodsText: (text: string) => void;
-  readonly onChangeRelationType: (type: RelationType) => void;
+  readonly onChangeRelationLine: (line: RelationLine) => void;
+  readonly onChangeHeadFrom: (head: RelationHead) => void;
+  readonly onChangeHeadTo: (head: RelationHead) => void;
   readonly onChangeRelationLabel: (label: string) => void;
   readonly onChangeFromCardinality: (v: string) => void;
   readonly onChangeToCardinality: (v: string) => void;
+  readonly onChangeNoteText: (text: string) => void;
+  readonly onChangeNoteTarget: (id: ClassId | undefined) => void;
+  readonly onChangeNamespaceName: (name: string) => void;
   readonly onDelete: () => void;
   readonly onEditStart: () => void;
   readonly onEditEnd: () => void;
 }
 
+const HEADS: readonly [RelationHead, string][] = [
+  ["none", "None"],
+  ["arrow", "Arrow"],
+  ["inheritance", "Inheritance (triangle)"],
+  ["composition", "Composition (filled diamond)"],
+  ["aggregation", "Aggregation (hollow diamond)"],
+  ["lollipop", "Lollipop"],
+];
+
 export function ClassPropertyWindow(props: ClassPropertyWindowProps) {
   const { selection, onEditStart, onEditEnd } = props;
   return (
     <div className="property-window">
-      {selection.kind === "class" ? (
+      {selection.kind === "class" && (
         <>
           <h3>Class</h3>
           <label>
@@ -35,14 +66,48 @@ export function ClassPropertyWindow(props: ClassPropertyWindowProps) {
             <input value={selection.node.name} onFocus={onEditStart} onBlur={onEditEnd} onChange={(e) => props.onChangeName(e.target.value)} />
           </label>
           <label>
-            Stereotype
+            Label
             <input
-              value={selection.node.stereotype ?? ""}
-              placeholder="interface, abstract, …"
+              value={selection.node.label ?? ""}
+              placeholder="shown instead of the name"
               onFocus={onEditStart}
               onBlur={onEditEnd}
-              onChange={(e) => props.onChangeStereotype(e.target.value)}
+              onChange={(e) => props.onChangeLabel(e.target.value)}
             />
+          </label>
+          <label>
+            Generic
+            <input
+              value={selection.node.generic ?? ""}
+              placeholder="Shape, T, …"
+              onFocus={onEditStart}
+              onBlur={onEditEnd}
+              onChange={(e) => props.onChangeGeneric(e.target.value)}
+            />
+          </label>
+          <label>
+            Annotations (comma separated)
+            <input
+              value={selection.node.stereotypes.join(", ")}
+              placeholder="interface, service, …"
+              onFocus={onEditStart}
+              onBlur={onEditEnd}
+              onChange={(e) => props.onChangeStereotypes(e.target.value)}
+            />
+          </label>
+          <label>
+            Namespace
+            <select
+              value={selection.node.namespace ?? ""}
+              onChange={(e) => props.onChangeNamespace(e.target.value === "" ? undefined : (e.target.value as NamespaceId))}
+            >
+              <option value="">(none)</option>
+              {props.namespaces.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Attributes (one per line)
@@ -54,20 +119,35 @@ export function ClassPropertyWindow(props: ClassPropertyWindowProps) {
           </label>
           {props.membersError !== undefined && <div className="hint" style={{ color: "#9f3a38" }}>{props.membersError}</div>}
         </>
-      ) : (
+      )}
+      {selection.kind === "relation" && (
         <>
           <h3>Relation</h3>
           <label>
-            Type
-            <select value={selection.relation.type} onChange={(e) => props.onChangeRelationType(e.target.value as RelationType)}>
-              <option value="inheritance">Inheritance</option>
-              <option value="realization">Realization</option>
-              <option value="composition">Composition</option>
-              <option value="aggregation">Aggregation</option>
-              <option value="association">Association</option>
-              <option value="dependency">Dependency</option>
-              <option value="linkSolid">Link (solid, no head)</option>
-              <option value="linkDashed">Link (dashed, no head)</option>
+            Line
+            <select value={selection.relation.line} onChange={(e) => props.onChangeRelationLine(e.target.value as RelationLine)}>
+              <option value="solid">Solid</option>
+              <option value="dashed">Dashed</option>
+            </select>
+          </label>
+          <label>
+            Head (start)
+            <select value={selection.relation.headFrom} onChange={(e) => props.onChangeHeadFrom(e.target.value as RelationHead)}>
+              {HEADS.map(([v, text]) => (
+                <option key={v} value={v}>
+                  {text}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Head (end)
+            <select value={selection.relation.headTo} onChange={(e) => props.onChangeHeadTo(e.target.value as RelationHead)}>
+              {HEADS.map(([v, text]) => (
+                <option key={v} value={v}>
+                  {text}
+                </option>
+              ))}
             </select>
           </label>
           <label>
@@ -82,6 +162,39 @@ export function ClassPropertyWindow(props: ClassPropertyWindowProps) {
             Cardinality (to)
             <input value={selection.relation.toCardinality ?? ""} onFocus={onEditStart} onBlur={onEditEnd} onChange={(e) => props.onChangeToCardinality(e.target.value)} />
           </label>
+        </>
+      )}
+      {selection.kind === "note" && (
+        <>
+          <h3>Note</h3>
+          <label>
+            Text
+            <textarea rows={3} value={selection.note.text} onFocus={onEditStart} onBlur={onEditEnd} onChange={(e) => props.onChangeNoteText(e.target.value)} />
+          </label>
+          <label>
+            Target
+            <select
+              value={selection.note.target ?? ""}
+              onChange={(e) => props.onChangeNoteTarget(e.target.value === "" ? undefined : (e.target.value as ClassId))}
+            >
+              <option value="">(free note)</option>
+              {props.classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+      {selection.kind === "namespace" && (
+        <>
+          <h3>Namespace</h3>
+          <label>
+            Name
+            <input value={selection.namespace.name} onFocus={onEditStart} onBlur={onEditEnd} onChange={(e) => props.onChangeNamespaceName(e.target.value)} />
+          </label>
+          <div className="hint">Nested namespaces are not supported.</div>
         </>
       )}
       <button className="danger" onClick={props.onDelete}>

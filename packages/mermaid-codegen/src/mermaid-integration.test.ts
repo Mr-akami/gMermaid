@@ -13,6 +13,7 @@ import type {
   LifecycleId,
   LifelineId,
   MessageId,
+  NamespaceId,
   NodeId,
   NoteId,
   RelationId,
@@ -134,43 +135,67 @@ describe("mermaid.js accepts generated flowcharts", () => {
   });
 });
 
+const CL = (s: string) => s as ClassId;
+const REL = (s: string) => s as RelationId;
+
 describe("mermaid.js accepts generated class diagrams", () => {
-  it("parses classes, members, stereotypes and every relation type", async () => {
+  it("parses classes, members, annotations and every relation shape", async () => {
     const ir: ClassIR = {
       kind: "class",
       classes: [
         {
-          id: "Animal" as ClassId,
+          id: CL("Animal"),
           name: "Animal",
-          stereotype: "abstract",
-          attributes: [{ name: "name", type: "String", visibility: "protected" }],
-          methods: [{ name: "speak", params: "loud: bool", type: "String", visibility: "public" }],
+          stereotypes: ["abstract", "living"],
+          attributes: [
+            { name: "name", type: "String", visibility: "protected" },
+            { name: "count", type: "int", visibility: "private", static: true },
+          ],
+          methods: [
+            { name: "speak", params: "loud: bool", type: "String", visibility: "public" },
+            { name: "breathe", params: "", visibility: "public", abstract: true },
+            { name: "make", params: "", type: "Animal", visibility: "public", static: true },
+          ],
         },
-        { id: "Dog" as ClassId, name: "Dog", attributes: [], methods: [] },
+        { id: CL("Dog"), name: "Dog", stereotypes: [], attributes: [], methods: [] },
       ],
       relations: [
-        { id: "r1" as RelationId, from: "Dog" as ClassId, to: "Animal" as ClassId, type: "inheritance" },
-        { id: "r2" as RelationId, from: "Dog" as ClassId, to: "Dog" as ClassId, type: "association", label: "parent", fromCardinality: "1", toCardinality: "0..1" },
-        { id: "r3" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "dependency" },
-        { id: "r4" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "composition" },
-        { id: "r5" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "aggregation" },
-        { id: "r6" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "realization" },
-        { id: "r7" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "linkSolid" },
-        { id: "r8" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "linkDashed" },
+        // forward, reversed and two-way spellings of every head
+        { id: REL("r1"), from: CL("Dog"), to: CL("Animal"), line: "solid", headFrom: "none", headTo: "inheritance" },
+        { id: REL("r2"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "inheritance", headTo: "none" },
+        { id: REL("r3"), from: CL("Dog"), to: CL("Dog"), line: "solid", headFrom: "none", headTo: "arrow", label: "parent", fromCardinality: "1", toCardinality: "0..1" },
+        { id: REL("r4"), from: CL("Animal"), to: CL("Dog"), line: "dashed", headFrom: "none", headTo: "arrow" },
+        { id: REL("r5"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "composition", headTo: "composition" },
+        { id: REL("r6"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "aggregation", headTo: "none" },
+        { id: REL("r7"), from: CL("Animal"), to: CL("Dog"), line: "dashed", headFrom: "inheritance", headTo: "inheritance" },
+        { id: REL("r8"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "none", headTo: "none" },
+        { id: REL("r9"), from: CL("Animal"), to: CL("Dog"), line: "dashed", headFrom: "arrow", headTo: "arrow" },
+        { id: REL("r10"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "none", headTo: "lollipop" },
+        { id: REL("r11"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "lollipop", headTo: "none" },
       ],
+      notes: [],
+      namespaces: [],
     };
     await expectMermaidAccepts(classToMermaid(ir));
   });
 
-  it("parses the direction directive", async () => {
+  it("parses labels, backtick names, generics, notes and namespaces", async () => {
     const ir: ClassIR = {
       kind: "class",
       direction: "LR",
       classes: [
-        { id: "A" as ClassId, name: "A", attributes: [], methods: [] },
-        { id: "B" as ClassId, name: "B", attributes: [], methods: [] },
+        { id: CL("Square"), name: "Square", generic: "Shape", label: 'A "square" <shape>', stereotypes: ["interface"], attributes: [], methods: [] },
+        { id: CL("Animal Class!"), name: "Animal Class!", stereotypes: [], attributes: [{ name: "position", type: "List~int~", visibility: "public" }], methods: [] },
+        { id: CL("my-class"), name: "my-class", namespace: "ns1" as NamespaceId, stereotypes: [], attributes: [], methods: [] },
       ],
-      relations: [{ id: "r1" as RelationId, from: "A" as ClassId, to: "B" as ClassId, type: "association" }],
+      relations: [
+        { id: REL("r1"), from: CL("Square"), to: CL("Animal Class!"), line: "solid", headFrom: "inheritance", headTo: "none", label: "is a" },
+      ],
+      notes: [
+        { id: "n1" as NoteId, text: 'free "note"\nsecond line' },
+        { id: "n2" as NoteId, text: "about the square", target: CL("Square") },
+      ],
+      namespaces: [{ id: "ns1" as NamespaceId, name: "Shapes" }],
     };
     await expectMermaidAccepts(classToMermaid(ir));
   });

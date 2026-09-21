@@ -5,22 +5,32 @@ exports[`layoutClassDiagram > matches the committed golden layout 1`] = `
   "classes": [
     {
       "attributes": [
-        "#name : String",
+        {
+          "abstract": false,
+          "static": false,
+          "text": "#String name",
+        },
       ],
       "attributesBottom": 197.2,
       "headerBottom": 169.2,
       "id": "Animal",
       "methods": [
-        "+speak() : String",
+        {
+          "abstract": false,
+          "static": false,
+          "text": "+speak() String",
+        },
       ],
       "name": "Animal",
       "rect": {
         "h": 109.6,
-        "w": 160,
+        "w": 144,
         "x": 0,
         "y": 115.59999999999998,
       },
-      "stereotype": "abstract",
+      "stereotypes": [
+        "abstract",
+      ],
     },
     {
       "attributes": [],
@@ -32,35 +42,40 @@ exports[`layoutClassDiagram > matches the committed golden layout 1`] = `
       "rect": {
         "h": 55.599999999999994,
         "w": 110,
-        "x": 25,
+        "x": 17,
         "y": 0,
       },
+      "stereotypes": [],
     },
   ],
   "kind": "class",
+  "namespaces": [],
+  "notes": [],
   "relations": [
     {
+      "headFrom": "none",
+      "headTo": "inheritance",
       "id": "r1",
+      "line": "solid",
       "points": [
         {
-          "x": 80,
+          "x": 72,
           "y": 55.599999999999994,
         },
         {
-          "x": 80,
+          "x": 72,
           "y": 85.6,
         },
         {
-          "x": 80,
+          "x": 72,
           "y": 115.59999999999998,
         },
       ],
-      "type": "inheritance",
     },
   ],
   "size": {
     "h": 225.2,
-    "w": 160,
+    "w": 144,
   },
 }
 `;

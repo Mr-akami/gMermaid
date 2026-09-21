@@ -52,6 +52,24 @@ export function expectCode(editor: Locator) {
   return expect.poll(() => codeText(editor), { timeout: 5_000 });
 }
 
+/** Click the middle of an edge/relation path.
+ *
+ * A polyline's <g> bounding box centre is usually empty canvas, so a plain
+ * `.click()` on the element either misses the stroke or is blocked by a
+ * neighbouring path; walk the geometry instead. */
+export async function clickPathMiddle(page: Page, editor: Locator, id: string): Promise<void> {
+  const point = await element(editor, id)
+    .locator("path")
+    .first()
+    .evaluate((el) => {
+      const path = el as unknown as SVGPathElement;
+      const p = path.getPointAtLength(path.getTotalLength() / 2);
+      const m = path.getScreenCTM()!;
+      return { x: p.x * m.a + p.y * m.c + m.e, y: p.x * m.b + p.y * m.d + m.f };
+    });
+  await page.mouse.click(point.x, point.y);
+}
+
 export function element(editor: Locator, id: string): Locator {
   return editor.locator(`[data-element-id="${id}"]`);
 }
