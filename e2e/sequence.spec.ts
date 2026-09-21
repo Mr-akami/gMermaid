@@ -114,3 +114,25 @@ test("autonumber start and step fields reach the code", async ({ page }) => {
   // numbering shows up on the rendered row
   await expect(editor.locator("svg text", { hasText: "10: call" })).toHaveCount(1);
 });
+
+// A note is attached to a lifeline in the text, so the GUI has to let you
+// say WHICH one — the creation heuristic used to be the only say you got.
+test("a note can be pointed at another lifeline", async ({ page }) => {
+  const editor = await openEditor(page, "Sequence");
+  await setCode(editor, "sequenceDiagram\n  participant A\n  participant B\n  participant C\n  A->>B: one\n");
+  await expectCode(editor).toContain("A->>B: one");
+
+  await editor.getByRole("button", { name: "+ Note" }).click();
+  await expectCode(editor).toContain("Note over A");
+
+  await editor.getByLabel("Note lifeline").selectOption({ label: "C" });
+  await expectCode(editor).toContain("Note over C");
+
+  await editor.getByLabel("Note second lifeline").selectOption({ label: "B" });
+  await expectCode(editor).toContain("Note over C,B");
+
+  // left of / right of hold one lifeline, so the pair collapses
+  await editor.getByLabel("Note position").selectOption("rightOf");
+  await expectCode(editor).toContain("Note right of C");
+  await expect(editor.getByLabel("Note second lifeline")).toHaveCount(0);
+});
