@@ -10,6 +10,7 @@ import {
   type ClassId,
   type ClassMember,
   type ClassMethod,
+  type NamespaceId,
 } from "@gmermaid/ir";
 import { layoutClassDiagram } from "@gmermaid/layout";
 import { classToMermaid } from "@gmermaid/mermaid-codegen";
@@ -32,14 +33,15 @@ function initialIR(): ClassIR {
     node: {
       id: a,
       name: "Animal",
+      stereotypes: [],
       attributes: [{ name: "name", type: "String", visibility: "protected" }],
-      methods: [{ name: "speak", params: "", type: "String", visibility: "public" }],
+      methods: [{ name: "speak", params: "", type: "String", visibility: "public", abstract: true }],
     },
   });
-  ir = applyClassAction(ir, { type: "addClass", node: { id: b, name: "Dog", attributes: [], methods: [] } });
+  ir = applyClassAction(ir, { type: "addClass", node: { id: b, name: "Dog", stereotypes: [], attributes: [], methods: [] } });
   ir = applyClassAction(ir, {
     type: "addRelation",
-    relation: { id: newId("relation"), from: b, to: a, type: "inheritance" },
+    relation: { id: newId("relation"), from: a, to: b, line: "solid", headFrom: "inheritance", headTo: "none" },
   });
   return ir;
 }
@@ -136,11 +138,17 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   const selectedClass = ir.classes.find((c) => c.id === view.selectedId);
   const selectedRelation = ir.relations.find((r) => r.id === view.selectedId);
+  const selectedNote = ir.notes.find((n) => n.id === view.selectedId);
+  const selectedNamespace = ir.namespaces.find((n) => n.id === view.selectedId);
   const selection: ClassSelection | undefined = selectedClass
     ? { kind: "class", node: selectedClass }
     : selectedRelation
       ? { kind: "relation", relation: selectedRelation }
-      : undefined;
+      : selectedNote
+        ? { kind: "note", note: selectedNote }
+        : selectedNamespace
+          ? { kind: "namespace", namespace: selectedNamespace }
+          : undefined;
 
   const canonicalAttrs = selectedClass?.attributes.map(formatAttribute).join("\n") ?? "";
   const canonicalMethods = selectedClass?.methods.map(formatMethod).join("\n") ?? "";
@@ -190,7 +198,26 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     const id = newId("class");
     let n = 1;
     while (ir.classes.some((c) => c.name === `NewClass${n}`)) n += 1;
-    h.dispatch({ type: "addClass", node: { id, name: `NewClass${n}`, attributes: [], methods: [] } });
+    h.dispatch({ type: "addClass", node: { id, name: `NewClass${n}`, stereotypes: [], attributes: [], methods: [] } });
+    setView({ selectedId: id });
+  }
+
+  function addNote() {
+    const id = newId("note");
+    h.dispatch({
+      type: "addNote",
+      note: { id, text: "note", ...(selectedClass !== undefined ? { target: selectedClass.id } : {}) },
+    });
+    setView({ selectedId: id });
+  }
+
+  // mermaid rejects an empty namespace, so one is created around the selection
+  function addNamespace() {
+    if (!selectedClass) return;
+    const id = newId("namespace");
+    let n = 1;
+    while (ir.namespaces.some((x) => x.name === `Namespace${n}`)) n += 1;
+    h.dispatch({ type: "addNamespace", namespace: { id, name: `Namespace${n}` }, classes: [selectedClass.id] });
     setView({ selectedId: id });
   }
 
@@ -208,7 +235,10 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     );
     if (!from || !target) return;
     const relId = newId("relation");
-    h.dispatch({ type: "addRelation", relation: { id: relId, from: from.id, to: target.id, type: "association" } });
+    h.dispatch({
+      type: "addRelation",
+      relation: { id: relId, from: from.id, to: target.id, line: "solid", headFrom: "none", headTo: "arrow" },
+    });
     setView({ selectedId: relId });
   }
 
@@ -217,7 +247,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     if (view.relateFrom !== undefined && target) {
       h.dispatch({
         type: "addRelation",
-        relation: { id: newId("relation"), from: view.relateFrom, to: target.id, type: "association" },
+        relation: { id: newId("relation"), from: view.relateFrom, to: target.id, line: "solid", headFrom: "none", headTo: "arrow" },
       });
     }
     if (view.selectedId !== id) setMemberDraft(null);
@@ -230,6 +260,8 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
         {mode === "standalone" && <button onClick={openFile}>Open…</button>}
         {mode === "standalone" && <button onClick={() => saveMmd(code, "class.mmd")}>Save…</button>}
         <button onClick={addClass}>+ Class</button>
+        <button onClick={addNote}>+ Note</button>
+        <button disabled={selectedClass === undefined} onClick={addNamespace}>+ Namespace</button>
         <button
           disabled={selectedClass === undefined}
           onClick={() => selectedClass && setView({ ...view, relateFrom: selectedClass.id })}
@@ -273,18 +305,33 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
             attributesText={attributesText}
             methodsText={methodsText}
             membersError={membersError}
+            namespaces={ir.namespaces}
+            classes={ir.classes}
             onChangeName={(name) => {
               if (!selectedClass) return;
               if (CLASS_NAME_RE.test(name)) h.dispatch({ type: "renameClass", id: selectedClass.id, name }, `class:${selectedClass.id}:name`);
             }}
-            onChangeStereotype={(stereotype) =>
-              selectedClass && h.dispatch({ type: "setStereotype", id: selectedClass.id, stereotype }, `class:${selectedClass.id}:st`)
+            onChangeLabel={(label) =>
+              selectedClass && h.dispatch({ type: "setClassLabel", id: selectedClass.id, label }, `class:${selectedClass.id}:label`)
+            }
+            onChangeGeneric={(generic) =>
+              selectedClass && h.dispatch({ type: "setClassGeneric", id: selectedClass.id, generic }, `class:${selectedClass.id}:generic`)
+            }
+            onChangeStereotypes={(text) =>
+              selectedClass &&
+              h.dispatch(
+                { type: "setStereotypes", id: selectedClass.id, stereotypes: text.split(",").map((s) => s.trim()).filter((s) => s !== "") },
+                `class:${selectedClass.id}:st`,
+              )
+            }
+            onChangeNamespace={(namespace?: NamespaceId) =>
+              selectedClass && h.dispatch({ type: "setClassNamespace", id: selectedClass.id, ...(namespace !== undefined ? { namespace } : {}) })
             }
             onChangeAttributesText={(text) => selectedClass && handleMembersChange(selectedClass.id, text, methodsText)}
             onChangeMethodsText={(text) => selectedClass && handleMembersChange(selectedClass.id, attributesText, text)}
-            onChangeRelationType={(relationType) =>
-              selectedRelation && h.dispatch({ type: "updateRelation", id: selectedRelation.id, relationType })
-            }
+            onChangeRelationLine={(line) => selectedRelation && h.dispatch({ type: "updateRelation", id: selectedRelation.id, line })}
+            onChangeHeadFrom={(headFrom) => selectedRelation && h.dispatch({ type: "updateRelation", id: selectedRelation.id, headFrom })}
+            onChangeHeadTo={(headTo) => selectedRelation && h.dispatch({ type: "updateRelation", id: selectedRelation.id, headTo })}
             onChangeRelationLabel={(label) =>
               selectedRelation && h.dispatch({ type: "updateRelation", id: selectedRelation.id, label }, `rel:${selectedRelation.id}:label`)
             }
@@ -294,9 +341,20 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
             onChangeToCardinality={(toCardinality) =>
               selectedRelation && h.dispatch({ type: "updateRelation", id: selectedRelation.id, toCardinality }, `rel:${selectedRelation.id}:tc`)
             }
+            onChangeNoteText={(text) =>
+              selectedNote && h.dispatch({ type: "updateNote", id: selectedNote.id, text }, `note:${selectedNote.id}:text`)
+            }
+            onChangeNoteTarget={(target?: ClassId) =>
+              selectedNote && h.dispatch({ type: "updateNote", id: selectedNote.id, target: target ?? null })
+            }
+            onChangeNamespaceName={(name) =>
+              selectedNamespace && h.dispatch({ type: "renameNamespace", id: selectedNamespace.id, name }, `ns:${selectedNamespace.id}:name`)
+            }
             onDelete={() => {
               if (selectedClass) h.dispatch({ type: "removeClass", id: selectedClass.id });
               if (selectedRelation) h.dispatch({ type: "removeRelation", id: selectedRelation.id });
+              if (selectedNote) h.dispatch({ type: "removeNote", id: selectedNote.id });
+              if (selectedNamespace) h.dispatch({ type: "removeNamespace", id: selectedNamespace.id });
               setMemberDraft(null);
               setView({});
             }}

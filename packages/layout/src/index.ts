@@ -9,3 +9,5 @@ export * from "./timeline";
 export * from "./journey";
 export * from "./requirement";
 export * from "./mindmap";
+export * from "./ganttTime";
+export * from "./gantt";

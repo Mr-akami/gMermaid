@@ -1,7 +1,8 @@
-import type { ClassIR, FlowchartIR, JourneyIR, MindmapIR, RequirementIR, SequenceIR, StateIR, TimelineIR } from "@gmermaid/ir";
+import type { ClassIR, FlowchartIR, GanttIR, JourneyIR, MindmapIR, RequirementIR, SequenceIR, StateIR, TimelineIR } from "@gmermaid/ir";
 import { parseClassDiagram } from "./classdiagram";
 import { firstStatement, type ParseResult } from "./common";
 import { parseFlowchart } from "./flowchart";
+import { parseGantt } from "./gantt";
 import { parseJourney } from "./journey";
 import { parseMindmap } from "./mindmap";
 import { parseRequirementDiagram } from "./requirement";
@@ -12,10 +13,10 @@ import { parseTimeline } from "./timeline";
 // One place that knows every diagram kind gMermaid supports. Adding a
 // diagram = add it here, then register its editor in packages/app.
 
-export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "mindmap"] as const;
+export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "gantt", "mindmap"] as const;
 export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
 
-export type AnyIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR | TimelineIR | MindmapIR;
+export type AnyIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR | TimelineIR | GanttIR | MindmapIR;
 
 /** Header keyword(s) that open each diagram kind, in mermaid text. */
 const HEADERS: Record<DiagramKind, readonly string[]> = {
@@ -27,6 +28,7 @@ const HEADERS: Record<DiagramKind, readonly string[]> = {
   journey: ["journey"],
   requirement: ["requirementDiagram"],
   mindmap: ["mindmap"],
+  gantt: ["gantt"],
 };
 
 export function detectDiagramKind(code: string): DiagramKind | undefined {
@@ -55,5 +57,7 @@ export function parseDiagram(kind: DiagramKind, code: string): ParseResult<AnyIR
       return parseRequirementDiagram(code);
     case "mindmap":
       return parseMindmap(code);
+    case "gantt":
+      return parseGantt(code);
   }
 }

@@ -10,12 +10,14 @@ import type {
   FlowchartEdge,
   FlowchartIR,
   FragmentId,
+  GanttIR,
   JourneyIR,
   LifecycleId,
   LifelineId,
   MessageId,
   MindmapIR,
   MindmapNodeId,
+  NamespaceId,
   NodeId,
   NoteId,
   RelationId,
@@ -31,6 +33,7 @@ import { FLOWCHART_SHAPES } from "@gmermaid/ir";
 import mermaid from "mermaid";
 import { flowchartToMermaid } from "./flowchart";
 import { classToMermaid } from "./classdiagram";
+import { ganttToMermaid } from "./gantt";
 import { journeyToMermaid } from "./journey";
 import { mindmapToMermaid } from "./mindmap";
 import { requirementToMermaid } from "./requirement";
@@ -193,43 +196,67 @@ describe("mermaid.js accepts generated flowcharts", () => {
   });
 });
 
+const CL = (s: string) => s as ClassId;
+const REL = (s: string) => s as RelationId;
+
 describe("mermaid.js accepts generated class diagrams", () => {
-  it("parses classes, members, stereotypes and every relation type", async () => {
+  it("parses classes, members, annotations and every relation shape", async () => {
     const ir: ClassIR = {
       kind: "class",
       classes: [
         {
-          id: "Animal" as ClassId,
+          id: CL("Animal"),
           name: "Animal",
-          stereotype: "abstract",
-          attributes: [{ name: "name", type: "String", visibility: "protected" }],
-          methods: [{ name: "speak", params: "loud: bool", type: "String", visibility: "public" }],
+          stereotypes: ["abstract", "living"],
+          attributes: [
+            { name: "name", type: "String", visibility: "protected" },
+            { name: "count", type: "int", visibility: "private", static: true },
+          ],
+          methods: [
+            { name: "speak", params: "loud: bool", type: "String", visibility: "public" },
+            { name: "breathe", params: "", visibility: "public", abstract: true },
+            { name: "make", params: "", type: "Animal", visibility: "public", static: true },
+          ],
         },
-        { id: "Dog" as ClassId, name: "Dog", attributes: [], methods: [] },
+        { id: CL("Dog"), name: "Dog", stereotypes: [], attributes: [], methods: [] },
       ],
       relations: [
-        { id: "r1" as RelationId, from: "Dog" as ClassId, to: "Animal" as ClassId, type: "inheritance" },
-        { id: "r2" as RelationId, from: "Dog" as ClassId, to: "Dog" as ClassId, type: "association", label: "parent", fromCardinality: "1", toCardinality: "0..1" },
-        { id: "r3" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "dependency" },
-        { id: "r4" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "composition" },
-        { id: "r5" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "aggregation" },
-        { id: "r6" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "realization" },
-        { id: "r7" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "linkSolid" },
-        { id: "r8" as RelationId, from: "Animal" as ClassId, to: "Dog" as ClassId, type: "linkDashed" },
+        // forward, reversed and two-way spellings of every head
+        { id: REL("r1"), from: CL("Dog"), to: CL("Animal"), line: "solid", headFrom: "none", headTo: "inheritance" },
+        { id: REL("r2"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "inheritance", headTo: "none" },
+        { id: REL("r3"), from: CL("Dog"), to: CL("Dog"), line: "solid", headFrom: "none", headTo: "arrow", label: "parent", fromCardinality: "1", toCardinality: "0..1" },
+        { id: REL("r4"), from: CL("Animal"), to: CL("Dog"), line: "dashed", headFrom: "none", headTo: "arrow" },
+        { id: REL("r5"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "composition", headTo: "composition" },
+        { id: REL("r6"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "aggregation", headTo: "none" },
+        { id: REL("r7"), from: CL("Animal"), to: CL("Dog"), line: "dashed", headFrom: "inheritance", headTo: "inheritance" },
+        { id: REL("r8"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "none", headTo: "none" },
+        { id: REL("r9"), from: CL("Animal"), to: CL("Dog"), line: "dashed", headFrom: "arrow", headTo: "arrow" },
+        { id: REL("r10"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "none", headTo: "lollipop" },
+        { id: REL("r11"), from: CL("Animal"), to: CL("Dog"), line: "solid", headFrom: "lollipop", headTo: "none" },
       ],
+      notes: [],
+      namespaces: [],
     };
     await expectMermaidAccepts(classToMermaid(ir));
   });
 
-  it("parses the direction directive", async () => {
+  it("parses labels, backtick names, generics, notes and namespaces", async () => {
     const ir: ClassIR = {
       kind: "class",
       direction: "LR",
       classes: [
-        { id: "A" as ClassId, name: "A", attributes: [], methods: [] },
-        { id: "B" as ClassId, name: "B", attributes: [], methods: [] },
+        { id: CL("Square"), name: "Square", generic: "Shape", label: 'A "square" <shape>', stereotypes: ["interface"], attributes: [], methods: [] },
+        { id: CL("Animal Class!"), name: "Animal Class!", stereotypes: [], attributes: [{ name: "position", type: "List~int~", visibility: "public" }], methods: [] },
+        { id: CL("my-class"), name: "my-class", namespace: "ns1" as NamespaceId, stereotypes: [], attributes: [], methods: [] },
       ],
-      relations: [{ id: "r1" as RelationId, from: "A" as ClassId, to: "B" as ClassId, type: "association" }],
+      relations: [
+        { id: REL("r1"), from: CL("Square"), to: CL("Animal Class!"), line: "solid", headFrom: "inheritance", headTo: "none", label: "is a" },
+      ],
+      notes: [
+        { id: "n1" as NoteId, text: 'free "note"\nsecond line' },
+        { id: "n2" as NoteId, text: "about the square", target: CL("Square") },
+      ],
+      namespaces: [{ id: "ns1" as NamespaceId, name: "Shapes" }],
     };
     await expectMermaidAccepts(classToMermaid(ir));
   });
@@ -495,6 +522,56 @@ describe("mermaid.js accepts generated requirement diagrams", () => {
       ],
     };
     await expectMermaidAccepts(requirementToMermaid(ir));
+  });
+});
+
+describe("mermaid.js accepts generated gantt charts", () => {
+  it("parses every diagram setting, tag, id and start/end form", async () => {
+    const ir: GanttIR = {
+      kind: "gantt",
+      title: "Adding GANTT diagram functionality to mermaid",
+      dateFormat: "YYYY-MM-DD",
+      axisFormat: "%d/%m",
+      tickInterval: "1week",
+      excludes: ["weekends", "2014-01-10"],
+      weekend: "friday",
+      todayMarker: "stroke-width:5px,stroke:#0f0,opacity:0.5",
+      inclusiveEndDates: true,
+      sections: [
+        {
+          id: "s1" as SectionId,
+          name: "A section",
+          tasks: [
+            { id: "t1" as TaskId, name: "Completed task", taskId: "des1", tags: ["done"], start: { kind: "date", value: "2014-01-06" }, end: { kind: "date", value: "2014-01-08" } },
+            { id: "t2" as TaskId, name: "Active task", taskId: "des2", tags: ["active"], start: { kind: "date", value: "2014-01-09" }, end: { kind: "duration", value: "3d" } },
+            { id: "t3" as TaskId, name: "Critical path", tags: ["crit", "done"], start: { kind: "after", ids: ["des1", "des2"] }, end: { kind: "duration", value: "2d" } },
+            { id: "t4" as TaskId, name: "Add to mermaid", tags: [], start: { kind: "prev" }, end: { kind: "until", ids: ["isadded"] } },
+            { id: "t5" as TaskId, name: "Functionality added", taskId: "isadded", tags: ["milestone"], start: { kind: "date", value: "2014-01-25" }, end: { kind: "duration", value: "0d" } },
+            { id: "t6" as TaskId, name: "Deadline", taskId: "v1", tags: ["vert"], start: { kind: "date", value: "2014-01-28" }, end: { kind: "duration", value: "0d" } },
+          ],
+        },
+      ],
+    };
+    await expectMermaidAccepts(ganttToMermaid(ir));
+  });
+
+  it("parses a bare chart, a nameless leading section and `todayMarker off`", async () => {
+    await expectMermaidAccepts(ganttToMermaid({ kind: "gantt", sections: [] }));
+    const ir: GanttIR = {
+      kind: "gantt",
+      todayMarker: "off",
+      sections: [
+        {
+          id: "s0" as SectionId,
+          name: "",
+          tasks: [
+            { id: "t1" as TaskId, name: "apple", taskId: "a", tags: [], start: { kind: "date", value: "2017-07-20" }, end: { kind: "duration", value: "1w" } },
+            { id: "t2" as TaskId, name: "kiwi", taskId: "d", tags: [], start: { kind: "date", value: "2017-07-20" }, end: { kind: "until", ids: ["a"] } },
+          ],
+        },
+      ],
+    };
+    await expectMermaidAccepts(ganttToMermaid(ir));
   });
 });
 

@@ -46,11 +46,19 @@ auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
 - Per-block `direction` round-trips but is not honored by layout: dagre has
   one rankdir per graph. An empty region is not expressible in mermaid text,
   so the GUI splits an existing member into a new region instead.
-### Class
+### Class (done)
 - Reversed / two-way relation tokens, `direction TD`, `classDiagram-v2`,
   `class X["label"]` + relaxed names, `*`/`$` classifiers, type-first
   attributes, inline `<<annotation>>`, generic class names, notes,
   namespaces, lollipop.
+- The relation IR is `line` (solid/dashed) + a head per end, so the named
+  UML kinds fall out of it (realization = dashed + inheritance head,
+  dependency = dashed + arrow). Reversed tokens keep their ends in source
+  order and move the head, so the token survives the round trip verbatim.
+- Left out: nested and dotted namespaces (flat, one level only) — a nested
+  `namespace` block is a parse error. The `*` classifier on an ATTRIBUTE is
+  dropped on import: UML has no abstract field and the IR keeps `abstract`
+  on methods only.
 
 ## Phase 3 — new diagram kinds (parallel, one PR per kind)
 Wave 1: Gantt, Requirement, User Journey.

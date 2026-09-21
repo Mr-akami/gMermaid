@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement" | "Journey" | "Timeline" | "Mindmap";
+export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement" | "Journey" | "Timeline" | "Gantt" | "Mindmap";
 
 /** Open the app fresh (no autosave) and switch to a diagram tab. */
 export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
@@ -50,6 +50,24 @@ export async function setCode(editor: Locator, text: string): Promise<void> {
  * after a click or keystroke races that sync — poll instead. */
 export function expectCode(editor: Locator) {
   return expect.poll(() => codeText(editor), { timeout: 5_000 });
+}
+
+/** Click the middle of an edge/relation path.
+ *
+ * A polyline's <g> bounding box centre is usually empty canvas, so a plain
+ * `.click()` on the element either misses the stroke or is blocked by a
+ * neighbouring path; walk the geometry instead. */
+export async function clickPathMiddle(page: Page, editor: Locator, id: string): Promise<void> {
+  const point = await element(editor, id)
+    .locator("path")
+    .first()
+    .evaluate((el) => {
+      const path = el as unknown as SVGPathElement;
+      const p = path.getPointAtLength(path.getTotalLength() / 2);
+      const m = path.getScreenCTM()!;
+      return { x: p.x * m.a + p.y * m.c + m.e, y: p.x * m.b + p.y * m.d + m.f };
+    });
+  await page.mouse.click(point.x, point.y);
 }
 
 export function element(editor: Locator, id: string): Locator {
