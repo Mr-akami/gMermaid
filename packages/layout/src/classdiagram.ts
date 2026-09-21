@@ -11,6 +11,7 @@ import {
   type RelationLine,
   type RelationId,
 } from "@gmermaid/ir";
+import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
 
@@ -131,7 +132,7 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     // dagre cannot route self-edges — they are synthesized after layout as a
     // rectangular detour off the node's right side (cf. SELF_MSG_EXTRA in
     // the sequence layout)
-    if (r.from !== r.to) g.setEdge(r.from, r.to, {}, r.id);
+    if (r.from !== r.to) g.setEdge(r.from, r.to, edgeLabelSize(r.label, measure, NOTE_FONT), r.id);
   }
 
   // notes take part in the layout as ordinary nodes: an attached note is

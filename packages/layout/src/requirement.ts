@@ -1,5 +1,6 @@
 import dagre from "@dagrejs/dagre";
 import type { ElementId, RelationId, RequirementIR, RequirementRelationType, RequirementId } from "@gmermaid/ir";
+import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
 
@@ -107,7 +108,7 @@ export function layoutRequirementDiagram(ir: RequirementIR, measure: TextMeasure
       throw new Error(`layoutRequirementDiagram: relation ${r.id} references a missing node`);
     }
     // dagre cannot route self-edges — synthesized after layout as a detour
-    if (r.from !== r.to) g.setEdge(r.from, r.to, {}, r.id);
+    if (r.from !== r.to) g.setEdge(r.from, r.to, edgeLabelSize(`«${r.type}»`, measure, BODY_FONT), r.id);
   }
 
   dagre.layout(g);

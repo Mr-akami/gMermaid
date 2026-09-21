@@ -1,5 +1,6 @@
 import dagre from "@dagrejs/dagre";
 import type { NoteId, StateIR, StateId, StateRole, TransitionId } from "@gmermaid/ir";
+import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
 import { clipPolylineAtRect, selfLoopPoints, SELF_LOOP_REACH } from "./compound";
@@ -160,7 +161,7 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
     }
     // dagre cannot route self-edges — synthesized after layout as a detour
     // off the box's right side (same geometry as class self-relations)
-    if (t.from !== t.to) g.setEdge(anchor(t.from), anchor(t.to), {}, t.id);
+    if (t.from !== t.to) g.setEdge(anchor(t.from), anchor(t.to), edgeLabelSize(t.label, measure, LABEL_STYLE), t.id);
   }
 
   // Regions stack along the flow axis: an invisible, zero-weight edge between
@@ -356,7 +357,12 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
     return {
       id: t.id,
       points,
-      ...(t.label !== undefined ? { label: t.label, labelPos: { x: mid.x, y: mid.y - 6 } } : {}),
+      ...(t.label !== undefined
+        ? {
+            label: t.label,
+            labelPos: typeof e.x === "number" && typeof e.y === "number" ? { x: e.x, y: e.y } : { x: mid.x, y: mid.y - 6 },
+          }
+        : {}),
     };
   });
 
