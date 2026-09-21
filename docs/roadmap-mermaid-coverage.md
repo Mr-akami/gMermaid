@@ -1,7 +1,12 @@
 # Mermaid coverage roadmap (2026-09-21)
 
-Goal: close the gap between gMermaid and mermaid.js syntax for the four core
-diagrams, then add Gantt / Requirement / Usecase / User Journey.
+**All phases below are merged.** gMermaid supports nine diagram kinds; the
+README table is the user-facing summary, this file keeps the per-kind
+decisions and the deliberate gaps.
+
+Goal was: close the gap between gMermaid and mermaid.js syntax for the four
+core diagrams, then add Gantt / Requirement / Usecase / User Journey, then
+Mindmap / Timeline.
 Each phase = one or more PRs; every PR carries unit tests (parser round
 trip, reducer, layout golden) and Playwright GUI tests under `e2e/`.
 
@@ -13,12 +18,12 @@ auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
 - Playwright harness, tab smoke test, CI step. `pnpm test:e2e`.
 - Diagram-kind registry (`DIAGRAM_KINDS`, `detectDiagramKind`, `DIAGRAMS`).
 
-## Phase 1 — parser leniency, all kinds (in progress)
+## Phase 1 — parser leniency, all kinds (done)
 - Frontmatter, `%%{init}%%`, trailing `%%` comments, `;` separators, bare
   `flowchart`/`graph TD;` headers, `:::class` stripped, styling/interaction
   lines dropped, `accTitle`/`accDescr` skipped, unicode / dotted ids.
 
-## Phase 2 — core four, feature depth (parallel, one PR per kind)
+## Phase 2 — core four, feature depth (done)
 ### Flowchart (done)
 - Edge model: line style (solid/dotted/thick/invisible) × head at each end
   (none/arrow/circle/cross) → `<-->`, `--o`, `x--x`, `-.-`, `===`.
@@ -60,11 +65,10 @@ auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
   dropped on import: UML has no abstract field and the IR keeps `abstract`
   on methods only.
 
-## Phase 3 — new diagram kinds (parallel, one PR per kind)
+## Phase 3 — new diagram kinds (done)
 Wave 1: Gantt, Requirement, User Journey.
-Wave 2: Mindmap (done), Timeline, Usecase (`usecase-beta`, needs mermaid ≥ 12 for
-validation — dev dependency bumped to 12.0.0; existing integration tests
-still pass).
+Wave 2: Mindmap, Timeline, Usecase (`usecase-beta`, needs mermaid ≥ 12 for
+validation — the dev dependency was bumped to 12.0.0).
 Each: IR + actions, parser, codegen, layout, renderer, editor + property
 window, registry entry, mermaid.js integration test, e2e spec.
 
@@ -82,6 +86,21 @@ window, registry entry, mermaid.js integration test, e2e spec.
   skipped), icon actors, explicit edge ids and their `animation` / `animate`
   metadata, extra-dash edge length, `classDef` / `class` / `style` / `:::`.
 
-## Phase 4 — polish
-- Cross-kind: shared `<br/>` multi-line text rendering, README/coverage
-  table, homework cleanup.
+## Phase 4 — polish (done)
+- README coverage table; the MCP tool description is generated from
+  `DIAGRAM_KINDS` so a new kind no longer needs a prose edit.
+- `expectCode` in `e2e/helpers.ts`: the CodeMirror wrapper defers external
+  value updates for 200ms after a local edit, so a single read of the pane
+  right after an edit races the sync. Poll instead of reading once.
+
+## Not planned
+- Styling and interaction syntax (`classDef`, `style`, `:::`, `click`,
+  `linkStyle`, `%%` comments) stays tolerated-and-dropped: it has no
+  meaning in a structural editor, so it cannot survive a round trip.
+- Per-cluster layout direction in flowchart subgraphs and state composites:
+  dagre has one rankdir per graph. The text round-trips.
+- Diagram kinds mermaid supports that gMermaid does not draw yet: ER, pie,
+  quadrant, git graph, block, C4, sankey, xychart, radar, packet, kanban,
+  architecture and treemap. Each would be another vertical slice; the
+  registry in `packages/mermaid-parser/src/registry.ts` plus
+  `packages/app/src/diagrams.tsx` is where one gets plugged in.
