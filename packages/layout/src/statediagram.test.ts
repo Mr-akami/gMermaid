@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StateIR, StateId, TransitionId } from "@gmermaid/ir";
 import { fixedWidthMeasurer } from "./measurer";
-import { layoutStateDiagram } from "./statediagram";
+import { COMPOSITE_TITLE_BAND, layoutStateDiagram } from "./statediagram";
 
 const S = (s: string) => s as StateId;
 const N = (s: string) => s as import("@gmermaid/ir").NoteId;
@@ -18,6 +18,13 @@ const ir: StateIR = {
     { id: "t1" as TransitionId, from: S("state_start"), to: S("Still") },
     { id: "t2" as TransitionId, from: S("Still"), to: S("state_end"), label: "done" },
   ],
+};
+
+/** Distance dagre left between the start dot and `Leaf`. */
+const startToLeafGap = (source: StateIR): number => {
+  const r = layoutStateDiagram(source, fixedWidthMeasurer());
+  const box = (id: string) => r.states.find((s) => s.id === id)!.rect;
+  return box("Leaf").y - (box("s").y + box("s").h);
 };
 
 describe("layoutStateDiagram", () => {
@@ -158,5 +165,150 @@ describe("layoutStateDiagram", () => {
     expect(Number.isFinite(empty.size.w)).toBe(true);
     const result = layoutStateDiagram(ir, fixedWidthMeasurer());
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+});
+
+  // The reported bug: three nested frames all landed on the same left edge and
+  // one edge inside the innermost one was ~380px long.
+  const nestedIR = (): StateIR => ({
+    kind: "state",
+    notes: [],
+    states: [
+      { id: S("state_start"), label: "", role: "start" },
+      { id: S("Outer"), label: "Outer", role: "normal" },
+      { id: S("state_start_Outer"), label: "", role: "start", parent: S("Outer") },
+      { id: S("Middle"), label: "Middle", role: "normal", parent: S("Outer") },
+      { id: S("state_start_Middle"), label: "", role: "start", parent: S("Middle") },
+      { id: S("Inner"), label: "Inner", role: "normal", parent: S("Middle") },
+      { id: S("state_start_Inner"), label: "", role: "start", parent: S("Inner") },
+      { id: S("Leaf"), label: "Leaf", role: "normal", parent: S("Inner") },
+      { id: S("state_end_Inner"), label: "", role: "end", parent: S("Inner") },
+      { id: S("Done"), label: "Done", role: "normal", parent: S("Middle") },
+      { id: S("Ready"), label: "Ready", role: "normal", parent: S("Outer") },
+      { id: S("state_end"), label: "", role: "end" },
+    ],
+    transitions: [
+      { id: "t1" as TransitionId, from: S("state_start"), to: S("Outer") },
+      { id: "t2" as TransitionId, from: S("state_start_Outer"), to: S("Middle") },
+      { id: "t3" as TransitionId, from: S("state_start_Middle"), to: S("Inner") },
+      { id: "t4" as TransitionId, from: S("state_start_Inner"), to: S("Leaf") },
+      { id: "t5" as TransitionId, from: S("Leaf"), to: S("state_end_Inner") },
+      { id: "t6" as TransitionId, from: S("Inner"), to: S("Done") },
+      { id: "t7" as TransitionId, from: S("Middle"), to: S("Ready") },
+      { id: "t8" as TransitionId, from: S("Outer"), to: S("state_end") },
+    ],
+  });
+
+describe("nested composites", () => {
+  it("matches the committed golden layout three levels deep", () => {
+    expect(layoutStateDiagram(nestedIR(), fixedWidthMeasurer())).toMatchSnapshot();
+  });
+
+  it("insets every frame strictly inside its parent, title band included", () => {
+    const result = layoutStateDiagram(nestedIR(), fixedWidthMeasurer());
+    const box = (id: string) => result.states.find((s) => s.id === id)!.rect;
+    for (const [parent, child] of [
+      ["Outer", "Middle"],
+      ["Middle", "Inner"],
+    ] as const) {
+      const p = box(parent);
+      const c = box(child);
+      expect(c.x).toBeGreaterThan(p.x);
+      expect(c.x + c.w).toBeLessThan(p.x + p.w);
+      // the child clears the parent title band, so the two titles never collide
+      expect(c.y).toBeGreaterThanOrEqual(p.y + COMPOSITE_TITLE_BAND);
+      expect(c.y + c.h).toBeLessThan(p.y + p.h);
+    }
+    // and the leaves clear the innermost title band too
+    const inner = box("Inner");
+    expect(box("Leaf").y).toBeGreaterThanOrEqual(inner.y + COMPOSITE_TITLE_BAND);
+  });
+
+  it("keeps rank separation independent of nesting depth", () => {
+    // the same three members, wrapped in one composite and then in three
+    const content = (parent: StateId) => [
+      { id: S("s"), label: "", role: "start" as const, parent },
+      { id: S("Leaf"), label: "Leaf", role: "normal" as const, parent },
+      { id: S("e"), label: "", role: "end" as const, parent },
+    ];
+    const wrapped = (depth: number): StateIR => {
+      const chain = Array.from({ length: depth }, (_, i) => S(`C${i}`));
+      const states = chain.map((id, i) => ({
+        id,
+        label: id as string,
+        role: "normal" as const,
+        ...(i > 0 ? { parent: chain[i - 1]! } : {}),
+      }));
+      return {
+        kind: "state",
+        notes: [],
+        states: [...states, ...content(chain.at(-1)!)],
+        transitions: [
+          { id: "a" as TransitionId, from: S("s"), to: S("Leaf") },
+          { id: "b" as TransitionId, from: S("Leaf"), to: S("e") },
+        ],
+      };
+    };
+    expect(startToLeafGap(wrapped(3))).toBe(startToLeafGap(wrapped(1)));
+  });
+
+  it("honours a composite's own direction", () => {
+    const sideways: StateIR = {
+      kind: "state",
+      notes: [],
+      states: [
+        { id: S("Comp"), label: "Comp", role: "normal", direction: "LR" },
+        { id: S("A"), label: "A", role: "normal", parent: S("Comp") },
+        { id: S("B"), label: "B", role: "normal", parent: S("Comp") },
+        { id: S("Out"), label: "Out", role: "normal" },
+      ],
+      transitions: [
+        { id: "t1" as TransitionId, from: S("A"), to: S("B") },
+        { id: "t2" as TransitionId, from: S("Comp"), to: S("Out") },
+      ],
+    };
+    const r = layoutStateDiagram(sideways, fixedWidthMeasurer());
+    const box = (id: string) => r.states.find((s) => s.id === id)!.rect;
+    // inside the composite the flow runs left to right...
+    expect(box("B").x).toBeGreaterThan(box("A").x + box("A").w);
+    expect(box("A").y).toBe(box("B").y);
+    // ...while the diagram around it stays top-down
+    expect(box("Out").y).toBeGreaterThan(box("Comp").y + box("Comp").h);
+  });
+
+  it("keeps concurrency regions working inside a nested composite", () => {
+    const buried: StateIR = {
+      kind: "state",
+      notes: [],
+      states: [
+        { id: S("Outer"), label: "Outer", role: "normal" },
+        { id: S("Active"), label: "Active", role: "normal", parent: S("Outer") },
+        { id: S("NumOff"), label: "NumOff", role: "normal", parent: S("Active") },
+        { id: S("NumOn"), label: "NumOn", role: "normal", parent: S("Active") },
+        { id: S("CapsOff"), label: "CapsOff", role: "normal", parent: S("Active"), region: 1 },
+      ],
+      transitions: [{ id: "t1" as TransitionId, from: S("NumOff"), to: S("NumOn") }],
+    };
+    const r = layoutStateDiagram(buried, fixedWidthMeasurer());
+    expect(r.regions.map((b) => [b.parent, b.index])).toEqual([
+      ["Active", 0],
+      ["Active", 1],
+    ]);
+    const frame = r.states.find((s) => s.id === "Active")!.rect;
+    const outer = r.states.find((s) => s.id === "Outer")!.rect;
+    for (const band of r.regions) {
+      expect(band.rect.x).toBeGreaterThanOrEqual(frame.x - 0.001);
+      expect(band.rect.x + band.rect.w).toBeLessThanOrEqual(frame.x + frame.w + 0.001);
+    }
+    // the bands travelled with their composite into the outer frame
+    expect(frame.x).toBeGreaterThan(outer.x);
+    expect(r.regions[0]!.rect.x).toBeGreaterThan(outer.x);
+    expect(r.regionSeparators).toHaveLength(1);
+    const sep = r.regionSeparators[0]!;
+    expect(sep.x1).toBe(frame.x);
+    expect(sep.x2).toBe(frame.x + frame.w);
+    expect(sep.y1).toBeGreaterThan(frame.y);
+    expect(sep.y1).toBeLessThan(frame.y + frame.h);
+    expect(JSON.parse(JSON.stringify(r))).toEqual(r);
   });
 });
