@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EdgeId, FlowchartIR, NodeId } from "@gmermaid/ir";
+import { FLOWCHART_SHAPES, type EdgeId, type FlowchartIR, type NodeId } from "@gmermaid/ir";
 import { flowchartToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseFlowchart } from "./flowchart";
 
@@ -25,10 +25,10 @@ describe("parseFlowchart", () => {
       ["b", "Is valid?", "diamond"],
       ["c", "End", "rect"],
     ]);
-    expect(result.ir.edges.map((e) => [e.from, e.to, e.arrow, e.label])).toEqual([
-      ["a", "b", "arrow", undefined],
-      ["b", "c", "dotted", "yes"],
-      ["b", "a", "thick", "no"],
+    expect(result.ir.edges.map((e) => [e.from, e.to, e.line, e.headEnd, e.label])).toEqual([
+      ["a", "b", "solid", "arrow", undefined],
+      ["b", "c", "dotted", "arrow", "yes"],
+      ["b", "a", "thick", "arrow", "no"],
     ]);
   });
 
@@ -67,8 +67,8 @@ describe("parseFlowchart", () => {
         { id: "n3" as NodeId, label: "plain", shape: "diamond" },
       ],
       edges: [
-        { id: "edge-1" as EdgeId, from: "n1" as NodeId, to: "n2" as NodeId, arrow: "dotted", label: "a#b" },
-        { id: "edge-2" as EdgeId, from: "n2" as NodeId, to: "n3" as NodeId, arrow: "open" },
+        { id: "edge-1" as EdgeId, from: "n1" as NodeId, to: "n2" as NodeId, line: "dotted", headStart: "none", headEnd: "arrow", label: "a#b" },
+        { id: "edge-2" as EdgeId, from: "n2" as NodeId, to: "n3" as NodeId, line: "solid", headStart: "none", headEnd: "none" },
       ],
     };
     const code = flowchartToMermaid(ir);
@@ -96,7 +96,7 @@ describe("parseFlowchart", () => {
   subgraphs: [],
       direction: "TB",
       nodes: shapes.map((shape, i) => ({ id: `n${i}` as NodeId, label: `s ${shape}`, shape })),
-      edges: [{ id: "edge-1" as EdgeId, from: "n0" as NodeId, to: "n1" as NodeId, arrow: "invisible" }],
+      edges: [{ id: "edge-1" as EdgeId, from: "n0" as NodeId, to: "n1" as NodeId, line: "invisible", headStart: "none", headEnd: "none" }],
     };
     const code = flowchartToMermaid(ir);
     const back = parseFlowchart(code);
@@ -121,10 +121,10 @@ describe("parseFlowchart", () => {
     const result = parseFlowchart("flowchart TB\n  a-- go -->b\n  b-. maybe .->c\n  c== hard ==>d\n");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.ir.edges.map((e) => [e.label, e.arrow])).toEqual([
-      ["go", "arrow"],
-      ["maybe", "dotted"],
-      ["hard", "thick"],
+    expect(result.ir.edges.map((e) => [e.label, e.line, e.headEnd])).toEqual([
+      ["go", "solid", "arrow"],
+      ["maybe", "dotted", "arrow"],
+      ["hard", "thick", "arrow"],
     ]);
   });
 
@@ -264,5 +264,183 @@ flowchart LR
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors[0]!.line).toBe(6);
+  });
+});
+
+// Link tokens, as mermaid's own destructLink reads them (probed against
+// mermaid.js 11.16.1): the last char is the head, the rest is the line, and
+// the leftover line chars are the rank span.
+const link = (code: string) => {
+  const result = parseFlowchart(`flowchart TB\n  ${code}\n`);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+  if (!result.ok) throw new Error("unreachable");
+  const e = result.ir.edges[0]!;
+  return [e.line, e.headStart, e.headEnd, e.length ?? 1, e.label] as const;
+};
+
+describe("parseFlowchart edge model", () => {
+  it.each([
+    ["A --> B", ["solid", "none", "arrow", 1, undefined]],
+    ["A --- B", ["solid", "none", "none", 1, undefined]],
+    ["A -.-> B", ["dotted", "none", "arrow", 1, undefined]],
+    ["A -.- B", ["dotted", "none", "none", 1, undefined]],
+    ["A ==> B", ["thick", "none", "arrow", 1, undefined]],
+    ["A === B", ["thick", "none", "none", 1, undefined]],
+    ["A ~~~ B", ["invisible", "none", "none", 1, undefined]],
+    ["A <--> B", ["solid", "arrow", "arrow", 1, undefined]],
+    ["A <==> B", ["thick", "arrow", "arrow", 1, undefined]],
+    ["A <-.-> B", ["dotted", "arrow", "arrow", 1, undefined]],
+    ["A --o B", ["solid", "none", "circle", 1, undefined]],
+    ["A --x B", ["solid", "none", "cross", 1, undefined]],
+    ["A o--o B", ["solid", "circle", "circle", 1, undefined]],
+    ["A x--x B", ["solid", "cross", "cross", 1, undefined]],
+    ["A o-- txt --o B", ["solid", "circle", "circle", 1, "txt"]],
+    ["A x== txt ==x B", ["thick", "cross", "cross", 1, "txt"]],
+    ["A -- txt --> B", ["solid", "none", "arrow", 1, "txt"]],
+    ["A -. txt .-> B", ["dotted", "none", "arrow", 1, "txt"]],
+    ["A == txt ==> B", ["thick", "none", "arrow", 1, "txt"]],
+    ["A -->|txt| B", ["solid", "none", "arrow", 1, "txt"]],
+    ["A ---> B", ["solid", "none", "arrow", 2, undefined]],
+    ["A ----> B", ["solid", "none", "arrow", 3, undefined]],
+    ["A ---- B", ["solid", "none", "none", 2, undefined]],
+    ["A -..-> B", ["dotted", "none", "arrow", 2, undefined]],
+    ["A -...-> B", ["dotted", "none", "arrow", 3, undefined]],
+    ["A ====> B", ["thick", "none", "arrow", 3, undefined]],
+    ["A ~~~~ B", ["invisible", "none", "none", 2, undefined]],
+    ["A -- txt ----> B", ["solid", "none", "arrow", 3, "txt"]],
+  ])("reads %s", (code, expected) => {
+    expect(link(code)).toEqual(expected);
+  });
+
+  it("parses `A--txt-->B` as an edge, not as a node called `A--txt`", () => {
+    const result = parseFlowchart("flowchart TB\n  A--txt-->B\n  C==hard==>D\n  E-.soft.->F\n");
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.nodes.map((n) => n.id)).toEqual(["A", "B", "C", "D", "E", "F"]);
+    expect(result.ir.edges.map((e) => [e.from, e.to, e.line, e.label])).toEqual([
+      ["A", "B", "solid", "txt"],
+      ["C", "D", "thick", "hard"],
+      ["E", "F", "dotted", "soft"],
+    ]);
+  });
+
+  it("keeps a leading `o`/`x` glued to an id inside the id (`Ao--oB`)", () => {
+    const result = parseFlowchart("flowchart TB\n  Ao--oB\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.nodes.map((n) => n.id)).toEqual(["Ao", "B"]);
+    expect(result.ir.edges[0]).toMatchObject({ headStart: "none", headEnd: "circle" });
+  });
+
+  it("round-trips every line style, head pair and length", () => {
+    const ir = roundTripLenient(`flowchart TB
+  a["A"] <--> b["B"]
+  a o--o b
+  a x--x b
+  a --o b
+  a --x b
+  a ---- b
+  a -..-> b
+  a ====> b
+  a ~~~~ b
+  a -- one ---> b
+`);
+    // codegen is canonical: node decls on their own lines, labels in |"…"|
+    expect(flowchartToMermaid(ir)).toBe(`flowchart TB
+  a["A"]
+  b["B"]
+  a <--> b
+  a o--o b
+  a x--x b
+  a --o b
+  a --x b
+  a ---- b
+  a -..-> b
+  a ====> b
+  a ~~~~ b
+  a --->|"one"| b
+`);
+  });
+});
+
+describe("parseFlowchart `@{ … }` shapes", () => {
+  it("parses shape + label and maps aliases", () => {
+    const result = parseFlowchart(`flowchart TB
+  A@{ shape: doc, label: "Report" }
+  B@{ shape: document }
+  C@{ shape: manual-input, label: "Type it" }
+  D@{ shape: rounded, label: "Round" }
+  A --> B --> C --> D
+`);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.nodes.map((n) => [n.id, n.shape, n.label])).toEqual([
+      ["A", "doc", "Report"],
+      ["B", "doc", "B"],
+      ["C", "slRect", "Type it"],
+      ["D", "rounded", "Round"],
+    ]);
+  });
+
+  it("emits the bracket form when there is one, `@{}` otherwise", () => {
+    const result = parseFlowchart('flowchart TB\n  A@{ shape: rounded, label: "R" } --> B@{ shape: hourglass, label: "H" }\n');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const code = flowchartToMermaid(result.ir);
+    expect(code).toContain('A("R")');
+    expect(code).toContain('B@{ shape: hourglass, label: "H" }');
+    const back = parseFlowchart(code);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(result.ir);
+  });
+
+  it("round-trips every shape in the registry", () => {
+    const ir: FlowchartIR = {
+      kind: "flowchart",
+      subgraphs: [],
+      direction: "TB",
+      nodes: FLOWCHART_SHAPES.map((s, i) => ({ id: `n${i}` as NodeId, label: `s ${s.shape}`, shape: s.shape })),
+      edges: [],
+    };
+    const code = flowchartToMermaid(ir);
+    const back = parseFlowchart(code);
+    expect(back.ok, code).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(ir);
+  });
+
+  it("reports an unknown shape", () => {
+    const result = parseFlowchart("flowchart TB\n  A@{ shape: banana }\n");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors[0]!.message).toContain("unknown shape");
+  });
+});
+
+describe("parseFlowchart id-less subgraphs", () => {
+  it("synthesizes an id and keeps the title", () => {
+    const result = parseFlowchart(`flowchart TB
+  subgraph My Title
+    direction LR
+    a --> b
+  end
+  subgraph "Second one"
+    c
+  end
+`);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.subgraphs).toEqual([
+      { id: "subGraph0", label: "My Title", direction: "LR" },
+      { id: "subGraph1", label: "Second one" },
+    ]);
+    // the synthesized id is mermaid-safe, so the emitted text round trips
+    const code = flowchartToMermaid(result.ir);
+    expect(code).toContain('subgraph subGraph0["My Title"]');
+    const back = parseFlowchart(code);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir.subgraphs).toEqual(result.ir.subgraphs);
   });
 });

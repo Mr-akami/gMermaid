@@ -1,9 +1,10 @@
 import type { EdgeId, NodeId, SubgraphId } from "./ids";
 import type {
-  FlowchartArrowType,
   FlowchartDirection,
+  FlowchartEdgeHead,
   FlowchartEndpoint,
   FlowchartIR,
+  FlowchartLineStyle,
   FlowchartNode,
   FlowchartNodeShape,
   FlowchartSubgraph,
@@ -19,12 +20,22 @@ export type FlowchartAction =
   | { type: "addNode"; node: FlowchartNode }
   | { type: "removeNode"; id: NodeId }
   | { type: "updateNode"; id: NodeId; label?: string; shape?: FlowchartNodeShape }
-  | { type: "addEdge"; id: EdgeId; from: FlowchartEndpoint; to: FlowchartEndpoint; arrow?: FlowchartArrowType }
+  | { type: "addEdge"; id: EdgeId; from: FlowchartEndpoint; to: FlowchartEndpoint; line?: FlowchartLineStyle; headEnd?: FlowchartEdgeHead }
   | { type: "removeEdge"; id: EdgeId }
-  | { type: "updateEdge"; id: EdgeId; label?: string; arrow?: FlowchartArrowType }
+  // length: 1 (the default) is stored as absent
+  | {
+      type: "updateEdge";
+      id: EdgeId;
+      label?: string;
+      line?: FlowchartLineStyle;
+      headStart?: FlowchartEdgeHead;
+      headEnd?: FlowchartEdgeHead;
+      length?: number;
+    }
   | { type: "setDirection"; direction: FlowchartDirection }
   | { type: "addSubgraph"; subgraph: FlowchartSubgraph }
-  | { type: "updateSubgraph"; id: SubgraphId; label?: string }
+  // direction null = remove the per-subgraph override
+  | { type: "updateSubgraph"; id: SubgraphId; label?: string; direction?: FlowchartDirection | null }
   // dissolve: members are promoted to the removed subgraph's parent
   | { type: "removeSubgraph"; id: SubgraphId };
 
@@ -68,7 +79,14 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
         ...ir,
         edges: [
           ...ir.edges,
-          { id: action.id, from: action.from, to: action.to, arrow: action.arrow ?? "arrow" },
+          {
+            id: action.id,
+            from: action.from,
+            to: action.to,
+            line: action.line ?? "solid",
+            headStart: "none",
+            headEnd: action.headEnd ?? "arrow",
+          },
         ],
       };
     }
@@ -81,14 +99,16 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
       if (!edge) return ir;
       const raw = action.label ?? edge.label;
       const label = raw === "" ? undefined : raw; // clearing the label removes it
-      const arrow = action.arrow ?? edge.arrow;
-      if (label === edge.label && arrow === edge.arrow) return ir;
+      const line = action.line ?? edge.line;
+      const headStart = action.headStart ?? edge.headStart;
+      const headEnd = action.headEnd ?? edge.headEnd;
+      const rawLen = action.length ?? edge.length ?? 1;
+      const length = Number.isInteger(rawLen) && rawLen > 1 ? rawLen : undefined;
+      if (label === edge.label && line === edge.line && headStart === edge.headStart && headEnd === edge.headEnd && length === edge.length) return ir;
       return {
         ...ir,
         edges: ir.edges.map((e) =>
-          e.id === action.id
-            ? { id: e.id, from: e.from, to: e.to, arrow, ...(label !== undefined ? { label } : {}) }
-            : e,
+          e.id === action.id ? omitUndefined({ id: e.id, from: e.from, to: e.to, line, headStart, headEnd, label, length }) : e,
         ),
       };
     }
@@ -106,8 +126,9 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
       const s = ir.subgraphs.find((x) => x.id === action.id);
       if (!s) return ir;
       const label = action.label ?? s.label;
-      if (label === s.label) return ir;
-      return { ...ir, subgraphs: ir.subgraphs.map((x) => (x.id === action.id ? { ...x, label } : x)) };
+      const direction = action.direction === null ? undefined : (action.direction ?? s.direction);
+      if (label === s.label && direction === s.direction) return ir;
+      return { ...ir, subgraphs: ir.subgraphs.map((x) => (x.id === action.id ? omitUndefined({ ...x, label, direction }) : x)) };
     }
 
     case "removeSubgraph": {

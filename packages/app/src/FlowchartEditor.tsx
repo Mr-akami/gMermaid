@@ -204,9 +204,16 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
             onChangeEdgeLabel={(label) =>
               selectedEdge && h.dispatch({ type: "updateEdge", id: selectedEdge.id, label }, `edge:${selectedEdge.id}:label`)
             }
-            onChangeEdgeArrow={(arrow) => selectedEdge && h.dispatch({ type: "updateEdge", id: selectedEdge.id, arrow })}
+            onChangeEdgeLine={(line) => selectedEdge && h.dispatch({ type: "updateEdge", id: selectedEdge.id, line })}
+            onChangeEdgeHead={(which, head) =>
+              selectedEdge && h.dispatch({ type: "updateEdge", id: selectedEdge.id, [which]: head })
+            }
+            onChangeEdgeLength={(length) => selectedEdge && h.dispatch({ type: "updateEdge", id: selectedEdge.id, length })}
             onChangeSubgraphLabel={(label) =>
               selectedSubgraph && h.dispatch({ type: "updateSubgraph", id: selectedSubgraph.id, label }, `sub:${selectedSubgraph.id}:label`)
+            }
+            onChangeSubgraphDirection={(direction) =>
+              selectedSubgraph && h.dispatch({ type: "updateSubgraph", id: selectedSubgraph.id, direction })
             }
             onDelete={() => {
               if (selectedNode) h.dispatch({ type: "removeNode", id: selectedNode.id });

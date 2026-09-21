@@ -19,7 +19,7 @@ const layout: FlowchartLayout = {
         { x: 100, y: 40 },
         { x: 100, y: 100 },
       ],
-      arrow: "arrow",
+      line: "solid", headStart: "none", headEnd: "arrow",
       label: "go",
       labelPos: { x: 100, y: 70 },
     },
@@ -32,6 +32,30 @@ describe("FlowchartView", () => {
       <FlowchartView layout={layout} viewState={{ selectedId: "node-1" }} />,
     );
     expect(html).toMatchSnapshot();
+  });
+
+  it("draws a marker at each end and one path per new shape", () => {
+    const heads: FlowchartLayout = {
+      ...layout,
+      nodes: (["doc", "hourglass", "fork", "brace", "crossCirc", "text"] as const).map((shape, i) => ({
+        id: `n${i}` as NodeId,
+        label: shape,
+        shape,
+        rect: { x: i * 60, y: 0, w: 50, h: 30 },
+      })),
+      edges: [
+        { id: "e1" as EdgeId, points: [{ x: 0, y: 0 }, { x: 0, y: 50 }], line: "solid", headStart: "circle", headEnd: "cross" },
+        { id: "e2" as EdgeId, points: [{ x: 0, y: 0 }, { x: 0, y: 50 }], line: "invisible", headStart: "none", headEnd: "none" },
+      ],
+    };
+    const html = renderToStaticMarkup(<FlowchartView layout={heads} viewState={{}} />);
+    expect(html).toContain('marker-start="url(#gm-circle)"');
+    expect(html).toContain('marker-end="url(#gm-cross)"');
+    // the invisible link draws no marker at all
+    expect(html.match(/marker-start=/g)).toHaveLength(1);
+    // marker-less shapes (fork, crossCirc) carry no label text
+    expect(html).not.toContain(">fork<");
+    expect(html).toContain(">doc<");
   });
 
   it("emits every layout id as a data-element-id (id contract, ADR 0001)", () => {

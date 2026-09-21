@@ -45,11 +45,18 @@ describe("label escaping", () => {
         label: shape,
         shape,
       })),
-      edges: (["arrow", "open", "dotted", "thick"] as const).map((arrow, i) => ({
+      edges: ([
+        ["solid", "arrow"],
+        ["solid", "none"],
+        ["dotted", "arrow"],
+        ["thick", "circle"],
+      ] as const).map(([line, headEnd], i) => ({
         id: `edge-${i}` as EdgeId,
         from: `node-${i}` as NodeId,
         to: `node-${i + 1}` as NodeId,
-        arrow,
+        line,
+        headStart: "none" as const,
+        headEnd,
       })),
     };
     expect(flowchartToMermaid(ir)).toMatchSnapshot();
