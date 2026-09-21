@@ -15,13 +15,14 @@ import {
 import { layoutClassDiagram } from "@gmermaid/layout";
 import { classToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseClassDiagram, parseMemberLine } from "@gmermaid/mermaid-parser";
-import { ClassView, type Viewport } from "@gmermaid/renderer";
+import { ClassView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ClassPropertyWindow, type ClassSelection } from "./ClassPropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): ClassIR {
@@ -85,8 +86,8 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyClassAction);
   const [view, setView] = useState<ViewState>({});
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
+  // reducer rejections must be visible, not silent no-ops (L2)
+  const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
   // drag-to-connect rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   // member text drafts are view-transient; the IR only sees parsed members.
@@ -116,6 +117,8 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     setMemberDraft(null);
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
@@ -132,6 +135,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     if (text === null) return;
     const opened = load.accept(parseClassDiagram(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     setMemberDraft(null);
     h.pushIR(opened);
     setView({});
@@ -243,6 +247,19 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     setView({ selectedId: relId });
   }
 
+  /** One delete path for the toolbar button, the property window and the
+   * Delete/Backspace key — they must agree on what "the selection" is. */
+  function deleteSelected() {
+    if (selectedClass) h.dispatch({ type: "removeClass", id: selectedClass.id });
+    else if (selectedRelation) h.dispatch({ type: "removeRelation", id: selectedRelation.id });
+    else if (selectedNote) h.dispatch({ type: "removeNote", id: selectedNote.id });
+    else if (selectedNamespace) h.dispatch({ type: "removeNamespace", id: selectedNamespace.id });
+    else return;
+    setRejectHint(undefined);
+    setMemberDraft(null);
+    setView({});
+  }
+
   function handleElementClick(id: string) {
     const target = ir.classes.find((c) => c.id === id);
     if (view.relateFrom !== undefined && target) {
@@ -254,6 +271,17 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     if (view.selectedId !== id) setMemberDraft(null);
     setView({ selectedId: id });
   }
+
+  const shell = useEditorShell({
+    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setMemberDraft(null);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
 
   return (
     <>
@@ -269,8 +297,14 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
         >
           → Relation from selected
         </button>
+        <button disabled={selection === undefined} onClick={deleteSelected}>
+          Delete
+        </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         <select
           value={ir.direction ?? "TB"}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<ClassIR["direction"]> })}
@@ -281,14 +315,15 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
           <option value="RL">Right→Left</option>
         </select>
         {view.relateFrom !== undefined && <span className="hint">click a target class…</span>}
+        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <ClassView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={() => {
               setMemberDraft(null);
@@ -310,7 +345,10 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
             classes={ir.classes}
             onChangeName={(name) => {
               if (!selectedClass) return;
-              if (CLASS_NAME_RE.test(name)) h.dispatch({ type: "renameClass", id: selectedClass.id, name }, `class:${selectedClass.id}:name`);
+              // a name mermaid cannot spell used to be dropped in silence
+              const reason = CLASS_NAME_RE.test(name) ? undefined : "a class name must be a bare identifier";
+              setRejectHint(reason);
+              if (reason === undefined) h.dispatch({ type: "renameClass", id: selectedClass.id, name }, `class:${selectedClass.id}:name`);
             }}
             onChangeLabel={(label) =>
               selectedClass && h.dispatch({ type: "setClassLabel", id: selectedClass.id, label }, `class:${selectedClass.id}:label`)
@@ -351,14 +389,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
             onChangeNamespaceName={(name) =>
               selectedNamespace && h.dispatch({ type: "renameNamespace", id: selectedNamespace.id, name }, `ns:${selectedNamespace.id}:name`)
             }
-            onDelete={() => {
-              if (selectedClass) h.dispatch({ type: "removeClass", id: selectedClass.id });
-              if (selectedRelation) h.dispatch({ type: "removeRelation", id: selectedRelation.id });
-              if (selectedNote) h.dispatch({ type: "removeNote", id: selectedNote.id });
-              if (selectedNamespace) h.dispatch({ type: "removeNamespace", id: selectedNamespace.id });
-              setMemberDraft(null);
-              setView({});
-            }}
+            onDelete={deleteSelected}
             onEditStart={() => {}}
             onEditEnd={() => {
               h.endEdit();

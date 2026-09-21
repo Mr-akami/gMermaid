@@ -74,7 +74,7 @@ export function StateView({
           <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--gm-stroke, #333)" />
         </marker>
       </defs>
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {/* composite frames go under everything, outermost first */}
         {layout.states
           .filter((s) => s.composite)

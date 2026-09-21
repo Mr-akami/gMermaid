@@ -15,13 +15,14 @@ import {
 import { layoutTimeline } from "@gmermaid/layout";
 import { timelineToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseTimeline } from "@gmermaid/mermaid-parser";
-import { TimelineView, type Viewport } from "@gmermaid/renderer";
+import { TimelineView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { TimelinePropertyWindow, type TimelineSelection } from "./TimelinePropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): TimelineIR {
@@ -65,8 +66,6 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyTimelineAction);
   const [view, setView] = useState<ViewState>({});
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // reducer rejections must be visible, not silent no-ops (L2)
   const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
   const [titleHint, setTitleHint] = useState<string | undefined>(undefined);
@@ -87,6 +86,8 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -102,6 +103,7 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
     if (text === null) return;
     const opened = load.accept(parseTimeline(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -176,6 +178,16 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
         ? { kind: "event", event: selectedEvent }
         : undefined;
 
+  const shell = useEditorShell({
+    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
+
   return (
     <>
       <div className="toolbar">
@@ -187,6 +199,9 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
         <button disabled={selection === undefined} onClick={deleteSelected}>Delete</button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         <label className="toolbar-field">
           Timeline title
           <input
@@ -202,13 +217,13 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
         </label>
         {titleHint !== undefined && <span className="hint">{titleHint}</span>}
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <TimelineView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={(id) => {
               setRejectHint(undefined);
               setView({ selectedId: id });

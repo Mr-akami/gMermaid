@@ -10,13 +10,14 @@ import {
 import { layoutFlowchart } from "@gmermaid/layout";
 import { flowchartToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseFlowchart } from "@gmermaid/mermaid-parser";
-import { FlowchartView, type Viewport } from "@gmermaid/renderer";
+import { FlowchartView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { PropertyWindow } from "./PropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): FlowchartIR {
@@ -53,9 +54,6 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyFlowchartAction);
   const [view, setView] = useState<ViewState>({});
-  // pan/zoom is ViewState (ADR 0001): held apart from the selection so a
-  // selection reset never snaps the camera; undefined = default framing
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // drag-to-connect rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   const ir = h.ir;
@@ -76,6 +74,8 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -91,6 +91,7 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
     if (text === null) return;
     const opened = load.accept(parseFlowchart(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -154,6 +155,27 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
     setView({ selectedId: id });
   }
 
+  /** One delete path for the toolbar button, the property window and the
+   * Delete/Backspace key — they must agree on what "the selection" is. */
+  function deleteSelected() {
+    if (selectedNode) h.dispatch({ type: "removeNode", id: selectedNode.id });
+    else if (selectedEdge) h.dispatch({ type: "removeEdge", id: selectedEdge.id });
+    else if (selectedSubgraph) h.dispatch({ type: "removeSubgraph", id: selectedSubgraph.id });
+    else return;
+    setRejectHint(undefined);
+    setView({});
+  }
+
+  const shell = useEditorShell({
+    ...(selected !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
+
   return (
     <>
       <div className="toolbar">
@@ -167,8 +189,14 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
         >
           → Connect from selected
         </button>
+        <button disabled={selected === undefined} onClick={deleteSelected}>
+          Delete
+        </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         <select
           value={ir.direction}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as FlowchartIR["direction"] })}
@@ -181,13 +209,13 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
         {view.connectFrom !== undefined && <span className="hint">click a target node to connect…</span>}
         {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <FlowchartView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={() => setView({})}
             onConnectDrag={handleConnectDrag}
@@ -217,12 +245,7 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
             onChangeSubgraphDirection={(direction) =>
               selectedSubgraph && h.dispatch({ type: "updateSubgraph", id: selectedSubgraph.id, direction })
             }
-            onDelete={() => {
-              if (selectedNode) h.dispatch({ type: "removeNode", id: selectedNode.id });
-              if (selectedEdge) h.dispatch({ type: "removeEdge", id: selectedEdge.id });
-              if (selectedSubgraph) h.dispatch({ type: "removeSubgraph", id: selectedSubgraph.id });
-              setView({});
-            }}
+            onDelete={deleteSelected}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />

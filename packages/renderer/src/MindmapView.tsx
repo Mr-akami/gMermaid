@@ -61,7 +61,7 @@ export function MindmapView({
       onPointerCancel={g.onPointerCancel}
       style={g.style}
     >
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {layout.branches.map((b) => (
           <BranchView key={b.id} branch={b} depth={layout.nodes.find((n) => n.id === b.to)?.depth ?? 1} />
         ))}

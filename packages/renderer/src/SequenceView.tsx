@@ -187,7 +187,7 @@ export function SequenceView({
         </marker>
       </defs>
 
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
       {/* participant boxes sit behind the heads they group */}
       {layout.boxes.map((b) => (
         <g key={b.id} data-element-id={b.id} style={{ pointerEvents: "none" }}>

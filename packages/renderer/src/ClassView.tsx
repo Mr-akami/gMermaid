@@ -84,7 +84,7 @@ export function ClassView({
         </marker>
       </defs>
 
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {layout.namespaces.map((n) => (
           <NamespaceView key={n.id} n={n} selected={viewState.selectedId === n.id} />
         ))}

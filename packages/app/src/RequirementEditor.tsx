@@ -12,13 +12,14 @@ import {
 import { layoutRequirementDiagram } from "@gmermaid/layout";
 import { requirementToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseRequirementDiagram } from "@gmermaid/mermaid-parser";
-import { RequirementView, type Viewport } from "@gmermaid/renderer";
+import { RequirementView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RequirementPropertyWindow, type RequirementSelection } from "./RequirementPropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): RequirementIR {
@@ -59,8 +60,8 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyRequirementAction);
   const [view, setView] = useState<ViewState>({});
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
+  // reducer rejections must be visible, not silent no-ops (L2)
+  const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
   // drag-to-connect rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   const ir = h.ir;
@@ -79,6 +80,8 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -94,6 +97,7 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
     if (text === null) return;
     const opened = load.accept(parseRequirementDiagram(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -133,6 +137,8 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
     if (selectedRequirement) h.dispatch({ type: "removeNode", id: selectedRequirement.id });
     else if (selectedElement) h.dispatch({ type: "removeNode", id: selectedElement.id });
     else if (selectedRelation) h.dispatch({ type: "removeRelation", id: selectedRelation.id });
+    else return;
+    setRejectHint(undefined);
     setView({});
   }
 
@@ -156,6 +162,16 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
 
   const nodeId = (selectedRequirement?.id ?? selectedElement?.id) as RequirementId | ElementId | undefined;
 
+  const shell = useEditorShell({
+    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
+
   return (
     <>
       <div className="toolbar">
@@ -168,6 +184,9 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         <select
           value={ir.direction ?? "TB"}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<RequirementIR["direction"]> })}
@@ -177,14 +196,15 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
           <option value="BT">Bottom→Top</option>
           <option value="RL">Right→Left</option>
         </select>
+        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <RequirementView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={(id) => setView({ selectedId: id })}
             onBackgroundClick={() => setView({})}
             onConnectDrag={handleConnectDrag}
@@ -197,7 +217,10 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
           <RequirementPropertyWindow
             selection={selection}
             onChangeName={(name) => {
-              if (nodeId !== undefined && REQ_NAME_RE.test(name)) h.dispatch({ type: "renameNode", id: nodeId, name }, `req:${nodeId}:name`);
+              // a name mermaid cannot spell used to be dropped in silence
+              const reason = REQ_NAME_RE.test(name) ? undefined : "a name must be a bare identifier";
+              setRejectHint(reason);
+              if (reason === undefined && nodeId !== undefined) h.dispatch({ type: "renameNode", id: nodeId, name }, `req:${nodeId}:name`);
             }}
             onChangeRequirementType={(requirementType) =>
               selectedRequirement && h.dispatch({ type: "updateRequirement", id: selectedRequirement.id, requirementType })

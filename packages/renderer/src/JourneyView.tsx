@@ -53,7 +53,7 @@ export function JourneyView({
       onPointerCancel={g.onPointerCancel}
       style={g.style}
     >
-      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+      <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {layout.title !== undefined && layout.titlePos && (
           <text
             x={layout.titlePos.x}

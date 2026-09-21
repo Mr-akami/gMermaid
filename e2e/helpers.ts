@@ -85,3 +85,46 @@ export async function clickPathMiddle(page: Page, editor: Locator, id: string): 
 export function element(editor: Locator, id: string): Locator {
   return editor.locator(`[data-element-id="${id}"]`);
 }
+
+/** Open the app with one diagram already in its autosave slot — the path a
+ * stored diagram takes on a plain page load (the Files panel and an opened
+ * file land in the same place). */
+export async function openStoredEditor(page: Page, kind: Kind, code: string): Promise<Locator> {
+  await page.goto("/");
+  await page.evaluate(
+    ([key, text]) => {
+      localStorage.clear();
+      localStorage.setItem(key, JSON.stringify({ code: text, updatedAt: Date.now() }));
+    },
+    [`gmermaid:doc:${kind.toLowerCase()}`, code] as const,
+  );
+  await page.reload();
+  await page.getByRole("button", { name: kind, exact: true }).click();
+  const editor = page.locator(".editor:not(.hidden)");
+  await expect(editor).toBeVisible();
+  return editor;
+}
+
+/** Assert an element is inside the visible canvas. The default viewport is
+ * identity + padding, so anything past the canvas edge used to be clipped
+ * away with no way back. */
+export async function expectInsideCanvas(editor: Locator, id: string): Promise<void> {
+  const canvas = await editor.locator(".canvas").boundingBox();
+  const box = await element(editor, id).boundingBox();
+  expect(canvas, "canvas has no box").not.toBeNull();
+  expect(box, `${id} has no box`).not.toBeNull();
+  const slack = 1; // sub-pixel rounding of the SVG transform
+  expect.soft(box!.x, `${id} left`).toBeGreaterThanOrEqual(canvas!.x - slack);
+  expect.soft(box!.y, `${id} top`).toBeGreaterThanOrEqual(canvas!.y - slack);
+  expect.soft(box!.x + box!.width, `${id} right`).toBeLessThanOrEqual(canvas!.x + canvas!.width + slack);
+  expect.soft(box!.y + box!.height, `${id} bottom`).toBeLessThanOrEqual(canvas!.y + canvas!.height + slack);
+}
+
+/** Pan the canvas until the diagram is off screen, the way a stray drag does. */
+export async function panAway(page: Page, editor: Locator): Promise<void> {
+  const canvas = (await editor.locator(".canvas").boundingBox())!;
+  await page.mouse.move(canvas.x + 12, canvas.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(canvas.x + canvas.width - 12, canvas.y + canvas.height - 12, { steps: 8 });
+  await page.mouse.up();
+}

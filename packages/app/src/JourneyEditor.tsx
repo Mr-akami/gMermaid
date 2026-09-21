@@ -11,13 +11,14 @@ import {
 import { layoutJourney } from "@gmermaid/layout";
 import { journeyToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseJourney } from "@gmermaid/mermaid-parser";
-import { JourneyView, type Viewport } from "@gmermaid/renderer";
+import { JourneyView } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { JourneyPropertyWindow, type JourneySelection } from "./JourneyPropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
+import { useEditorShell } from "./useEditorShell";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): JourneyIR {
@@ -60,8 +61,6 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
   const [view, setView] = useState<ViewState>({});
   // reducer rejections must be visible, not silent no-ops (L2)
   const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
-  // pan/zoom is ViewState (ADR 0001), held apart from the selection
-  const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   const ir = h.ir;
 
   const layout = useMemo(() => layoutJourney(ir, measurer), [ir]);
@@ -77,6 +76,8 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
 
   useEffect(() => {
     if (!loadRequest) return;
+    // a REPLACED diagram is framed afresh; an edit never moves the camera
+    shell.fitOnNextLayout();
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
@@ -92,6 +93,7 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
     if (text === null) return;
     const opened = load.accept(parseJourney(text), "Cannot open file");
     if (opened === undefined) return;
+    shell.fitOnNextLayout();
     h.pushIR(opened);
     setView({});
   }
@@ -156,6 +158,16 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
     setView({});
   }
 
+  const shell = useEditorShell({
+    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    onEscape: () => {
+      setRejectHint(undefined);
+      setView({});
+    },
+    onUndo: h.undo,
+    onRedo: h.redo,
+  });
+
   return (
     <>
       <div className="toolbar">
@@ -174,6 +186,9 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
         <button onClick={h.redo} disabled={!h.canRedo}>
           Redo
         </button>
+        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
+          ⤢ Fit
+        </button>
         <label className="toolbar-field">
           Title
           <input
@@ -184,13 +199,13 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
           />
         </label>
       </div>
-      <div className="canvas">
+      <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <JourneyView
             layout={layout}
             viewState={{ selectedId: view.selectedId }}
-            viewport={viewport}
-            onViewportChange={setViewport}
+            viewport={shell.viewport}
+            onViewportChange={shell.setViewport}
             onElementClick={(id) => setView({ selectedId: id })}
             onBackgroundClick={() => setView({})}
           />
