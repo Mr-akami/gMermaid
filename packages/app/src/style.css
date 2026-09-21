@@ -126,6 +126,19 @@ body { margin: 0; font-family: sans-serif; }
   color: #666;
   font-size: 11px;
 }
+
+/* the real mermaid parser refused the text: our own parser was happy, so this
+   is a different failure from .code-errors and must not look like it */
+.code-mermaid-error {
+  max-height: 120px;
+  overflow: auto;
+  border-top: 1px solid #c7b0dd;
+  background: #f8f4fd;
+  color: #5b3a8e;
+  font-size: 12px;
+  font-family: monospace;
+  padding: 6px 10px;
+}
 .canvas-error {
   padding: 16px;
   color: #9f3a38;

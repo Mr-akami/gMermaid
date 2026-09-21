@@ -6,6 +6,7 @@ import type {
   UsecaseLayout,
   UsecaseNoteBox,
 } from "@gmermaid/layout";
+import { edgePath } from "./edgePath";
 import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 export interface UsecaseViewState {
@@ -253,7 +254,7 @@ function BoundaryView({ b, selected }: { b: UsecaseBoundaryFrame; selected: bool
 }
 
 function EdgeView({ e, selected }: { e: UsecaseEdgePath; selected: boolean }) {
-  const d = e.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const d = edgePath(e.points);
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
   return (
     <g data-element-id={e.id} style={{ cursor: "pointer" }}>

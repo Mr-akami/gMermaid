@@ -7,7 +7,7 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
   "regionSeparators": [],
   "regions": [],
   "size": {
-    "h": 171.6,
+    "h": 199.2,
     "w": 72,
   },
   "states": [
@@ -46,7 +46,7 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
         "h": 16,
         "w": 16,
         "x": 28,
-        "y": 155.6,
+        "y": 183.2,
       },
       "role": "end",
     },
@@ -74,7 +74,7 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
       "label": "done",
       "labelPos": {
         "x": 36,
-        "y": 124.6,
+        "y": 144.4,
       },
       "points": [
         {
@@ -83,11 +83,320 @@ exports[`layoutStateDiagram > matches the committed golden layout 1`] = `
         },
         {
           "x": 36,
-          "y": 130.6,
+          "y": 144.4,
         },
         {
           "x": 36,
-          "y": 155.6,
+          "y": 183.2,
+        },
+      ],
+    },
+  ],
+}
+`;
+
+exports[`nested composites > matches the committed golden layout three levels deep 1`] = `
+{
+  "kind": "state",
+  "notes": [],
+  "regionSeparators": [],
+  "regions": [],
+  "size": {
+    "h": 734.8000000000001,
+    "w": 112,
+  },
+  "states": [
+    {
+      "composite": false,
+      "depth": 0,
+      "id": "state_start",
+      "label": "",
+      "rect": {
+        "h": 16,
+        "w": 16,
+        "x": 48,
+        "y": 0,
+      },
+      "role": "start",
+    },
+    {
+      "composite": true,
+      "depth": 0,
+      "id": "Outer",
+      "label": "Outer",
+      "rect": {
+        "h": 602.8000000000001,
+        "w": 112,
+        "x": 0,
+        "y": 66,
+      },
+      "role": "normal",
+    },
+    {
+      "composite": false,
+      "depth": 1,
+      "id": "state_start_Outer",
+      "label": "",
+      "rect": {
+        "h": 16,
+        "w": 16,
+        "x": 48,
+        "y": 98,
+      },
+      "role": "start",
+    },
+    {
+      "composite": true,
+      "depth": 1,
+      "id": "Middle",
+      "label": "Middle",
+      "rect": {
+        "h": 407.20000000000005,
+        "w": 96,
+        "x": 8,
+        "y": 164,
+      },
+      "role": "normal",
+    },
+    {
+      "composite": false,
+      "depth": 2,
+      "id": "state_start_Middle",
+      "label": "",
+      "rect": {
+        "h": 16,
+        "w": 16,
+        "x": 48,
+        "y": 196,
+      },
+      "role": "start",
+    },
+    {
+      "composite": true,
+      "depth": 2,
+      "id": "Inner",
+      "label": "Inner",
+      "rect": {
+        "h": 211.6,
+        "w": 80,
+        "x": 16,
+        "y": 262,
+      },
+      "role": "normal",
+    },
+    {
+      "composite": false,
+      "depth": 3,
+      "id": "state_start_Inner",
+      "label": "",
+      "rect": {
+        "h": 16,
+        "w": 16,
+        "x": 48,
+        "y": 294,
+      },
+      "role": "start",
+    },
+    {
+      "composite": false,
+      "depth": 3,
+      "id": "Leaf",
+      "label": "Leaf",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 64,
+        "x": 24,
+        "y": 360,
+      },
+      "role": "normal",
+    },
+    {
+      "composite": false,
+      "depth": 3,
+      "id": "state_end_Inner",
+      "label": "",
+      "rect": {
+        "h": 16,
+        "w": 16,
+        "x": 48,
+        "y": 449.6,
+      },
+      "role": "end",
+    },
+    {
+      "composite": false,
+      "depth": 2,
+      "id": "Done",
+      "label": "Done",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 64,
+        "x": 24,
+        "y": 523.6,
+      },
+      "role": "normal",
+    },
+    {
+      "composite": false,
+      "depth": 1,
+      "id": "Ready",
+      "label": "Ready",
+      "rect": {
+        "h": 39.599999999999994,
+        "w": 72,
+        "x": 20,
+        "y": 621.2,
+      },
+      "role": "normal",
+    },
+    {
+      "composite": false,
+      "depth": 0,
+      "id": "state_end",
+      "label": "",
+      "rect": {
+        "h": 16,
+        "w": 16,
+        "x": 48,
+        "y": 718.8000000000001,
+      },
+      "role": "end",
+    },
+  ],
+  "transitions": [
+    {
+      "id": "t1",
+      "points": [
+        {
+          "x": 56,
+          "y": 16,
+        },
+        {
+          "x": 56,
+          "y": 41,
+        },
+        {
+          "x": 56,
+          "y": 66,
+        },
+      ],
+    },
+    {
+      "id": "t2",
+      "points": [
+        {
+          "x": 56,
+          "y": 114,
+        },
+        {
+          "x": 56,
+          "y": 139,
+        },
+        {
+          "x": 56,
+          "y": 164,
+        },
+      ],
+    },
+    {
+      "id": "t3",
+      "points": [
+        {
+          "x": 56,
+          "y": 212,
+        },
+        {
+          "x": 56,
+          "y": 237,
+        },
+        {
+          "x": 56,
+          "y": 262,
+        },
+      ],
+    },
+    {
+      "id": "t4",
+      "points": [
+        {
+          "x": 56,
+          "y": 310,
+        },
+        {
+          "x": 56,
+          "y": 335,
+        },
+        {
+          "x": 56,
+          "y": 360,
+        },
+      ],
+    },
+    {
+      "id": "t5",
+      "points": [
+        {
+          "x": 56,
+          "y": 399.6,
+        },
+        {
+          "x": 56,
+          "y": 424.6,
+        },
+        {
+          "x": 56,
+          "y": 449.6,
+        },
+      ],
+    },
+    {
+      "id": "t6",
+      "points": [
+        {
+          "x": 56,
+          "y": 473.6,
+        },
+        {
+          "x": 56,
+          "y": 498.6,
+        },
+        {
+          "x": 56,
+          "y": 523.6,
+        },
+      ],
+    },
+    {
+      "id": "t7",
+      "points": [
+        {
+          "x": 56,
+          "y": 571.2,
+        },
+        {
+          "x": 56,
+          "y": 596.2,
+        },
+        {
+          "x": 56,
+          "y": 621.2,
+        },
+      ],
+    },
+    {
+      "id": "t8",
+      "points": [
+        {
+          "x": 56,
+          "y": 668.8000000000001,
+        },
+        {
+          "x": 56,
+          "y": 693.8000000000001,
+        },
+        {
+          "x": 56,
+          "y": 718.8000000000001,
         },
       ],
     },

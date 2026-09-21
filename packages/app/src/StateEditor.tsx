@@ -117,8 +117,12 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   const codeValid = mermaidValid && machineValid;
   useAutosave(STORAGE_KEY, code, mode === "standalone" && codeValid);
   useAutosave(XSTATE_KEY, machine.code, mode === "standalone" && codeValid);
+  // autosave follows OUR parsers alone: a diagram the IR already holds is real
+  // work, and must keep being saved even while mermaid.js refuses its text.
+  // Mermaid.js's verdict travels separately, and only gates the review submit.
+  const [mermaidJsValid, setMermaidJsValid] = useState(true);
   useEffect(() => onCodeChange?.(code), [code, onCodeChange]);
-  useEffect(() => onValidityChange?.(codeValid), [codeValid, onValidityChange]);
+  useEffect(() => onValidityChange?.(codeValid && mermaidJsValid), [codeValid, mermaidJsValid, onValidityChange]);
 
   useEffect(() => {
     if (!loadRequest) return;
@@ -485,8 +489,11 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
             onCommit: (next) => h.pushIR(mergeMermaidDetail(ir, next), "code-pane"),
             codeWarnings: machine.warnings,
             onValidityChange: setMachineValid,
+            // the XState tab holds a machine config, not mermaid text
+            mermaidText: false,
           },
         ]}
+        onMermaidValidityChange={setMermaidJsValid}
       />
     </>
   );

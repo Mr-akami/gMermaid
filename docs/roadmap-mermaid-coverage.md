@@ -39,6 +39,9 @@ shared by every kind (`STYLING_STATEMENTS`) and every drop is reported as a
   a start head that differs from the end head is dropped on emit, as
   mermaid's own `destructLink` calls that combination invalid.
 - Per-subgraph `direction` round-trips but layout still has one rankdir.
+  Nested subgraphs also inflate dagre's rank separation (each cluster adds
+  border ranks); the state layout dodges this by laying each composite out
+  on its own, and flowcharts could follow.
 ### Sequence (done)
 - Activation (`+`/`-` suffix and `activate`/`deactivate`), `box`, `rect`,
   `create`/`destroy`, participant types `@{ type: … }`, multi-line notes
@@ -50,9 +53,11 @@ shared by every kind (`STYLING_STATEMENTS`) and every drop is reported as a
 ### State (done)
 - Concurrency `--` regions, per-block `direction`, multi-line notes,
   self-transitions, `state X <<choice>>` etc. already ok.
-- Per-block `direction` round-trips but is not honored by layout: dagre has
-  one rankdir per graph. An empty region is not expressible in mermaid text,
-  so the GUI splits an existing member into a new region instead.
+- Each composite is laid out in a dagre graph of its own and placed in its
+  parent as a single node, so a composite honors its own `direction` and the
+  rank separation no longer grows with nesting depth. An empty region is not
+  expressible in mermaid text, so the GUI splits an existing member into a
+  new region instead.
 ### Class (done)
 - Reversed / two-way relation tokens, `direction TD`, `classDiagram-v2`,
   `class X["label"]` + relaxed names, `*`/`$` classifiers, type-first
@@ -112,8 +117,9 @@ window, registry entry, mermaid.js integration test, e2e spec.
 - Styling and interaction syntax (`classDef`, `style`, `:::`, `click`,
   `linkStyle`, `%%` comments) stays tolerated-and-dropped: it has no
   meaning in a structural editor, so it cannot survive a round trip.
-- Per-cluster layout direction in flowchart subgraphs and state composites:
-  dagre has one rankdir per graph. The text round-trips.
+- Per-subgraph layout direction in flowcharts: dagre has one rankdir per
+  graph and flowchart subgraphs are still one compound graph. The text
+  round-trips. (State composites do honor it — each is laid out separately.)
 - Diagram kinds mermaid supports that gMermaid does not draw yet: ER, pie,
   quadrant, git graph, block, C4, sankey, xychart, radar, packet, kanban,
   architecture and treemap. Each would be another vertical slice; the

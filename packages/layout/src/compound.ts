@@ -1,3 +1,4 @@
+import { inflate, labelAnchor, type CollisionIndex } from "./collision";
 import type { Point, Rect } from "./result";
 
 // Shared geometry for compound (cluster) layouts: dagre cannot attach an
@@ -29,6 +30,41 @@ export function selfLoopPoints(rect: Rect, index = 0): Point[] {
     { x: reach, y: cy + SELF_LOOP_H / 2 },
     { x: right, y: cy + SELF_LOOP_H / 2 },
   ];
+}
+
+/** Clear space kept around a self-loop's label: a measured line box is the
+ * text's advance, and the glyphs drawn from it want a little more. */
+const LABEL_SLACK = 6;
+const GAP = 6;
+
+/**
+ * Where a self-loop's label goes, given what is already drawn. Candidates run
+ * best first — on the detour's axis just past it, then clear above it, then
+ * clear below it, then centred over or under the box — and every kind that
+ * draws a self-loop offers the same arc, so a label that has to move moves the
+ * same way everywhere. A label with nowhere to go keeps the first spot.
+ *
+ * `reach` and `cy` are the detour's own geometry (see `selfLoopPoints`).
+ */
+export function placeSelfLoopLabel(
+  taken: CollisionIndex,
+  box: Rect,
+  reach: number,
+  cy: number,
+  size: { readonly w: number; readonly h: number },
+): { labelPos: Point; right: number } {
+  const w = size.w + LABEL_SLACK * 2;
+  const h = size.h + LABEL_SLACK * 2;
+  const right = reach + GAP;
+  const boxMid = box.x + box.w / 2 - w / 2;
+  const spot = taken.place([
+    { x: right, y: cy - h / 2, w, h },
+    { x: right, y: cy - SELF_LOOP_H / 2 - GAP - h, w, h },
+    { x: right, y: cy + SELF_LOOP_H / 2 + GAP, w, h },
+    { x: boxMid, y: box.y - GAP - h, w, h },
+    { x: boxMid, y: box.y + box.h + GAP, w, h },
+  ]);
+  return { labelPos: labelAnchor(inflate(spot.rect, -LABEL_SLACK)), right: spot.rect.x + spot.rect.w };
 }
 
 /** First point of segment [a,b] crossing the rect boundary, or null. */

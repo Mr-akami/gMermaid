@@ -1,4 +1,5 @@
 export * from "./measurer";
+export * from "./collision";
 export * from "./result";
 export * from "./flowchart";
 export * from "./sequenceResult";

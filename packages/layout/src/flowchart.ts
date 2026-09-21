@@ -1,5 +1,6 @@
 import dagre from "@dagrejs/dagre";
 import type { FlowchartEndpoint, FlowchartIR, FlowchartNodeShape, SubgraphId } from "@gmermaid/ir";
+import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { EdgePath, FlowchartLayout, NodeBox, Point, SubgraphBox } from "./result";
 import { clipPolylineAtRect } from "./compound";
@@ -9,7 +10,11 @@ const NODE_PADDING_Y = 10;
 const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
 // visual breathing room around a cluster; the extra top holds the title
 const SUB_PAD = 8;
-const SUB_TITLE_H = 24;
+/** Height of a subgraph's title band — where the renderer puts the label. */
+export const SUBGRAPH_TITLE_BAND = 24;
+/** Reserved above the members: the band plus the same padding the other
+ * sides get, so a node never sits against the title. */
+const SUB_TITLE_H = SUBGRAPH_TITLE_BAND + SUB_PAD;
 // marker-like shapes carry no label of their own, so they get a fixed box
 // instead of one measured from text
 const FIXED_SIZE: Partial<Record<FlowchartNodeShape, readonly [number, number]>> = {
@@ -80,8 +85,15 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
     if (!g.hasNode(edge.from as string) || !g.hasNode(edge.to as string)) {
       throw new Error(`layoutFlowchart: edge ${edge.id} references a missing node`);
     }
-    // `--->` spans extra ranks: that is dagre's minlen
-    g.setEdge(anchor(edge.from), anchor(edge.to), { minlen: edge.length ?? 1 }, edge.id);
+    // `--->` spans extra ranks: that is dagre's minlen. Telling dagre the
+    // label's measured size makes it reserve a rank-sized gap for it, which
+    // is what keeps a long label off the nodes it runs between.
+    g.setEdge(
+      anchor(edge.from),
+      anchor(edge.to),
+      { minlen: edge.length ?? 1, ...edgeLabelSize(edge.label, measure, LABEL_STYLE) },
+      edge.id,
+    );
   }
 
   dagre.layout(g);
@@ -141,8 +153,14 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
       line: edge.line,
       headStart: edge.headStart,
       headEnd: edge.headEnd,
+      // dagre positions a sized label itself; fall back to the midpoint for
+      // edges it could not place (clipped cluster edges, self loops)
       ...(edge.label !== undefined && points.length > 0
-        ? { label: edge.label, labelPos: polylineMidpoint(points) }
+        ? {
+            label: edge.label,
+            labelPos:
+              typeof e.x === "number" && typeof e.y === "number" ? { x: e.x, y: e.y } : polylineMidpoint(points),
+          }
         : {}),
     };
   });

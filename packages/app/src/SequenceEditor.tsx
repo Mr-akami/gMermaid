@@ -103,7 +103,12 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
   // recovered draft is never clobbered by the sample it fell back to
   const [codeValid, setCodeValid] = useState(initial.recoveredText === undefined);
   useAutosave(STORAGE_KEY, code, mode === "standalone" && codeValid);
+  // autosave follows OUR parser alone: a diagram the IR already holds is real
+  // work, and must keep being saved even while mermaid refuses its text.
+  // Mermaid's verdict travels separately, and only gates the review submit.
+  const [mermaidValid, setMermaidValid] = useState(true);
   useEffect(() => onCodeChange?.(code), [code, onCodeChange]);
+  useEffect(() => onValidityChange?.(codeValid && mermaidValid), [codeValid, mermaidValid, onValidityChange]);
 
   useEffect(() => {
     if (!loadRequest) return;
@@ -507,6 +512,10 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
             onChangeNotePosition={(position) =>
               selection.kind === "note" && h.dispatch({ type: "updateNote", id: selection.note.id, position })
             }
+            lifelines={ir.lifelines}
+            onChangeNoteLifelines={(lifelines) =>
+              selection.kind === "note" && h.dispatch({ type: "updateNote", id: selection.note.id, lifelines })
+            }
             onChangeBranchCondition={(condition) =>
               selection.kind === "branch" &&
               h.dispatch({ type: "updateBranch", id: selection.branch.id, condition }, `branch:${selection.branch.id}:cond`)
@@ -540,10 +549,8 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
         onEditEnd={h.endEdit}
         initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
         loadWarnings={load.warnings}
-        onValidityChange={(valid) => {
-          setCodeValid(valid);
-          onValidityChange?.(valid);
-        }}
+        onValidityChange={setCodeValid}
+        onMermaidValidityChange={setMermaidValid}
       />
     </>
   );

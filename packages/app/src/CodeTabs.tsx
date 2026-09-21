@@ -11,6 +11,9 @@ export interface CodeTab<T> extends Omit<CodePaneProps<T>, "onEditStart" | "onEd
 
 export interface CodeTabsProps<T> {
   readonly tabs: readonly CodeTab<T>[];
+  /** mermaid.js's verdict on the mermaid tab — the other tab's text is not
+   * mermaid, so only one tab can produce it. */
+  readonly onMermaidValidityChange?: ((valid: boolean) => void) | undefined;
   readonly onEditStart: () => void;
   readonly onEditEnd: () => void;
 }
@@ -24,7 +27,7 @@ export interface CodeTabsProps<T> {
  * self-invalidate when the IR moves under it (`Draft.base`), which is exactly
  * what happens while the other tab is being typed in.
  */
-export function CodeTabs<T>({ tabs, onEditStart, onEditEnd }: CodeTabsProps<T>) {
+export function CodeTabs<T>({ tabs, onEditStart, onEditEnd, onMermaidValidityChange }: CodeTabsProps<T>) {
   const [active, setActive] = useState(tabs[0]?.id ?? "");
   return (
     <div className="code-tabs">
@@ -44,7 +47,12 @@ export function CodeTabs<T>({ tabs, onEditStart, onEditEnd }: CodeTabsProps<T>) 
       {tabs.map(({ id, label: _label, hint, ...pane }) => (
         <div key={id} className={id === active ? "code-tab-panel" : "code-tab-panel hidden"}>
           {hint !== undefined && <div className="code-tab-hint">{hint}</div>}
-          <CodePane {...pane} onEditStart={onEditStart} onEditEnd={onEditEnd} />
+          <CodePane
+            {...pane}
+            onEditStart={onEditStart}
+            onEditEnd={onEditEnd}
+            {...(pane.mermaidText === false ? {} : { onMermaidValidityChange })}
+          />
         </div>
       ))}
     </div>

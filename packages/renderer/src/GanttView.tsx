@@ -95,17 +95,20 @@ export function GanttView({
               stroke="var(--gm-grid, #d7dce3)"
               strokeWidth={1}
             />
-            <text
-              x={t.x}
-              y={layout.axisY - 8}
-              textAnchor="middle"
-              fontSize={11}
-              fontFamily="sans-serif"
-              fill="var(--gm-muted, #667)"
-              style={{ userSelect: "none" }}
-            >
-              {t.label}
-            </text>
+            {/* a crowded axis keeps the gridline and drops the date */}
+            {t.label !== undefined && (
+              <text
+                x={t.x}
+                y={layout.axisY - 8}
+                textAnchor="middle"
+                fontSize={11}
+                fontFamily="sans-serif"
+                fill="var(--gm-muted, #667)"
+                style={{ userSelect: "none" }}
+              >
+                {t.label}
+              </text>
+            )}
           </g>
         ))}
         <line

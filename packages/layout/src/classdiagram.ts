@@ -11,6 +11,9 @@ import {
   type RelationLine,
   type RelationId,
 } from "@gmermaid/ir";
+import { collisionIndex } from "./collision";
+import { placeSelfLoopLabel } from "./compound";
+import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
 
@@ -25,7 +28,9 @@ const MIN_W = 110;
 const NOTE_PAD = 8;
 // visual breathing room around a namespace frame; the extra top holds the title
 const NS_PAD = 10;
-const NS_TITLE_H = 24;
+/** Height of a namespace's title band. */
+export const NAMESPACE_TITLE_BAND = 24;
+const NS_TITLE_H = NAMESPACE_TITLE_BAND + NS_PAD;
 // self-relation detour geometry (right side of the node)
 const SELF_REL_W = 30;
 const SELF_REL_H = 26;
@@ -131,7 +136,7 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     // dagre cannot route self-edges — they are synthesized after layout as a
     // rectangular detour off the node's right side (cf. SELF_MSG_EXTRA in
     // the sequence layout)
-    if (r.from !== r.to) g.setEdge(r.from, r.to, {}, r.id);
+    if (r.from !== r.to) g.setEdge(r.from, r.to, edgeLabelSize(r.label, measure, NOTE_FONT), r.id);
   }
 
   // notes take part in the layout as ordinary nodes: an attached note is
@@ -181,10 +186,24 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     };
   });
 
+  const notes: ClassNoteBox[] = ir.notes.map((n) => {
+    const pos = g.node(n.id);
+    const size = noteSize.get(n.id)!;
+    const rect = { x: pos.x - size.w / 2, y: pos.y - size.h / 2, w: size.w, h: size.h };
+    const link =
+      n.target !== undefined && g.hasEdge(n.id, n.target, n.id)
+        ? g.edge(n.id, n.target, n.id).points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }))
+        : undefined;
+    return { id: n.id, rect, text: n.text, ...(link !== undefined ? { link } : {}) };
+  });
+
   const boxByClass = new Map<ClassId, Rect>(classes.map((c) => [c.id, c.rect]));
   // stacked self-relations on one node fan outward by index
   const selfCount = new Map<ClassId, number>();
   let selfMaxRight = 0;
+  // dagre reserved room for the labels on the edges it routed; a self-relation
+  // is drawn afterwards, so its label has to find its own gap.
+  const taken = collisionIndex([...classes.map((c) => c.rect), ...notes.map((n) => n.rect)]);
 
   const relations: RelationPath[] = ir.relations.map((r) => {
     let points: Point[];
@@ -202,9 +221,14 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
         { x: reach, y: cy + SELF_REL_H / 2 },
         { x: right, y: cy + SELF_REL_H / 2 },
       ];
-      labelPos = { x: reach + 6, y: cy };
-      const labelW = r.label !== undefined ? measure.measure(r.label, MEMBER_FONT).w + 12 : 0;
-      selfMaxRight = Math.max(selfMaxRight, reach + labelW);
+      if (r.label !== undefined) {
+        const spot = placeSelfLoopLabel(taken, rect, reach, cy, measure.measure(r.label, MEMBER_FONT));
+        labelPos = spot.labelPos;
+        selfMaxRight = Math.max(selfMaxRight, spot.right + 6);
+      } else {
+        labelPos = { x: reach + 6, y: cy };
+        selfMaxRight = Math.max(selfMaxRight, reach);
+      }
     } else {
       const e = g.edge(r.from, r.to, r.id);
       points = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
@@ -227,17 +251,6 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
         ? { toCardinality: r.toCardinality, toCardinalityPos: { x: last.x + 8, y: last.y - 8 } }
         : {}),
     };
-  });
-
-  const notes: ClassNoteBox[] = ir.notes.map((n) => {
-    const pos = g.node(n.id);
-    const size = noteSize.get(n.id)!;
-    const rect = { x: pos.x - size.w / 2, y: pos.y - size.h / 2, w: size.w, h: size.h };
-    const link =
-      n.target !== undefined && g.hasEdge(n.id, n.target, n.id)
-        ? g.edge(n.id, n.target, n.id).points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }))
-        : undefined;
-    return { id: n.id, rect, text: n.text, ...(link !== undefined ? { link } : {}) };
   });
 
   const graph = g.graph();

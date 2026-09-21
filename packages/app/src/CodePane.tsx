@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror, { ExternalChange } from "@uiw/react-codemirror";
 import type { ViewUpdate } from "@codemirror/view";
 import type { ParseError, ParseResult, ParseWarning } from "@gmermaid/mermaid-parser";
+import { useMermaidVerdict } from "./mermaidValidator";
 
 export interface CodePaneProps<T> {
   /** Canonical code generated from the IR. */
@@ -15,6 +16,19 @@ export interface CodePaneProps<T> {
   readonly initialDraft?: string | undefined;
   /** Reports whether the visible draft can be represented by the canonical IR. */
   readonly onValidityChange?: ((valid: boolean) => void) | undefined;
+  /** Reports the REAL mermaid parser's verdict on the shown text: false only
+   * when mermaid refused it outright.
+   *
+   * Kept apart from {@link onValidityChange} on purpose. Text our own parser
+   * accepts is already in the IR — real user work — and must keep being
+   * persisted even while mermaid cannot read the generated text (whole
+   * diagram families have had such codegen bugs). So autosave follows
+   * `onValidityChange`, and only the MCP review submit follows this one. */
+  readonly onMermaidValidityChange?: ((valid: boolean) => void) | undefined;
+  /** False for a pane whose text is not mermaid at all (the XState tab):
+   * mermaid.js would reject it every keystroke and the message would be a
+   * lie. Such a pane reports itself mermaid-valid and shows nothing. */
+  readonly mermaidText?: boolean | undefined;
   /** What the LAST load (file, Files panel, autosave) threw away. Shown until
    * the user starts editing, at which point their own draft speaks instead. */
   readonly loadWarnings?: readonly ParseWarning[] | undefined;
@@ -44,6 +58,8 @@ export function CodePane<T>({
   onEditEnd,
   initialDraft,
   onValidityChange,
+  onMermaidValidityChange,
+  mermaidText = true,
   loadWarnings,
   codeWarnings,
 }: CodePaneProps<T>) {
@@ -68,7 +84,18 @@ export function CodePane<T>({
   // choose instead of losing either side.
   const staleWhileFocused = focused && draft !== null && draft.base !== code;
 
+  // CONTEXT.md's Validation rule: the real mermaid parser judges the text, not
+  // just our own. Judging what the pane SHOWS covers both directions with one
+  // mechanism — a hand-typed diagram we accept but mermaid does not, and code
+  // our codegen produced that mermaid cannot read.
+  const shownCode = active?.text ?? code;
+  const mermaidVerdict = useMermaidVerdict(mermaidText ? shownCode : undefined);
+
   const valid = errors.length === 0 && !staleWhileFocused;
+  // "pending"/"unavailable" deliberately count as valid: validation is async
+  // and may never answer (offline chunk), and a permanently disabled review
+  // button would be worse than a late error.
+  const mermaidValid = mermaidVerdict.status !== "rejected";
   // What the last successful parse dropped. It outlives the draft on
   // purpose: by the time the pane snaps back to canonical code the styling is
   // ALREADY gone from it, which is exactly when the user needs to be told.
@@ -77,6 +104,9 @@ export function CodePane<T>({
   const validityRef = useRef(onValidityChange);
   validityRef.current = onValidityChange;
   useEffect(() => validityRef.current?.(valid), [valid]);
+  const mermaidValidityRef = useRef(onMermaidValidityChange);
+  mermaidValidityRef.current = onMermaidValidityChange;
+  useEffect(() => mermaidValidityRef.current?.(mermaidValid), [mermaidValid]);
 
   // latest-ref: keeps handleChange referentially stable so the CodeMirror
   // wrapper doesn't reconfigure its extensions on every parent render
@@ -158,6 +188,11 @@ export function CodePane<T>({
               line {e.line}: {e.message}
             </div>
           ))}
+        </div>
+      )}
+      {mermaidVerdict.status === "rejected" && (
+        <div className="code-mermaid-error">
+          <strong>Mermaid.js が解釈できません:</strong> {mermaidVerdict.message}
         </div>
       )}
       {(shownWarnings.length > 0 || (active === null && (codeWarnings?.length ?? 0) > 0)) && (
