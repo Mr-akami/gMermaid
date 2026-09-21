@@ -95,11 +95,90 @@ describe("parseStateDiagram", () => {
   });
 
   it("rejects unknown constructs with a line number", () => {
-    // `--` concurrency regions are still unsupported
-    const result = parseStateDiagram("stateDiagram-v2\n  state X {\n    A\n    --\n    B\n  }\n");
+    const result = parseStateDiagram("stateDiagram-v2\n  state X {\n    A\n    A ==> B\n  }\n");
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors[0]!.line).toBe(4);
+    // `--` only makes sense inside a block
+    const stray = parseStateDiagram("stateDiagram-v2\n  A\n  --\n  B\n");
+    expect(stray.ok).toBe(false);
+    if (stray.ok) return;
+    expect(stray.errors[0]!).toMatchObject({ line: 3 });
+  });
+
+  it("parses `--` concurrency regions with per-region [*] and a per-block direction", () => {
+    const code = `stateDiagram-v2
+  [*] --> Active
+  state Active {
+    direction LR
+    [*] --> NumLockOff
+    NumLockOff --> NumLockOn : EvNumLockPressed
+    --
+    [*] --> CapsLockOff
+    CapsLockOff --> [*]
+    --
+    state ScrollLockOff
+  }
+`;
+    const result = parseStateDiagram(code);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    const byId = new Map(result.ir.states.map((s) => [s.id as string, s]));
+    expect(byId.get("Active")).toMatchObject({ direction: "LR" });
+    expect("region" in byId.get("Active")!).toBe(false);
+    // region 0 members carry no region field; later regions are indexed
+    expect(byId.get("state_start_Active")).toMatchObject({ role: "start", parent: "Active" });
+    expect("region" in byId.get("NumLockOff")!).toBe(false);
+    expect(byId.get("state_start_Active_r1")).toMatchObject({ role: "start", parent: "Active", region: 1 });
+    expect(byId.get("state_end_Active_r1")).toMatchObject({ role: "end", parent: "Active", region: 1 });
+    expect(byId.get("CapsLockOff")).toMatchObject({ parent: "Active", region: 1 });
+    expect(byId.get("ScrollLockOff")).toMatchObject({ parent: "Active", region: 2 });
+    // codegen groups members by region and separates the groups with `--`
+    const regen = stateToMermaid(result.ir);
+    expect(regen).toBe(`stateDiagram-v2
+  state Active {
+    direction LR
+    state NumLockOff
+    state NumLockOn
+    [*] --> NumLockOff
+    --
+    state CapsLockOff
+    [*] --> CapsLockOff
+    CapsLockOff --> [*]
+    --
+    state ScrollLockOff
+  }
+  [*] --> Active
+  NumLockOff --> NumLockOn : EvNumLockPressed
+`);
+    const back = parseStateDiagram(regen);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(sortById(back.ir.states)).toEqual(sortById(result.ir.states));
+    expect(edgeSet(back.ir.transitions)).toEqual(edgeSet(result.ir.transitions));
+    expect(stateToMermaid(back.ir)).toBe(regen);
+  });
+
+  it("round-trips multi-line notes in block form and self-transitions", () => {
+    const code = `stateDiagram-v2
+  A --> A : tick
+  A --> B: no space before the label
+  note right of A
+    first #lt;line#gt;
+    second
+  end note
+`;
+    const result = parseStateDiagram(code);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    expect(edgeSet(result.ir.transitions)).toEqual(["A\u2192A:tick", "A\u2192B:no space before the label"]);
+    expect(result.ir.notes[0]!.text).toBe("first <line>\nsecond");
+    const regen = stateToMermaid(result.ir);
+    expect(regen).toContain("  note right of A\n    first #lt;line#gt;\n    second\n  end note\n");
+    const back = parseStateDiagram(regen);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(result.ir);
   });
 });
 
