@@ -38,12 +38,12 @@ export type SequenceAction =
   // activate: undefined = keep, null = clear
   | { type: "updateMessage"; id: MessageId; label?: string; arrow?: MessageArrowType; activate?: "start" | "end" | null }
   | { type: "updateNote"; id: NoteId; text?: string; position?: NotePosition }
-  | { type: "removeEvent"; id: EventId }
+  | { type: "removeEvent"; id: SequenceEventId }
   | { type: "updateFragment"; id: FragmentId; fragmentKind?: FragmentKind }
   // loopBounds: undefined = keep, null = clear
   | { type: "updateBranch"; id: BranchId; condition?: string; loopBounds?: LoopBounds | null }
   | { type: "addBranch"; fragmentId: FragmentId; branchId: BranchId; condition: string }
-  | { type: "moveEventTo"; id: EventId; container: EventContainer; index: number }
+  | { type: "moveEventTo"; id: SequenceEventId; container: EventContainer; index: number }
   // null = take the lifeline out of its box; a box left empty disappears
   | { type: "setLifelineBox"; id: LifelineId; box: BoxId | null }
   | { type: "addBox"; box: Box }
@@ -62,10 +62,10 @@ export type SequenceAction =
       fragmentKind: FragmentKind;
       condition: string;
       loopBounds?: LoopBounds;
-      eventIds: readonly EventId[];
+      eventIds: readonly SequenceEventId[];
     };
 
-export type EventId = SequenceEvent["id"];
+export type SequenceEventId = SequenceEvent["id"];
 
 /** Where an event lives: the top level, or inside a fragment branch. */
 export type EventContainer = { kind: "root" } | { kind: "branch"; branchId: BranchId };

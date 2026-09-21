@@ -53,6 +53,23 @@ function eachMessage(
   }
 }
 
+/** Every lifeline an event subtree touches — what a fragment frame spans. */
+function lifelinesOf(events: readonly SequenceEvent[]): Set<LifelineId> {
+  const out = new Set<LifelineId>();
+  const walk = (list: readonly SequenceEvent[]): void => {
+    for (const e of list) {
+      if (e.kind === "message") {
+        out.add(e.from);
+        out.add(e.to);
+      } else if (e.kind === "note") for (const id of e.lifelines) out.add(id);
+      else if (e.kind === "fragment") for (const b of e.branches) walk(b.events);
+      else out.add(e.lifeline);
+    }
+  };
+  walk(events);
+  return out;
+}
+
 export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceLayout {
   // Multi-line text (`<br/>` in the mermaid source) measures line by line:
   // the renderer draws one <tspan> per line, so height grows with the count.
@@ -134,22 +151,6 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
       rect: { x: cx - BAR_W / 2 + depth * BAR_NEST, y: from, w: BAR_W, h: Math.max(BAR_MIN_H, at - from) },
       depth,
     });
-  };
-
-  const lifelinesOf = (events: readonly SequenceEvent[]): Set<LifelineId> => {
-    const s = new Set<LifelineId>();
-    const walk = (list: readonly SequenceEvent[]): void => {
-      for (const e of list) {
-        if (e.kind === "message") {
-          s.add(e.from);
-          s.add(e.to);
-        } else if (e.kind === "note") for (const id of e.lifelines) s.add(id);
-        else if (e.kind === "fragment") for (const b of e.branches) walk(b.events);
-        else s.add(e.lifeline);
-      }
-    };
-    walk(events);
-    return s;
   };
 
   const walk = (

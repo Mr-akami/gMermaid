@@ -123,6 +123,7 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
           <label>
             Type
             <select
+              aria-label="Type"
               value={selection.lifeline.kind}
               onChange={(e) => props.onChangeLifelineKind(e.target.value as ParticipantKind)}
             >
@@ -136,6 +137,7 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
           <label>
             Box
             <select
+              aria-label="Box"
               value={props.lifelineBox?.id ?? ""}
               onChange={(e) => props.onChangeLifelineBox(e.target.value === "" ? null : e.target.value === "new" ? "new" : (e.target.value as BoxId))}
             >
@@ -153,6 +155,7 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
               <label>
                 Box name
                 <input
+                  aria-label="Box name"
                   value={props.lifelineBox.name}
                   onFocus={onEditStart}
                   onBlur={onEditEnd}
@@ -162,6 +165,7 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
               <label>
                 Box color
                 <input
+                  aria-label="Box color"
                   value={props.lifelineBox.color ?? ""}
                   placeholder="rgb(200,220,255)"
                   onFocus={onEditStart}
@@ -172,11 +176,11 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
             </>
           )}
           <label>
-            <input type="checkbox" checked={props.lifelineCreated} onChange={(e) => props.onToggleCreated(e.target.checked)} />{" "}
+            <input type="checkbox" aria-label="Created at first message" checked={props.lifelineCreated} onChange={(e) => props.onToggleCreated(e.target.checked)} />{" "}
             Created at first message
           </label>
           <label>
-            <input type="checkbox" checked={props.lifelineDestroyed} onChange={(e) => props.onToggleDestroyed(e.target.checked)} />{" "}
+            <input type="checkbox" aria-label="Destroyed at last message" checked={props.lifelineDestroyed} onChange={(e) => props.onToggleDestroyed(e.target.checked)} />{" "}
             Destroyed at last message
           </label>
         </>
@@ -214,6 +218,7 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
           <label>
             Activation
             <select
+              aria-label="Activation"
               value={selection.message.activate ?? ""}
               onChange={(e) => props.onChangeMessageActivation(e.target.value === "" ? null : (e.target.value as "start" | "end"))}
             >
@@ -230,6 +235,7 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
           <label>
             Fill color
             <input
+              aria-label="Fill color"
               value={selection.fragment.branches[0]?.condition ?? ""}
               placeholder="rgb(0,0,255)"
               onFocus={onEditStart}

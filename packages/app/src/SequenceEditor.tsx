@@ -362,6 +362,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
         <label className="hint" style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <input
             type="checkbox"
+            aria-label="autonumber"
             checked={ir.autonumber !== undefined}
             onChange={(e) => h.dispatch({ type: "setAutonumber", autonumber: e.target.checked ? { start: 1, step: 1 } : null })}
           />
@@ -372,6 +373,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
             <label className="hint">
               start
               <input
+                aria-label="autonumber start"
                 style={{ width: 44, marginLeft: 4 }}
                 inputMode="numeric"
                 value={ir.autonumber.start}
@@ -387,6 +389,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
             <label className="hint">
               step
               <input
+                aria-label="autonumber step"
                 style={{ width: 44, marginLeft: 4 }}
                 inputMode="numeric"
                 value={ir.autonumber.step}

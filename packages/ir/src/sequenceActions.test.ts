@@ -249,8 +249,10 @@ describe("activation", () => {
   });
 });
 
+const X = (s: string) => s as BoxId;
+const E = (s: string) => s as LifecycleId;
+
 describe("boxes", () => {
-  const X = (s: string) => s as BoxId;
   const three: SeqIR = {
     ...base,
     lifelines: [...base.lifelines, { id: L("c"), name: "C", kind: "actor" }],
@@ -295,8 +297,6 @@ describe("boxes", () => {
 });
 
 describe("setLifecycle", () => {
-  const E = (s: string) => s as LifecycleId;
-
   it("create goes right before the first message touching the lifeline, destroy before the last", () => {
     const created = applySequenceAction(base, { type: "setLifecycle", lifeline: L("b"), which: "create", eventId: E("c1"), on: true });
     expect(created.events.map((e) => e.id)).toEqual(["c1", "m1", "f1", "m4"]);
