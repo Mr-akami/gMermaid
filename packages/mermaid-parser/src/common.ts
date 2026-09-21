@@ -26,6 +26,7 @@ export function unescapeLabel(text: string): string {
   return text
     .replaceAll("<br/>", "\n")
     .replaceAll("#quot;", '"')
+    .replaceAll("#37;", "%")
     .replaceAll("#lt;", "<")
     .replaceAll("#gt;", ">")
     .replaceAll("#35;", "#");

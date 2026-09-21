@@ -36,7 +36,10 @@ function escapeLabel(label: string): string {
     .replaceAll("<", "#lt;")
     .replaceAll(">", "#gt;")
     .replaceAll('"', "#quot;")
-    .replaceAll(/\r?\n/g, "<br/>");
+    .replaceAll(/\r?\n/g, "<br/>")
+    // `%%` opens a comment for our line preprocessor (mermaid keeps it here,
+    // but the text would not survive our own import), so it travels escaped.
+    .replaceAll("%%", "#37;#37;");
 }
 
 /** Statement keywords the parser strips before it ever looks for a relation:
