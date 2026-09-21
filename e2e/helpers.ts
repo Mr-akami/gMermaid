@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement";
+export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement" | "Journey";
 
 /** Open the app fresh (no autosave) and switch to a diagram tab. */
 export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
@@ -27,13 +27,13 @@ export async function setCode(editor: Locator, text: string): Promise<void> {
   await cm.click();
   await cm.press("ControlOrMeta+a");
   await cm.press("Delete");
-  // insertText avoids CodeMirror auto-indent interfering with pasted lines
+  // dispatching on the view avoids CodeMirror auto-indent mangling pasted
+  // lines; the content DOM carries the view as `cmTile` (older CodeMirror
+  // called it `cmView`), so accept either handle
   await cm.evaluate((el, t) => {
-    // CodeMirror hangs its content view off .cm-content: `cmView` before the
-    // tiled renderer, `cmTile` since. Both expose the EditorView as `.view`.
-    type Holder = { view: { dispatch: (tr: unknown) => void; state: { doc: { length: number } } } };
-    const content = el as unknown as { cmView?: Holder; cmTile?: Holder };
-    const view = content.cmView?.view ?? content.cmTile?.view;
+    type Handle = { view: { dispatch: (tr: unknown) => void; state: { doc: { length: number } } } };
+    const host = el as unknown as { cmTile?: Handle; cmView?: Handle };
+    const view = (host.cmTile ?? host.cmView)?.view;
     if (!view) throw new Error("CodeMirror view not found");
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: t } });
   }, text);

@@ -8,6 +8,7 @@ describe("detectDiagramKind", () => {
     expect(detectDiagramKind("sequenceDiagram\nA->>B: x")).toBe("sequence");
     expect(detectDiagramKind("classDiagram\nclass A")).toBe("class");
     expect(detectDiagramKind("stateDiagram-v2\n[*] --> A")).toBe("state");
+    expect(detectDiagramKind("journey\n  title x")).toBe("journey");
     expect(detectDiagramKind("requirementDiagram\nrequirement a {\n}")).toBe("requirement");
     expect(detectDiagramKind("pie\n")).toBeUndefined();
   });

@@ -7,19 +7,23 @@ import type {
   EdgeId,
   FlowchartIR,
   FragmentId,
+  JourneyIR,
   LifelineId,
   MessageId,
   NodeId,
   NoteId,
   RelationId,
+  SectionId,
   RequirementIR,
   SequenceIR,
   StateIR,
+  TaskId,
   TransitionId,
 } from "@gmermaid/ir";
 import mermaid from "mermaid";
 import { flowchartToMermaid } from "./flowchart";
 import { classToMermaid } from "./classdiagram";
+import { journeyToMermaid } from "./journey";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
@@ -274,6 +278,28 @@ describe("mermaid.js accepts generated state diagrams", () => {
       ],
     };
     await expectMermaidAccepts(stateToMermaid(ir));
+  });
+});
+
+describe("mermaid.js accepts generated user journeys", () => {
+  it("parses title, sections, tasks with and without actors, and an implicit first section", async () => {
+    const ir: JourneyIR = {
+      kind: "journey",
+      title: "My working day & more",
+      sections: [
+        { id: "s0" as SectionId, name: "", tasks: [{ id: "t0" as TaskId, name: "Wake up", score: 2, actors: [] }] },
+        {
+          id: "s1" as SectionId,
+          name: "Go to work",
+          tasks: [
+            { id: "t1" as TaskId, name: "Make tea", score: 5, actors: ["Me"] },
+            { id: "t2" as TaskId, name: "Do work (hard)", score: 1, actors: ["Me", "Cat"] },
+          ],
+        },
+        { id: "s2" as SectionId, name: "日本語 section", tasks: [{ id: "t3" as TaskId, name: "帰る", score: 4, actors: ["私"] }] },
+      ],
+    };
+    await expectMermaidAccepts(journeyToMermaid(ir));
   });
 });
 

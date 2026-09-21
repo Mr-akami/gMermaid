@@ -15,6 +15,8 @@ export type RelationId = Id<"relation">;
 export type StateId = Id<"state">;
 export type TransitionId = Id<"transition">;
 export type SubgraphId = Id<"subgraph">;
+export type SectionId = Id<"section">;
+export type TaskId = Id<"task">;
 export type RequirementId = Id<"requirement">;
 export type ElementId = Id<"element">;
 
@@ -31,6 +33,8 @@ export type AnyId =
   | StateId
   | TransitionId
   | SubgraphId
+  | SectionId
+  | TaskId
   | RequirementId
   | ElementId;
 
