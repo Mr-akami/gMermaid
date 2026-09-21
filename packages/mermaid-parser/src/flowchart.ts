@@ -1,5 +1,6 @@
 import {
   flowchartShapeFromMermaid,
+  normalizeFlowchartEdge,
   type EdgeId,
   type FlowchartDirection,
   type FlowchartEdge,
@@ -432,16 +433,20 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
         for (const from of parsed.groups[g]!) {
           for (const to of parsed.groups[g + 1]!) {
             edgeSeq += 1;
-            edges.push({
-              id: `edge-${edgeSeq}` as EdgeId,
-              from: from.id as FlowchartEndpoint,
-              to: to.id as FlowchartEndpoint,
-              line: link.line,
-              headStart: link.headStart,
-              headEnd: link.headEnd,
-              ...(link.length !== undefined ? { length: link.length } : {}),
-              ...(link.label !== undefined ? { label: link.label } : {}),
-            });
+            // an imported diagram cannot introduce a head pair mermaid has
+            // no token for either: same invariant, same normalizer
+            edges.push(
+              normalizeFlowchartEdge({
+                id: `edge-${edgeSeq}` as EdgeId,
+                from: from.id as FlowchartEndpoint,
+                to: to.id as FlowchartEndpoint,
+                line: link.line,
+                headStart: link.headStart,
+                headEnd: link.headEnd,
+                ...(link.length !== undefined ? { length: link.length } : {}),
+                ...(link.label !== undefined ? { label: link.label } : {}),
+              }),
+            );
           }
         }
       }

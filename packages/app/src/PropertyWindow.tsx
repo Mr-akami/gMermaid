@@ -150,6 +150,7 @@ export function PropertyWindow(props: PropertyWindowProps) {
             <select
               aria-label="Edge start head"
               value={element.headStart}
+              disabled={element.line === "invisible"}
               onChange={(e) => props.onChangeEdgeHead("headStart", e.target.value as FlowchartEdgeHead)}
             >
               {HEADS.map(([v, l]) => (
@@ -164,6 +165,7 @@ export function PropertyWindow(props: PropertyWindowProps) {
             <select
               aria-label="Edge end head"
               value={element.headEnd}
+              disabled={element.line === "invisible"}
               onChange={(e) => props.onChangeEdgeHead("headEnd", e.target.value as FlowchartEdgeHead)}
             >
               {HEADS.map(([v, l]) => (
@@ -184,9 +186,15 @@ export function PropertyWindow(props: PropertyWindowProps) {
               onChange={(e) => props.onChangeEdgeLength(Number(e.target.value))}
             />
           </label>
-          {element.headStart !== "none" && element.headStart !== element.headEnd && (
-            <div className="hint">mermaid は両端が同じ形のときだけ始点マーカーを出力します</div>
-          )}
+          {/* the two selects are coupled: the reducer keeps the pair to what
+              mermaid can spell, so say which way the coupling will pull */}
+          <div className="hint">
+            {element.line === "invisible"
+              ? "非表示リンク(~~~)はマーカーを持てないため、両端とも None に固定されます"
+              : element.headStart === "none"
+                ? "始点マーカーを選ぶと、終点も同じ形に揃います(mermaid は <--> / o--o / x--x のみ)"
+                : "両端は同じ形に揃います。片方を変えるともう一方も追従します"}
+          </div>
         </>
       )}
       <button className="danger" onClick={onDelete}>

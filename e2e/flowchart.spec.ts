@@ -89,3 +89,28 @@ test("a subgraph's direction is editable from the property window", async ({ pag
   await editor.getByLabel("Subgraph direction").selectOption("");
   await expectCode(editor).not.toContain("direction LR");
 });
+
+test("the head selects are coupled to what mermaid can spell", async ({ page }) => {
+  const editor = await openEditor(page, "Flowchart");
+  await setCode(editor, 'flowchart TB\n  A["Start"] --> B["End"]\n');
+
+  await element(editor, "edge-1").locator("path").first().click({ force: true });
+  await expect(editor.getByRole("heading", { name: "Edge" })).toBeVisible();
+
+  await editor.getByLabel("Edge end head").selectOption("cross");
+  await expectCode(editor).toContain("A --x B");
+
+  // mermaid has no token for a mismatched pair, so the end follows the start
+  await editor.getByLabel("Edge start head").selectOption("circle");
+  await expectCode(editor).toContain("A o--o B");
+  await expect(editor.getByLabel("Edge start head")).toHaveValue("circle");
+  await expect(editor.getByLabel("Edge end head")).toHaveValue("circle");
+
+  // an invisible link has no head slots at all
+  await editor.getByLabel("Edge line").selectOption("invisible");
+  await expectCode(editor).toContain("A ~~~ B");
+  await expect(editor.getByLabel("Edge start head")).toBeDisabled();
+  await expect(editor.getByLabel("Edge end head")).toBeDisabled();
+  await expect(editor.getByLabel("Edge start head")).toHaveValue("none");
+  await expect(editor.getByLabel("Edge end head")).toHaveValue("none");
+});

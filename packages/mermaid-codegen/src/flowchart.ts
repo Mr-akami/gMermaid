@@ -51,8 +51,9 @@ const HEAD_END: Record<FlowchartEdgeHead, string> = { none: "", arrow: ">", circ
 
 /** `-->`, `o-.-o`, `<-->`, `~~~`; extra line chars per unit of length.
  * Mermaid only has tokens for a SYMMETRIC pair of heads (`<-->`, `o--o`,
- * `x--x`) — `o---` reads back as a plain open link — so a start head that
- * differs from the end head is dropped rather than emitted as a lie. */
+ * `x--x`) — `o---` reads back as a plain open link. That invariant now lives
+ * in the reducer (`normalizeFlowchartEdge`), so the mismatch branch below is
+ * unreachable; it stays as a belt-and-braces guard against emitting a lie. */
 export function edgeToken(edge: FlowchartEdge): string {
   const n = edge.length ?? 1;
   const start = edge.headStart === edge.headEnd ? HEAD_START[edge.headStart] : "";
@@ -66,6 +67,8 @@ export function edgeToken(edge: FlowchartEdge): string {
     case "thick":
       return `${start}${"=".repeat(n + 1)}${end || "="}`;
     case "invisible":
+      // `~~~` has no head slot at either end; the reducer guarantees both
+      // heads are already "none" here
       return "~".repeat(n + 2);
   }
 }
