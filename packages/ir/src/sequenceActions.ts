@@ -37,7 +37,7 @@ export type SequenceAction =
   | { type: "addEventAt"; event: Message | Note | Activation | Lifecycle; container: EventContainer; index: number }
   // activate: undefined = keep, null = clear
   | { type: "updateMessage"; id: MessageId; label?: string; arrow?: MessageArrowType; activate?: "start" | "end" | null }
-  | { type: "updateNote"; id: NoteId; text?: string; position?: NotePosition }
+  | { type: "updateNote"; id: NoteId; text?: string; position?: NotePosition; lifelines?: readonly LifelineId[] }
   | { type: "removeEvent"; id: SequenceEventId }
   | { type: "updateFragment"; id: FragmentId; fragmentKind?: FragmentKind }
   // loopBounds: undefined = keep, null = clear
@@ -231,14 +231,27 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
     }
 
     case "updateNote": {
+      const known = new Set(ir.lifelines.map((l) => l.id));
       const next = mapEvents(ir.events, (e) => {
         if (e.kind !== "note" || e.id !== action.id) return e;
         const text = action.text ?? e.text;
         const position = action.position ?? e.position;
-        if (text === e.text && position === e.position) return e;
+        // an unknown or duplicated target would emit a note mermaid cannot
+        // resolve, so the reducer keeps the old targets instead
+        const asked = action.lifelines;
+        const lifelines =
+          asked === undefined || asked.length === 0 || asked.some((id) => !known.has(id)) || new Set(asked).size !== asked.length
+            ? e.lifelines
+            : asked;
+        const same =
+          text === e.text &&
+          position === e.position &&
+          lifelines.length === e.lifelines.length &&
+          lifelines.every((id, i) => id === e.lifelines[i]);
+        if (same) return e;
         // `left of`/`right of` hold one lifeline only: the pair a two-sided
         // `over` note carried has to go with the position change
-        return normalizeSequenceNote({ ...e, text, position });
+        return normalizeSequenceNote({ ...e, text, position, lifelines });
       });
       return next === ir.events ? ir : { ...ir, events: next };
     }

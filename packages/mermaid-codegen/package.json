@@ -10,6 +10,7 @@
     "@gmermaid/ir": "workspace:*"
   },
   "devDependencies": {
+    "@gmermaid/mermaid-parser": "workspace:*",
     "jsdom": "^30.0.1",
     "mermaid": "^12.0.0"
   }

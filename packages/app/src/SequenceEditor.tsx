@@ -512,6 +512,10 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
             onChangeNotePosition={(position) =>
               selection.kind === "note" && h.dispatch({ type: "updateNote", id: selection.note.id, position })
             }
+            lifelines={ir.lifelines}
+            onChangeNoteLifelines={(lifelines) =>
+              selection.kind === "note" && h.dispatch({ type: "updateNote", id: selection.note.id, lifelines })
+            }
             onChangeBranchCondition={(condition) =>
               selection.kind === "branch" &&
               h.dispatch({ type: "updateBranch", id: selection.branch.id, condition }, `branch:${selection.branch.id}:cond`)

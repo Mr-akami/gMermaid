@@ -4,7 +4,7 @@ exports[`layoutRequirementDiagram > matches the committed golden layout 1`] = `
 {
   "boxes": [
     {
-      "headerBottom": 231.19999999999996,
+      "headerBottom": 255.99999999999997,
       "id": "test_req",
       "lines": [
         "Id: 1.1",
@@ -17,7 +17,7 @@ exports[`layoutRequirementDiagram > matches the committed golden layout 1`] = `
         "h": 149.6,
         "w": 208,
         "x": 8,
-        "y": 173.59999999999997,
+        "y": 198.39999999999998,
       },
       "stereotype": "«functionalRequirement»",
     },
@@ -44,7 +44,7 @@ exports[`layoutRequirementDiagram > matches the committed golden layout 1`] = `
       "label": "«satisfies»",
       "labelPos": {
         "x": 112,
-        "y": 137.6,
+        "y": 150,
       },
       "points": [
         {
@@ -53,11 +53,11 @@ exports[`layoutRequirementDiagram > matches the committed golden layout 1`] = `
         },
         {
           "x": 112,
-          "y": 143.6,
+          "y": 156,
         },
         {
           "x": 112,
-          "y": 173.59999999999997,
+          "y": 198.39999999999998,
         },
       ],
       "type": "satisfies",
@@ -65,7 +65,7 @@ exports[`layoutRequirementDiagram > matches the committed golden layout 1`] = `
   ],
   "kind": "requirement",
   "size": {
-    "h": 323.2,
+    "h": 348,
     "w": 224,
   },
 }

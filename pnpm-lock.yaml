@@ -139,6 +139,9 @@ importers:
         specifier: workspace:*
         version: link:../ir
     devDependencies:
+      '@gmermaid/mermaid-parser':
+        specifier: workspace:*
+        version: link:../mermaid-parser
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1

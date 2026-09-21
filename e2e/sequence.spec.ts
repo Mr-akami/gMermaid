@@ -72,12 +72,13 @@ test("the property window toggles a message's activation and a participant type"
 test("the property window puts a lifeline into a new box and wraps a message in a rect", async ({ page }) => {
   const editor = await openEditor(page, "Sequence");
   await setCode(editor, `sequenceDiagram\n  participant a\n  participant b\n  a->>b: call\n`);
-  await expect(editor.locator("svg [data-element-id^='box-']")).toHaveCount(0);
+  await expect(editor.locator("svg [data-element-id^='box-'], svg [data-element-id^='pbx_']")).toHaveCount(0);
 
   await head(element(editor, "b")).click();
   await editor.getByLabel("Box", { exact: true }).selectOption("new");
   await expectCode(editor).toMatch(/box Group\n\s+participant b\n\s+end/);
-  await expect(editor.locator("svg [data-element-id^='box-']")).toHaveCount(1);
+  // a box born in the GUI carries the generated `pbx_` prefix
+  await expect(editor.locator("svg [data-element-id^='box-'], svg [data-element-id^='pbx_']")).toHaveCount(1);
 
   // a is put into the same box, which keeps both members contiguous
   await head(element(editor, "a")).click();
@@ -112,4 +113,26 @@ test("autonumber start and step fields reach the code", async ({ page }) => {
   await expectCode(editor).toContain("autonumber 10 5");
   // numbering shows up on the rendered row
   await expect(editor.locator("svg text", { hasText: "10: call" })).toHaveCount(1);
+});
+
+// A note is attached to a lifeline in the text, so the GUI has to let you
+// say WHICH one — the creation heuristic used to be the only say you got.
+test("a note can be pointed at another lifeline", async ({ page }) => {
+  const editor = await openEditor(page, "Sequence");
+  await setCode(editor, "sequenceDiagram\n  participant A\n  participant B\n  participant C\n  A->>B: one\n");
+  await expectCode(editor).toContain("A->>B: one");
+
+  await editor.getByRole("button", { name: "+ Note" }).click();
+  await expectCode(editor).toContain("Note over A");
+
+  await editor.getByLabel("Note lifeline").selectOption({ label: "C" });
+  await expectCode(editor).toContain("Note over C");
+
+  await editor.getByLabel("Note second lifeline").selectOption({ label: "B" });
+  await expectCode(editor).toContain("Note over C,B");
+
+  // left of / right of hold one lifeline, so the pair collapses
+  await editor.getByLabel("Note position").selectOption("rightOf");
+  await expectCode(editor).toContain("Note right of C");
+  await expect(editor.getByLabel("Note second lifeline")).toHaveCount(0);
 });

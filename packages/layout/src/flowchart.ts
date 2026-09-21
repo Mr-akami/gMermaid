@@ -1,5 +1,6 @@
 import dagre from "@dagrejs/dagre";
 import type { FlowchartEndpoint, FlowchartIR, FlowchartNodeShape, SubgraphId } from "@gmermaid/ir";
+import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { EdgePath, FlowchartLayout, NodeBox, Point, SubgraphBox } from "./result";
 import { clipPolylineAtRect } from "./compound";
@@ -80,8 +81,15 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
     if (!g.hasNode(edge.from as string) || !g.hasNode(edge.to as string)) {
       throw new Error(`layoutFlowchart: edge ${edge.id} references a missing node`);
     }
-    // `--->` spans extra ranks: that is dagre's minlen
-    g.setEdge(anchor(edge.from), anchor(edge.to), { minlen: edge.length ?? 1 }, edge.id);
+    // `--->` spans extra ranks: that is dagre's minlen. Telling dagre the
+    // label's measured size makes it reserve a rank-sized gap for it, which
+    // is what keeps a long label off the nodes it runs between.
+    g.setEdge(
+      anchor(edge.from),
+      anchor(edge.to),
+      { minlen: edge.length ?? 1, ...edgeLabelSize(edge.label, measure, LABEL_STYLE) },
+      edge.id,
+    );
   }
 
   dagre.layout(g);
@@ -141,8 +149,14 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
       line: edge.line,
       headStart: edge.headStart,
       headEnd: edge.headEnd,
+      // dagre positions a sized label itself; fall back to the midpoint for
+      // edges it could not place (clipped cluster edges, self loops)
       ...(edge.label !== undefined && points.length > 0
-        ? { label: edge.label, labelPos: polylineMidpoint(points) }
+        ? {
+            label: edge.label,
+            labelPos:
+              typeof e.x === "number" && typeof e.y === "number" ? { x: e.x, y: e.y } : polylineMidpoint(points),
+          }
         : {}),
     };
   });
