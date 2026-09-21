@@ -14,7 +14,7 @@ import {
   type NodeId,
   type SubgraphId,
 } from "@gmermaid/ir";
-import { dropList, prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult, type ParseWarning } from "./common";
+import { dropList, importedIds, prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // Recognizes the flowchart subset gMermaid emits plus common hand-written
 // variants (unquoted labels, bare node ids, `graph` keyword, `;` separators,
@@ -24,6 +24,11 @@ import { dropList, prepareLines, unescapeLabel, unquote, type ParseError, type P
 // `:::className` suffixes on nodes. Each drop is reported as a warning.
 
 const DROPPED = dropList();
+
+// Words mermaid's flowchart grammar claims before it reads an id, verified
+// against mermaid.js itself. A hand-typed id from this list is rejected
+// rather than rewritten — the id is the user's, and it is theirs to fix.
+export const FLOWCHART_RESERVED_IDS: readonly string[] = ["class", "classDef", "end", "flowchart", "graph", "linkStyle", "style", "subgraph"];
 
 // mermaid ids may hold any letter/digit (incl. non-ASCII), `_`, `-` and `.`
 const ID = "[\\p{L}\\p{N}_.-]+";
@@ -299,6 +304,9 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   const errors: ParseError[] = [];
   const warnings: ParseWarning[] = [];
   const lines = prepareLines(code, { drop: DROPPED, splitSemicolons: true, stripClassSuffix: true, warnings });
+  // Flowchart node and subgraph ids are spelled verbatim in the text, so
+  // every id that comes in from it passes the import gate.
+  const ids = importedIds(FLOWCHART_RESERVED_IDS);
 
   let direction: FlowchartDirection = "TB";
   let headerSeen = false;
@@ -315,25 +323,26 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   // ids only ever seen as bare edge endpoints: may turn out to be subgraphs
   const bareOnly = new Set<string>();
 
-  const declare = (ref: NodeRef): void => {
+  const declare = (ref: NodeRef, lineNo: number): void => {
+    const id = ids.take(ref.id, lineNo);
     const explicit = ref.label !== undefined || ref.shape !== undefined;
-    const existing = nodes.get(ref.id);
+    const existing = nodes.get(id);
     if (!existing) {
-      if (subgraphs.has(ref.id)) return; // an edge endpoint naming a subgraph
-      nodeOrder.push(ref.id);
+      if (subgraphs.has(id)) return; // an edge endpoint naming a subgraph
+      nodeOrder.push(id);
       const parent = currentParent();
-      nodes.set(ref.id, {
-        id: ref.id as NodeId,
-        label: ref.label ?? ref.id,
+      nodes.set(id, {
+        id: id as NodeId,
+        label: ref.label ?? id,
         shape: ref.shape ?? "rect",
         ...(parent !== undefined ? { parent } : {}),
       });
-      if (explicit) bareOnly.delete(ref.id);
-      else bareOnly.add(ref.id);
+      if (explicit) bareOnly.delete(id);
+      else bareOnly.add(id);
     } else if (explicit) {
       // a later decl with an explicit label/shape wins over a bare reference
-      nodes.set(ref.id, { ...existing, label: ref.label ?? existing.label, shape: ref.shape ?? existing.shape });
-      bareOnly.delete(ref.id);
+      nodes.set(id, { ...existing, label: ref.label ?? existing.label, shape: ref.shape ?? existing.shape });
+      bareOnly.delete(id);
     }
   };
 
@@ -360,7 +369,7 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       let id: string;
       let title: string | undefined;
       if (withId) {
-        id = withId[1]!;
+        id = ids.take(withId[1]!, lineNo);
         title = withId[2];
       } else {
         title = head[1]!;
@@ -430,7 +439,7 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
         }
       }
       if (bad) continue;
-      for (const group of parsed.groups) for (const ref of group) declare(ref);
+      for (const group of parsed.groups) for (const ref of group) declare(ref, lineNo);
       for (let g = 0; g < parsed.links.length; g++) {
         const link = parsed.links[g]!;
         for (const from of parsed.groups[g]!) {
@@ -441,8 +450,8 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
             edges.push(
               normalizeFlowchartEdge({
                 id: `edge-${edgeSeq}` as EdgeId,
-                from: from.id as FlowchartEndpoint,
-                to: to.id as FlowchartEndpoint,
+                from: ids.take(from.id, lineNo) as FlowchartEndpoint,
+                to: ids.take(to.id, lineNo) as FlowchartEndpoint,
                 line: link.line,
                 headStart: link.headStart,
                 headEnd: link.headEnd,
@@ -463,16 +472,19 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       continue;
     }
     if (ref && (ref.label !== undefined || ref.shape !== undefined || ID_RE.test(line))) {
-      declare(ref);
+      declare(ref, lineNo);
       continue;
     }
 
     errors.push({ line: lineNo, message: `cannot parse: ${line}` });
   }
 
+  errors.push(...ids.errors());
   if (!headerSeen) errors.push({ line: 1, message: "empty diagram: missing header" });
   for (const open of stack) errors.push({ line: open.openedAt, message: `unclosed subgraph: ${open.id}` });
   if (errors.length > 0) return { ok: false, errors };
+  warnings.push(...ids.warnings());
+  warnings.sort((a, b) => a.line - b.line);
 
   return {
     ok: true,
