@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { BoxId, BranchId, FragmentId, LifecycleId, LifelineId, MessageId } from "./ids";
 import { applySequenceAction, normalizeSequenceNote } from "./sequenceActions";
-import type { Message, SequenceIR as SeqIR } from "./sequence";
+import { emptySequence } from "./sequence";
+import type { Message, Note, SequenceIR as SeqIR } from "./sequence";
 
 const L = (s: string) => s as LifelineId;
 const M = (s: string) => s as MessageId;
@@ -358,5 +359,50 @@ describe("setLifecycle", () => {
     expect(
       normalizeSequenceNote({ kind: "note", id: N("n2"), position: "over", lifelines: [L("a"), L("b"), L("c")], text: "x" }).lifelines,
     ).toEqual([L("a"), L("b")]);
+  });
+});
+
+const noteOf = (ir: SeqIR): Note => ir.events[0] as Note;
+
+describe("updateNote retargets a note", () => {
+  const threeLifelinesAndANote = (): SeqIR => {
+    let ir = emptySequence();
+    for (const name of ["A", "B", "C"]) {
+      ir = applySequenceAction(ir, {
+        type: "addLifeline",
+        lifeline: { id: L(name), name, kind: "participant" },
+      });
+    }
+    return applySequenceAction(ir, {
+      type: "addEventAt",
+      event: { kind: "note", id: N("n1"), position: "over", lifelines: [L("A")], text: "n" },
+      container: { kind: "root" },
+      index: 0,
+    });
+  };
+
+  it("moves it to another lifeline", () => {
+    const ir = applySequenceAction(threeLifelinesAndANote(), { type: "updateNote", id: N("n1"), lifelines: [L("C")] });
+    expect(noteOf(ir).lifelines).toEqual(["C"]);
+  });
+
+  it("spans a pair for `over` and keeps the first one otherwise", () => {
+    let ir = applySequenceAction(threeLifelinesAndANote(), {
+      type: "updateNote",
+      id: N("n1"),
+      lifelines: [L("C"), L("B")],
+    });
+    expect(noteOf(ir).lifelines).toEqual(["C", "B"]);
+    ir = applySequenceAction(ir, { type: "updateNote", id: N("n1"), position: "leftOf" });
+    expect(noteOf(ir).lifelines).toEqual(["C"]);
+  });
+
+  it("keeps the old target when asked for an unknown or duplicated one", () => {
+    const start = threeLifelinesAndANote();
+    for (const lifelines of [[], [L("ghost")], [L("B"), L("B")]]) {
+      const ir = applySequenceAction(start, { type: "updateNote", id: N("n1"), lifelines });
+      expect(noteOf(ir).lifelines).toEqual(["A"]);
+      expect(ir).toBe(start);
+    }
   });
 });

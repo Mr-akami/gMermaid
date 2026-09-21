@@ -5,6 +5,7 @@ import type {
   Fragment,
   FragmentKind,
   Lifeline,
+  LifelineId,
   Message,
   MessageArrowType,
   Note,
@@ -25,6 +26,8 @@ export type SequenceSelection =
 
 export interface SequencePropertyWindowProps {
   readonly selection: SequenceSelection;
+  /** Every lifeline, so a note can be pointed at another one. */
+  readonly lifelines: readonly Lifeline[];
   readonly onChangeLifelineName: (name: string) => void;
   readonly onChangeLifelineKind: (kind: ParticipantKind) => void;
   /** Boxes offered in the lifeline's Box select. */
@@ -49,6 +52,7 @@ export interface SequencePropertyWindowProps {
   readonly onChangeBranchCondition: (condition: string) => void;
   readonly onChangeNoteText: (text: string) => void;
   readonly onChangeNotePosition: (position: NotePosition) => void;
+  readonly onChangeNoteLifelines: (lifelines: readonly LifelineId[]) => void;
   readonly onAddBranch: () => void;
   readonly onDelete: () => void;
   /** e.g. a lifeline still referenced by messages cannot be deleted. */
@@ -311,13 +315,54 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
               <option value="rightOf">Right of</option>
             </select>
           </label>
-          {/* mermaid spans a pair of lifelines with `over` only, so say what
-              the coupling will do before the reducer does it */}
-          <div className="hint">
-            {selection.note.lifelines.length > 1
-              ? `over ${selection.note.lifelines.join(", ")} — Left of / Right of keeps only ${selection.note.lifelines[0]}`
-              : `on ${selection.note.lifelines.join(", ")}`}
-          </div>
+          <label>
+            Lifeline
+            <select
+              aria-label="Note lifeline"
+              value={selection.note.lifelines[0] ?? ""}
+              onChange={(e) =>
+                props.onChangeNoteLifelines([
+                  e.target.value as LifelineId,
+                  ...selection.note.lifelines.slice(1).filter((id) => id !== (e.target.value as LifelineId)),
+                ])
+              }
+            >
+              {props.lifelines.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* mermaid spans a PAIR of lifelines with `over` only */}
+          {selection.note.position === "over" && (
+            <label>
+              and
+              <select
+                aria-label="Note second lifeline"
+                value={selection.note.lifelines[1] ?? ""}
+                onChange={(e) =>
+                  props.onChangeNoteLifelines(
+                    e.target.value === ""
+                      ? selection.note.lifelines.slice(0, 1)
+                      : [selection.note.lifelines[0] as LifelineId, e.target.value as LifelineId],
+                  )
+                }
+              >
+                <option value="">—</option>
+                {props.lifelines
+                  .filter((l) => l.id !== selection.note.lifelines[0])
+                  .map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
+          {selection.note.lifelines.length > 1 && selection.note.position !== "over" && (
+            <div className="hint">Left of / Right of は1本にしか付けられません</div>
+          )}
         </>
       )}
       {selection.kind === "branch" && (
