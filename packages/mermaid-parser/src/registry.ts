@@ -1,18 +1,21 @@
-import type { ClassIR, FlowchartIR, GanttIR, SequenceIR, StateIR } from "@gmermaid/ir";
+import type { ClassIR, FlowchartIR, GanttIR, JourneyIR, RequirementIR, SequenceIR, StateIR, TimelineIR } from "@gmermaid/ir";
 import { parseClassDiagram } from "./classdiagram";
 import { firstStatement, type ParseResult } from "./common";
 import { parseFlowchart } from "./flowchart";
 import { parseGantt } from "./gantt";
+import { parseJourney } from "./journey";
+import { parseRequirementDiagram } from "./requirement";
 import { parseSequence } from "./sequence";
 import { parseStateDiagram } from "./statediagram";
+import { parseTimeline } from "./timeline";
 
 // One place that knows every diagram kind gMermaid supports. Adding a
 // diagram = add it here, then register its editor in packages/app.
 
-export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "gantt"] as const;
+export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "gantt"] as const;
 export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
 
-export type AnyIR = FlowchartIR | SequenceIR | ClassIR | StateIR | GanttIR;
+export type AnyIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR | TimelineIR | GanttIR;
 
 /** Header keyword(s) that open each diagram kind, in mermaid text. */
 const HEADERS: Record<DiagramKind, readonly string[]> = {
@@ -20,6 +23,9 @@ const HEADERS: Record<DiagramKind, readonly string[]> = {
   sequence: ["sequenceDiagram"],
   class: ["classDiagram"],
   state: ["stateDiagram"],
+  timeline: ["timeline"],
+  journey: ["journey"],
+  requirement: ["requirementDiagram"],
   gantt: ["gantt"],
 };
 
@@ -41,6 +47,12 @@ export function parseDiagram(kind: DiagramKind, code: string): ParseResult<AnyIR
       return parseClassDiagram(code);
     case "state":
       return parseStateDiagram(code);
+    case "timeline":
+      return parseTimeline(code);
+    case "journey":
+      return parseJourney(code);
+    case "requirement":
+      return parseRequirementDiagram(code);
     case "gantt":
       return parseGantt(code);
   }

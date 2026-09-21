@@ -1,5 +1,15 @@
-import type { FlowchartEdge, FlowchartIR, FlowchartNode, FlowchartSubgraph, SubgraphId } from "@gmermaid/ir";
+import {
+  flowchartShapeInfo,
+  type FlowchartEdge,
+  type FlowchartEdgeHead,
+  type FlowchartIR,
+  type FlowchartNode,
+  type FlowchartSubgraph,
+  type SubgraphId,
+} from "@gmermaid/ir";
 
+// bracket forms where mermaid has one; every other shape only exists as
+// `id@{ shape: name, label: "…" }`
 function nodeDecl(node: FlowchartNode): string {
   const label = escapeLabel(node.label);
   switch (node.shape) {
@@ -31,21 +41,32 @@ function nodeDecl(node: FlowchartNode): string {
       return `${node.id}[/"${label}"\\]`;
     case "trapezoidAlt":
       return `${node.id}[\\"${label}"/]`;
+    default:
+      return `${node.id}@{ shape: ${flowchartShapeInfo(node.shape).mermaid}, label: "${label}" }`;
   }
 }
 
-function arrowToken(edge: FlowchartEdge): string {
-  switch (edge.arrow) {
-    case "arrow":
-      return "-->";
-    case "open":
-      return "---";
+const HEAD_START: Record<FlowchartEdgeHead, string> = { none: "", arrow: "<", circle: "o", cross: "x" };
+const HEAD_END: Record<FlowchartEdgeHead, string> = { none: "", arrow: ">", circle: "o", cross: "x" };
+
+/** `-->`, `o-.-o`, `<-->`, `~~~`; extra line chars per unit of length.
+ * Mermaid only has tokens for a SYMMETRIC pair of heads (`<-->`, `o--o`,
+ * `x--x`) — `o---` reads back as a plain open link — so a start head that
+ * differs from the end head is dropped rather than emitted as a lie. */
+export function edgeToken(edge: FlowchartEdge): string {
+  const n = edge.length ?? 1;
+  const start = edge.headStart === edge.headEnd ? HEAD_START[edge.headStart] : "";
+  const end = HEAD_END[edge.headEnd];
+  switch (edge.line) {
+    case "solid":
+      // `--` + head, or `---` when there is no head: the last `-` fills the head slot
+      return `${start}${"-".repeat(n + 1)}${end || "-"}`;
     case "dotted":
-      return "-.->";
+      return `${start}-${".".repeat(n)}-${end}`;
     case "thick":
-      return "==>";
+      return `${start}${"=".repeat(n + 1)}${end || "="}`;
     case "invisible":
-      return "~~~";
+      return "~".repeat(n + 2);
   }
 }
 
@@ -93,9 +114,9 @@ export function flowchartToMermaid(ir: FlowchartIR): string {
   emitScope(undefined, "  ");
 
   for (const edge of ir.edges) {
-    const arrow = arrowToken(edge);
+    const arrow = edgeToken(edge);
     // invisible links cannot carry a label in mermaid
-    const label = edge.label !== undefined && edge.arrow !== "invisible" ? `|"${escapeLabel(edge.label)}"|` : "";
+    const label = edge.label !== undefined && edge.line !== "invisible" ? `|"${escapeLabel(edge.label)}"|` : "";
     lines.push(`  ${edge.from} ${arrow}${label} ${edge.to}`);
   }
   return lines.join("\n") + "\n";

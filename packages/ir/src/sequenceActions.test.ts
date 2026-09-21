@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BranchId, FragmentId, LifelineId, MessageId } from "./ids";
+import type { BoxId, BranchId, FragmentId, LifecycleId, LifelineId, MessageId } from "./ids";
 import { applySequenceAction } from "./sequenceActions";
 import type { Message, SequenceIR as SeqIR } from "./sequence";
 
@@ -21,9 +21,10 @@ const msg = (id: string, label = id): Message => ({
 const base: SeqIR = {
   kind: "sequence",
   lifelines: [
-    { id: L("a"), name: "A", isActor: false },
-    { id: L("b"), name: "B", isActor: false },
+    { id: L("a"), name: "A", kind: "participant" },
+    { id: L("b"), name: "B", kind: "participant" },
   ],
+  boxes: [],
   events: [
     msg("m1"),
     {
@@ -216,5 +217,107 @@ describe("moveEventTo", () => {
         index: 0,
       }),
     ).toBe(base);
+  });
+});
+
+describe("activation", () => {
+  it("updateMessage sets and clears the suffix-form flag", () => {
+    const on = applySequenceAction(base, { type: "updateMessage", id: M("m1"), activate: "start" });
+    expect(on.events[0]).toMatchObject({ activate: "start" });
+    expect(applySequenceAction(on, { type: "updateMessage", id: M("m1"), activate: "start" })).toBe(on);
+    const off = applySequenceAction(on, { type: "updateMessage", id: M("m1"), activate: null });
+    expect("activate" in off.events[0]!).toBe(false);
+  });
+
+  it("addEventAt inserts standalone activation events; unknown lifelines are rejected", () => {
+    const A = "activation-1" as import("./ids").ActivationId;
+    const next = applySequenceAction(base, {
+      type: "addEventAt",
+      event: { kind: "activation", id: A, lifeline: L("b"), on: true },
+      container: { kind: "root" },
+      index: 1,
+    });
+    expect(next.events.map((e) => e.id)).toEqual(["m1", "activation-1", "f1", "m4"]);
+    expect(
+      applySequenceAction(base, {
+        type: "addEventAt",
+        event: { kind: "activation", id: A, lifeline: L("zz"), on: true },
+        container: { kind: "root" },
+        index: 0,
+      }),
+    ).toBe(base);
+  });
+});
+
+const X = (s: string) => s as BoxId;
+const E = (s: string) => s as LifecycleId;
+
+describe("boxes", () => {
+  const three: SeqIR = {
+    ...base,
+    lifelines: [...base.lifelines, { id: L("c"), name: "C", kind: "actor" }],
+  };
+
+  it("addBox groups lifelines and steals them from other boxes", () => {
+    const one = applySequenceAction(three, { type: "addBox", box: { id: X("x1"), name: "G1", lifelines: [L("a"), L("b")] } });
+    expect(one.boxes).toEqual([{ id: "x1", name: "G1", lifelines: ["a", "b"] }]);
+    const two = applySequenceAction(one, { type: "addBox", box: { id: X("x2"), name: "G2", color: "rgb(1,2,3)", lifelines: [L("b"), L("zz")] } });
+    expect(two.boxes).toEqual([
+      { id: "x1", name: "G1", lifelines: ["a"] },
+      { id: "x2", name: "G2", color: "rgb(1,2,3)", lifelines: ["b"] },
+    ]);
+    expect(applySequenceAction(two, { type: "addBox", box: { id: X("x1"), name: "dup", lifelines: [] } })).toBe(two);
+  });
+
+  it("setLifelineBox keeps box members contiguous and drops emptied boxes", () => {
+    const one = applySequenceAction(three, { type: "addBox", box: { id: X("x1"), name: "G1", lifelines: [L("a")] } });
+    // c joins a's box: it is moved right after a, ahead of b
+    const joined = applySequenceAction(one, { type: "setLifelineBox", id: L("c"), box: X("x1") });
+    expect(joined.lifelines.map((l) => l.id)).toEqual(["a", "c", "b"]);
+    expect(joined.boxes[0]!.lifelines).toEqual(["a", "c"]);
+    expect(applySequenceAction(joined, { type: "setLifelineBox", id: L("c"), box: X("x1") })).toBe(joined);
+    const left = applySequenceAction(joined, { type: "setLifelineBox", id: L("a"), box: null });
+    expect(left.boxes[0]!.lifelines).toEqual(["c"]);
+    const empty = applySequenceAction(left, { type: "setLifelineBox", id: L("c"), box: null });
+    expect(empty.boxes).toEqual([]);
+    expect(applySequenceAction(empty, { type: "setLifelineBox", id: L("c"), box: null })).toBe(empty);
+  });
+
+  it("updateBox / removeBox / removeLifeline cascade", () => {
+    const one = applySequenceAction(three, { type: "addBox", box: { id: X("x1"), name: "G1", lifelines: [L("a"), L("c")] } });
+    const colored = applySequenceAction(one, { type: "updateBox", id: X("x1"), color: "aqua", name: "Team" });
+    expect(colored.boxes[0]).toEqual({ id: "x1", name: "Team", color: "aqua", lifelines: ["a", "c"] });
+    const uncolored = applySequenceAction(colored, { type: "updateBox", id: X("x1"), color: null });
+    expect("color" in uncolored.boxes[0]!).toBe(false);
+    expect(applySequenceAction(uncolored, { type: "updateBox", id: X("x1"), name: "Team" })).toBe(uncolored);
+    expect(applySequenceAction(one, { type: "removeLifeline", id: L("a") }).boxes[0]!.lifelines).toEqual(["c"]);
+    expect(applySequenceAction(one, { type: "removeBox", id: X("x1") }).boxes).toEqual([]);
+    expect(applySequenceAction(one, { type: "removeBox", id: X("nope") })).toBe(one);
+  });
+});
+
+describe("setLifecycle", () => {
+  it("create goes right before the first message touching the lifeline, destroy before the last", () => {
+    const created = applySequenceAction(base, { type: "setLifecycle", lifeline: L("b"), which: "create", eventId: E("c1"), on: true });
+    expect(created.events.map((e) => e.id)).toEqual(["c1", "m1", "f1", "m4"]);
+    const destroyed = applySequenceAction(created, { type: "setLifecycle", lifeline: L("b"), which: "destroy", eventId: E("d1"), on: true });
+    expect(destroyed.events.map((e) => e.id)).toEqual(["c1", "m1", "f1", "d1", "m4"]);
+    // turning it back off removes the event wherever it sits
+    const off = applySequenceAction(destroyed, { type: "setLifecycle", lifeline: L("b"), which: "create", eventId: E("x"), on: false });
+    expect(off.events.map((e) => e.id)).toEqual(["m1", "f1", "d1", "m4"]);
+    expect(applySequenceAction(off, { type: "setLifecycle", lifeline: L("b"), which: "create", eventId: E("x"), on: false })).toBe(off);
+  });
+
+  it("anchors inside a fragment branch when the first message lives there", () => {
+    const ir: SeqIR = { ...base, events: [base.events[1]!, msg("m4")] };
+    const next = applySequenceAction(ir, { type: "setLifecycle", lifeline: L("a"), which: "create", eventId: E("c1"), on: true });
+    const frag = next.events[0]!;
+    if (frag.kind !== "fragment") throw new Error("expected fragment");
+    expect(frag.branches[0]!.events.map((e) => e.id)).toEqual(["c1", "m2"]);
+  });
+
+  it("is a no-op without a message to attach to", () => {
+    const lonely: SeqIR = { ...base, lifelines: [...base.lifelines, { id: L("c"), name: "C", kind: "participant" }] };
+    expect(applySequenceAction(lonely, { type: "setLifecycle", lifeline: L("c"), which: "create", eventId: E("c1"), on: true })).toBe(lonely);
   });
 });

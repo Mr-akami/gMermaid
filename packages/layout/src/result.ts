@@ -1,4 +1,4 @@
-import type { EdgeId, FlowchartArrowType, FlowchartNodeShape, NodeId, SubgraphId } from "@gmermaid/ir";
+import type { EdgeId, FlowchartEdgeHead, FlowchartLineStyle, FlowchartNodeShape, NodeId, SubgraphId } from "@gmermaid/ir";
 
 // LayoutResult is pure data in diagram space. It carries ids only — never IR
 // object references — so the renderer cannot reach into the IR. Must survive
@@ -27,7 +27,9 @@ export interface EdgePath {
   readonly points: readonly Point[];
   readonly label?: string;
   readonly labelPos?: Point;
-  readonly arrow: FlowchartArrowType;
+  readonly line: FlowchartLineStyle;
+  readonly headStart: FlowchartEdgeHead;
+  readonly headEnd: FlowchartEdgeHead;
 }
 
 export interface SubgraphBox {

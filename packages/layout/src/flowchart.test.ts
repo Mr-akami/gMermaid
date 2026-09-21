@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EdgeId, FlowchartIR, NodeId } from "@gmermaid/ir";
 import { fixedWidthMeasurer } from "./measurer";
 import { layoutFlowchart } from "./flowchart";
+import type { FlowchartLayout } from "./result";
 
 const ir: FlowchartIR = {
   kind: "flowchart",
@@ -13,12 +14,15 @@ const ir: FlowchartIR = {
     { id: "node-3" as NodeId, label: "End", shape: "rounded" },
   ],
   edges: [
-    { id: "edge-1" as EdgeId, from: "node-1" as NodeId, to: "node-2" as NodeId, arrow: "arrow" },
-    { id: "edge-2" as EdgeId, from: "node-2" as NodeId, to: "node-3" as NodeId, arrow: "arrow", label: "yes" },
+    { id: "edge-1" as EdgeId, from: "node-1" as NodeId, to: "node-2" as NodeId, line: "solid", headStart: "none", headEnd: "arrow" },
+    { id: "edge-2" as EdgeId, from: "node-2" as NodeId, to: "node-3" as NodeId, line: "solid", headStart: "none", headEnd: "arrow", label: "yes" },
   ],
 };
 
 const S = (s: string) => s as import("@gmermaid/ir").SubgraphId;
+
+/** Vertical space between the first two nodes of a TB layout. */
+const rankGap = (l: FlowchartLayout) => l.nodes[1]!.rect.y - (l.nodes[0]!.rect.y + l.nodes[0]!.rect.h);
 
 describe("layoutFlowchart", () => {
   it("is deterministic and vertically ordered for TB", () => {
@@ -42,7 +46,7 @@ describe("layoutFlowchart", () => {
       ...ir,
       edges: [
         ...ir.edges,
-        { id: "edge-3" as EdgeId, from: "node-1" as NodeId, to: "node-2" as NodeId, arrow: "dotted" },
+        { id: "edge-3" as EdgeId, from: "node-1" as NodeId, to: "node-2" as NodeId, line: "dotted", headStart: "none", headEnd: "arrow" },
       ],
     };
     const result = layoutFlowchart(multi, fixedWidthMeasurer());
@@ -51,10 +55,20 @@ describe("layoutFlowchart", () => {
     expect(third!.points).not.toEqual(first!.points);
   });
 
+  it("spends edge length as extra ranks (dagre minlen)", () => {
+    const short = layoutFlowchart(ir, fixedWidthMeasurer());
+    const long: FlowchartIR = {
+      ...ir,
+      edges: [{ ...ir.edges[0]!, length: 3 }, ir.edges[1]!],
+    };
+    const result = layoutFlowchart(long, fixedWidthMeasurer());
+    expect(rankGap(result)).toBeGreaterThan(rankGap(short));
+  });
+
   it("throws on edges referencing missing nodes", () => {
     const broken: FlowchartIR = {
       ...ir,
-      edges: [{ id: "edge-9" as EdgeId, from: "node-1" as NodeId, to: "node-ghost" as NodeId, arrow: "arrow" }],
+      edges: [{ id: "edge-9" as EdgeId, from: "node-1" as NodeId, to: "node-ghost" as NodeId, line: "solid", headStart: "none", headEnd: "arrow" }],
     };
     expect(() => layoutFlowchart(broken, fixedWidthMeasurer())).toThrow(/missing node/);
   });
@@ -72,7 +86,7 @@ describe("layoutFlowchart", () => {
         { id: "a" as NodeId, label: "A", shape: "rect", parent: S("grp") },
         { id: "b" as NodeId, label: "B", shape: "rect" },
       ],
-      edges: [{ id: "edge-1" as EdgeId, from: "b" as NodeId, to: S("grp"), arrow: "arrow" }],
+      edges: [{ id: "edge-1" as EdgeId, from: "b" as NodeId, to: S("grp"), line: "solid", headStart: "none", headEnd: "arrow" }],
       subgraphs: [{ id: S("grp"), label: "Group" }],
     };
     const result = layoutFlowchart(withSub, fixedWidthMeasurer());

@@ -5,3 +5,6 @@ export * from "./sequenceResult";
 export * from "./sequence";
 export * from "./classdiagram";
 export * from "./statediagram";
+export * from "./timeline";
+export * from "./journey";
+export * from "./requirement";

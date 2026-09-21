@@ -1,5 +1,5 @@
 import dagre from "@dagrejs/dagre";
-import type { FlowchartEndpoint, FlowchartIR, SubgraphId } from "@gmermaid/ir";
+import type { FlowchartEndpoint, FlowchartIR, FlowchartNodeShape, SubgraphId } from "@gmermaid/ir";
 import type { TextMeasurer } from "./measurer";
 import type { EdgePath, FlowchartLayout, NodeBox, Point, SubgraphBox } from "./result";
 import { clipPolylineAtRect } from "./compound";
@@ -10,6 +10,14 @@ const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
 // visual breathing room around a cluster; the extra top holds the title
 const SUB_PAD = 8;
 const SUB_TITLE_H = 24;
+// marker-like shapes carry no label of their own, so they get a fixed box
+// instead of one measured from text
+const FIXED_SIZE: Partial<Record<FlowchartNodeShape, readonly [number, number]>> = {
+  smCirc: [18, 18],
+  fCirc: [18, 18],
+  crossCirc: [26, 26],
+  fork: [80, 12],
+};
 
 export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): FlowchartLayout {
   // multigraph: parallel edges between the same pair are keyed by edge id.
@@ -26,6 +34,14 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
       // Diamonds need extra room so the label fits inside the rotated square.
       w *= 1.6;
       h *= 1.6;
+    } else if (node.shape === "tri" || node.shape === "flipTri") {
+      // a triangle only holds its label near the base
+      w *= 1.6;
+      h *= 1.4;
+    } else if (FIXED_SIZE[node.shape] !== undefined) {
+      const [fw, fh] = FIXED_SIZE[node.shape]!;
+      w = node.shape === "fork" ? Math.max(w, fw) : fw;
+      h = fh;
     }
     g.setNode(node.id, { width: w, height: h });
   }
@@ -64,7 +80,8 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
     if (!g.hasNode(edge.from as string) || !g.hasNode(edge.to as string)) {
       throw new Error(`layoutFlowchart: edge ${edge.id} references a missing node`);
     }
-    g.setEdge(anchor(edge.from), anchor(edge.to), {}, edge.id);
+    // `--->` spans extra ranks: that is dagre's minlen
+    g.setEdge(anchor(edge.from), anchor(edge.to), { minlen: edge.length ?? 1 }, edge.id);
   }
 
   dagre.layout(g);
@@ -121,7 +138,9 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
     return {
       id: edge.id,
       points,
-      arrow: edge.arrow,
+      line: edge.line,
+      headStart: edge.headStart,
+      headEnd: edge.headEnd,
       ...(edge.label !== undefined && points.length > 0
         ? { label: edge.label, labelPos: polylineMidpoint(points) }
         : {}),
