@@ -19,7 +19,7 @@ import { sequenceToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseSequence } from "@gmermaid/mermaid-parser";
 import { SequenceView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
+import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SequencePropertyWindow, type BoxChoice, type SequenceSelection } from "./SequencePropertyWindow";
@@ -83,8 +83,9 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
   const [initial] = useState(() => {
     if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseSequence, initialIR);
     const parsed = parseSequence(initialCode);
-    return parsed.ok ? { ir: parsed.ir } : { ir: initialIR(), recoveredText: initialCode };
+    return parsed.ok ? { ir: parsed.ir, warnings: parsed.warnings } : { ir: initialIR(), recoveredText: initialCode, warnings: [] };
   });
+  const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applySequenceAction);
   const [view, setView] = useState<ViewState>({});
   // pan/zoom is ViewState (ADR 0001), held apart from the selection
@@ -109,9 +110,8 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
-      const result = parseSequence(loadRequest.code);
-      if (result.ok) h.pushIR(result.ir);
-      else alert(`Cannot load stored diagram:\n${formatParseErrors(result.errors)}`);
+      const loaded = load.accept(parseSequence(loadRequest.code), "Cannot load stored diagram");
+      if (loaded !== undefined) h.pushIR(loaded);
     }
     setView({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,13 +120,10 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
   async function openFile() {
     const text = await openMmd();
     if (text === null) return;
-    const result = parseSequence(text);
-    if (result.ok) {
-      h.pushIR(result.ir);
-      setView({});
-    } else {
-      alert(`Cannot open file:\n${result.errors.map((e) => `line ${e.line}: ${e.message}`).join("\n")}`);
-    }
+    const opened = load.accept(parseSequence(text), "Cannot open file");
+    if (opened === undefined) return;
+    h.pushIR(opened);
+    setView({});
   }
 
   const selection: SequenceSelection | undefined = useMemo(() => {
@@ -542,6 +539,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
         initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
+        loadWarnings={load.warnings}
         onValidityChange={(valid) => {
           setCodeValid(valid);
           onValidityChange?.(valid);

@@ -15,7 +15,7 @@ import { stateToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseStateDiagram } from "@gmermaid/mermaid-parser";
 import { StateView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
+import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { StatePropertyWindow, type StateSelection } from "./StatePropertyWindow";
@@ -68,8 +68,9 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   const [initial] = useState(() => {
     if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseStateDiagram, initialIR);
     const parsed = parseStateDiagram(initialCode);
-    return parsed.ok ? { ir: parsed.ir } : { ir: initialIR(), recoveredText: initialCode };
+    return parsed.ok ? { ir: parsed.ir, warnings: parsed.warnings } : { ir: initialIR(), recoveredText: initialCode, warnings: [] };
   });
+  const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyStateAction);
   const [view, setView] = useState<ViewState>({});
   // pan/zoom is ViewState (ADR 0001), held apart from the selection
@@ -91,9 +92,8 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
-      const result = parseStateDiagram(loadRequest.code);
-      if (result.ok) h.pushIR(result.ir);
-      else alert(`Cannot load stored diagram:\n${formatParseErrors(result.errors)}`);
+      const loaded = load.accept(parseStateDiagram(loadRequest.code), "Cannot load stored diagram");
+      if (loaded !== undefined) h.pushIR(loaded);
     }
     setView({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,13 +102,10 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   async function openFile() {
     const text = await openMmd();
     if (text === null) return;
-    const result = parseStateDiagram(text);
-    if (result.ok) {
-      h.pushIR(result.ir);
-      setView({});
-    } else {
-      alert(`Cannot open file:\n${formatParseErrors(result.errors)}`);
-    }
+    const opened = load.accept(parseStateDiagram(text), "Cannot open file");
+    if (opened === undefined) return;
+    h.pushIR(opened);
+    setView({});
   }
 
   function addState() {
@@ -370,6 +367,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
         initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
+        loadWarnings={load.warnings}
         onValidityChange={(valid) => {
           setCodeValid(valid);
           onValidityChange?.(valid);

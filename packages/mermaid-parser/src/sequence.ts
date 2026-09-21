@@ -23,13 +23,18 @@ import type {
   SequenceIR,
 } from "@gmermaid/ir";
 import { isColorToken, PARTICIPANT_KINDS } from "@gmermaid/ir";
-import { prepareLines, unescapeLabel, type ParseError, type ParseResult } from "./common";
+import { dropList, droppedWarning, prepareLines, unescapeLabel, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // Dialect the IR cannot hold is DISCARDED by design, same as `%%` comments:
 // frontmatter, `%%{init}%%` directives, `title`, `accTitle` / `accDescr`,
-// trailing `;` terminators, `links`/`properties` metadata other than `type`.
+// trailing `;` terminators, `@{ … }` participant metadata other than `type`,
+// the `link` / `links` / `properties` actor menus — and `autonumber off`,
+// which the IR cannot express (it only says "numbered, from n by m", or
+// nothing at all). It is dropped like the rest: a diagram that only turns
+// numbering off reopens identically, one that turns it off after an
+// `autonumber` comes back numbered. Both report a warning.
 
-const DROPPED = ["title", "accTitle", "accDescr"];
+const DROPPED = dropList({ extra: ["title", "link", "links", "properties"] });
 
 // mermaid actor ids may hold any letter/digit (incl. non-ASCII), `_`, `-`, `.`
 const ID = "[\\p{L}\\p{N}_.-]+";
@@ -87,7 +92,8 @@ const DECL_TAIL = `(${ID})(?:@\\{([^}]*)\\})?(?:\\s+as\\s+(.+))?`;
 
 export function parseSequence(code: string): ParseResult<SequenceIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, warnings });
 
   const lifelines: Lifeline[] = [];
   const seen = new Set<string>();
@@ -142,6 +148,11 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
         return { ok: false, errors };
       }
       headerSeen = true;
+      continue;
+    }
+
+    if (/^autonumber\s+off$/.test(line)) {
+      warnings.push(droppedWarning("autonumber off", lineNo));
       continue;
     }
 
@@ -342,6 +353,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
 
   return {
     ok: true,
+    warnings,
     ir: {
       kind: "sequence",
       lifelines,

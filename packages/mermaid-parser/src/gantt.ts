@@ -9,15 +9,15 @@ import {
   type SectionId,
   type TaskId,
 } from "@gmermaid/ir";
-import { prepareLines, type ParseError, type ParseResult } from "./common";
+import { dropList, prepareLines, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // gantt subset: title / dateFormat / axisFormat / tickInterval / excludes /
 // weekend / todayMarker / inclusiveEndDates, `section X`, and task lines
 // `Name : meta`. Dialect the IR cannot hold is DISCARDED by design, same as
-// `%%` comments: frontmatter, `%%{init}%%`, `includes`, `weekday`, `topAxis`,
-// `click`, `accTitle` / `accDescr` and trailing `;`.
+// `%%` comments: frontmatter, `%%{init}%%`, the shared styling statements,
+// `includes` / `weekday` / `topAxis` / `displayMode` / `link`, trailing `;`.
 
-const DROPPED = ["accTitle", "accDescr", "click", "includes", "weekday", "topAxis", "displayMode"];
+const DROPPED = dropList({ extra: ["includes", "weekday", "topAxis", "displayMode", "link"] });
 
 /** Mermaid's own duration grammar (`3d`, `1.5h`, `500ms`); anything else in
  * the end slot is read as a date. */
@@ -27,7 +27,8 @@ const TAGS: readonly string[] = GANTT_TAGS;
 
 export function parseGantt(code: string): ParseResult<GanttIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, warnings });
 
   interface DraftSection {
     readonly id: SectionId;
@@ -139,6 +140,7 @@ export function parseGantt(code: string): ParseResult<GanttIR> {
 
   return {
     ok: true,
+    warnings,
     ir: {
       kind: "gantt",
       ...(opts.title !== undefined ? { title: opts.title } : {}),

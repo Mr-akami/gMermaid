@@ -14,16 +14,16 @@ import {
   type NodeId,
   type SubgraphId,
 } from "@gmermaid/ir";
-import { prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult } from "./common";
+import { dropList, prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // Recognizes the flowchart subset gMermaid emits plus common hand-written
 // variants (unquoted labels, bare node ids, `graph` keyword, `;` separators,
 // bare `flowchart` header = TB). Dialect the IR cannot hold is DISCARDED by
-// design, same as `%%` comments: frontmatter, `%%{init}%%` directives,
-// `style` / `classDef` / `class` / `linkStyle` / `click` statements,
-// `accTitle` / `accDescr`, and `:::className` suffixes on nodes.
+// design, same as `%%` comments: frontmatter, `%%{init}%%` directives, the
+// shared styling/accessibility statements (STYLING_STATEMENTS) and
+// `:::className` suffixes on nodes. Each drop is reported as a warning.
 
-const DROPPED = ["style", "classDef", "class", "linkStyle", "click", "accTitle", "accDescr"];
+const DROPPED = dropList();
 
 // mermaid ids may hold any letter/digit (incl. non-ASCII), `_`, `-` and `.`
 const ID = "[\\p{L}\\p{N}_.-]+";
@@ -297,7 +297,8 @@ function parseEdgeLine(line: string): { groups: NodeRef[][]; links: Link[] } | s
 
 export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED, splitSemicolons: true, stripClassSuffix: true });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, splitSemicolons: true, stripClassSuffix: true, warnings });
 
   let direction: FlowchartDirection = "TB";
   let headerSeen = false;
@@ -475,6 +476,7 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
 
   return {
     ok: true,
+    warnings,
     ir: {
       kind: "flowchart",
       direction,

@@ -448,6 +448,47 @@ describe("parseSequence participant types", () => {
   });
 });
 
+describe("parseSequence dropped dialect", () => {
+  const MENUS = `sequenceDiagram
+  participant A
+  participant B
+  link A: Dash @ https://x
+  links A: {"a": "https://x"}
+  properties A: {"c": "red"}
+  A->>B: hi
+`;
+
+  it("opens actor menus (`link` / `links` / `properties`) instead of refusing the file", () => {
+    const result = parseSequence(MENUS);
+    expect(result.ok, JSON.stringify(result.ok ? [] : result.errors)).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.events).toHaveLength(1);
+    expect(result.warnings.map((w) => [w.line, w.message.split("`")[1]])).toEqual([
+      [4, "link"],
+      [5, "links"],
+      [6, "properties"],
+    ]);
+  });
+
+  it("drops `autonumber off`, which the IR cannot express, with a warning", () => {
+    const result = parseSequence("sequenceDiagram\n  autonumber off\n  A->>B: hi\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.autonumber).toBeUndefined();
+    expect(result.warnings).toEqual([
+      { line: 2, message: "`autonumber off` is not represented in the editor and will be lost on save" },
+    ]);
+  });
+
+  it("still reads a plain `autonumber`", () => {
+    const result = parseSequence("sequenceDiagram\n  autonumber 5 10\n  A->>B: hi\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.autonumber).toEqual({ start: 5, step: 10 });
+    expect(result.warnings).toEqual([]);
+  });
+});
+
 describe("parseSequence multi-line text", () => {
   it("turns `<br/>` into newlines in notes and message labels, both ways", () => {
     const ir = roundTripLenient(`sequenceDiagram\n  a->>b: first<br/>second\n  Note over a,b: one<br/>two\n`);

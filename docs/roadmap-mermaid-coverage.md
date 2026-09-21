@@ -12,7 +12,9 @@ trip, reducer, layout golden) and Playwright GUI tests under `e2e/`.
 
 Design rules stay as in `CONTEXT.md` / ADR 0001: IR is master, layout is
 auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
-**tolerated and dropped on import** — it has no GUI meaning here.
+**tolerated and dropped on import** — it has no GUI meaning here. The set is
+shared by every kind (`STYLING_STATEMENTS`) and every drop is reported as a
+`ParseWarning`, shown under the code pane.
 
 ## Phase 0 — test infra (done)
 - Playwright harness, tab smoke test, CI step. `pnpm test:e2e`.

@@ -1,19 +1,20 @@
 import type { JourneyIR, JourneySection, JourneyTask, SectionId, TaskId } from "@gmermaid/ir";
-import { prepareLines, type ParseError, type ParseResult } from "./common";
+import { dropList, prepareLines, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // `journey`: `title X`, `section X`, and task lines `Name: score: A, B`.
 // Mirrors mermaid's lexer: the task name is everything up to the FIRST `:`,
 // the field after it is the score, the (optional) field after that is the
 // comma-separated actor list; further `:` fields are ignored. `#` opens a
 // comment anywhere, so a `#` line tail is discarded. Frontmatter, `%%`
-// comments, `;` terminators and `accTitle` / `accDescr` are dropped by
-// design (see prepareLines).
+// comments, `;` terminators, the shared styling statements and journey's
+// `link` are dropped by design (see prepareLines) and reported as warnings.
 
-const DROPPED = ["accTitle", "accDescr"];
+const DROPPED = dropList({ extra: ["link"] });
 
 export function parseJourney(code: string): ParseResult<JourneyIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, warnings });
 
   let headerSeen = false;
   let title: string | undefined;
@@ -83,6 +84,7 @@ export function parseJourney(code: string): ParseResult<JourneyIR> {
   const out: JourneySection[] = sections.map((s) => ({ id: s.id, name: s.name, tasks: s.tasks }));
   return {
     ok: true,
+    warnings,
     ir: { kind: "journey", ...(title !== undefined ? { title } : {}), sections: out },
   };
 }

@@ -185,4 +185,24 @@ mindmap
       applyMindmapAction(ir, { type: "addNode", node: { id: "x" as MindmapNodeId, label: ":::", shape: "default", parent: "root" as MindmapNodeId } }),
     ).toBe(before);
   });
+
+  it("drops a styling statement instead of reading it as a second root", () => {
+    const result = parseMindmap("mindmap\n  root((r))\n    a\nclassDef x fill:#f00\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.nodes.map((n) => n.label)).toEqual(["r", "a"]);
+    expect(result.warnings).toEqual([
+      { line: 4, message: "`classDef` is not represented in the editor and will be lost on save" },
+    ]);
+  });
+
+  it("keeps node labels that merely start with a dropped keyword", () => {
+    // mindmap text is free prose and has no `class` statement at all, so
+    // these are nodes, not styling
+    const result = parseMindmap("mindmap\n  root((r))\n    style guide\n    class diagram\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.nodes.map((n) => n.label)).toEqual(["r", "style guide", "class diagram"]);
+    expect(result.warnings).toEqual([]);
+  });
 });

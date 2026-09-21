@@ -1,14 +1,16 @@
 import type { EventId, PeriodId, SectionId, TimelineEvent, TimelineIR, TimelinePeriod, TimelineSection } from "@gmermaid/ir";
-import { prepareLines, type ParseError, type ParseResult } from "./common";
+import { dropList, prepareLines, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // timeline: `title X`, `section X`, period lines `2002 : LinkedIn`, several
 // events on one line (`2004 : Facebook : Google`) and continuation lines that
 // start with `:` and attach to the period above. Mermaid's timeline text is
 // raw — `#`, `<` and `>` are literal there — so the only text transform is
 // `<br>` ↔ newline. Dialect the IR cannot hold is DISCARDED by design, same as
-// `%%` comments: frontmatter, `%%{init}%%`, `accTitle` / `accDescr`, `;`.
+// `%%` comments: frontmatter, `%%{init}%%`, `;`, and the shared styling
+// statements plus `callback` — without that last part a `classDef` line would
+// be read as a PERIOD and silently rewritten as one on save.
 
-const DROPPED = ["accTitle", "accDescr"];
+const DROPPED = dropList({ extra: ["callback"] });
 
 /** Mermaid accepts `<br>`, `<br/>` and `<br />` as a line break. */
 const BR_RE = /<br\s*\/?>/gi;
@@ -17,7 +19,8 @@ const toText = (raw: string): string => raw.trim().replaceAll(BR_RE, "\n");
 
 export function parseTimeline(code: string): ParseResult<TimelineIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, warnings });
 
   const sections: TimelineSection[] = [];
   let title: string | undefined;
@@ -121,5 +124,5 @@ export function parseTimeline(code: string): ParseResult<TimelineIR> {
   if (!headerSeen) errors.push({ line: 1, message: "empty diagram: missing header" });
   if (errors.length > 0) return { ok: false, errors };
 
-  return { ok: true, ir: { kind: "timeline", ...(title !== undefined ? { title } : {}), sections } };
+  return { ok: true, warnings, ir: { kind: "timeline", ...(title !== undefined ? { title } : {}), sections } };
 }

@@ -113,4 +113,22 @@ describe("parseJourney", () => {
     });
     expect(ir).toBe(before);
   });
+
+  it("drops styling instead of failing on `task score must be a number`", () => {
+    const result = parseJourney("journey\n  section S\n  T: 1: Me\nclassDef y fill:#f00\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.sections[0]!.tasks.map((t) => t.name)).toEqual(["T"]);
+    expect(result.warnings).toEqual([
+      { line: 4, message: "`classDef` is not represented in the editor and will be lost on save" },
+    ]);
+  });
+
+  it("keeps a task whose name starts with a dropped keyword", () => {
+    const result = parseJourney("journey\n  section S\n  class: 5: Me\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.sections[0]!.tasks.map((t) => t.name)).toEqual(["class"]);
+    expect(result.warnings).toEqual([]);
+  });
 });

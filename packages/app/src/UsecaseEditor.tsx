@@ -13,7 +13,7 @@ import { usecaseToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseUsecase } from "@gmermaid/mermaid-parser";
 import { UsecaseView, type Viewport } from "@gmermaid/renderer";
 import { measurer } from "./measurer";
-import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
+import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { UsecasePropertyWindow, type UsecaseSelection } from "./UsecasePropertyWindow";
@@ -59,8 +59,9 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
   const [initial] = useState(() => {
     if (initialCode === undefined) return loadInitial(STORAGE_KEY, parseUsecase, initialIR);
     const parsed = parseUsecase(initialCode);
-    return parsed.ok ? { ir: parsed.ir } : { ir: initialIR(), recoveredText: initialCode };
+    return parsed.ok ? { ir: parsed.ir, warnings: parsed.warnings } : { ir: initialIR(), recoveredText: initialCode, warnings: [] };
   });
+  const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyUsecaseAction);
   const [view, setView] = useState<ViewState>({});
   // reducer rejections must be visible, not silent no-ops (L2)
@@ -84,9 +85,8 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
     if (loadRequest.code === null) {
       h.pushIR(initialIR());
     } else {
-      const result = parseUsecase(loadRequest.code);
-      if (result.ok) h.pushIR(result.ir);
-      else alert(`Cannot load stored diagram:\n${formatParseErrors(result.errors)}`);
+      const loaded = load.accept(parseUsecase(loadRequest.code), "Cannot load stored diagram");
+      if (loaded !== undefined) h.pushIR(loaded);
     }
     setView({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,13 +95,10 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
   async function openFile() {
     const text = await openMmd();
     if (text === null) return;
-    const result = parseUsecase(text);
-    if (result.ok) {
-      h.pushIR(result.ir);
-      setView({});
-    } else {
-      alert(`Cannot open file:\n${formatParseErrors(result.errors)}`);
-    }
+    const opened = load.accept(parseUsecase(text), "Cannot open file");
+    if (opened === undefined) return;
+    h.pushIR(opened);
+    setView({});
   }
 
   const selectedActor = ir.actors.find((a) => a.id === view.selectedId);
@@ -308,6 +305,7 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
         onEditStart={() => {}}
         onEditEnd={h.endEdit}
         initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
+        loadWarnings={load.warnings}
         onValidityChange={setCodeValid}
       />
     </>
