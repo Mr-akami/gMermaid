@@ -89,3 +89,21 @@ test("the toolbar adds, renames and deletes a section", async ({ page }) => {
   await editor.getByRole("button", { name: "Delete", exact: true }).click();
   await expectCode(editor).not.toContain("section Rollout");
 });
+
+test("a task name mermaid would read as a statement is refused with a reason", async ({ page }) => {
+  const editor = await openEditor(page, "Gantt");
+  await setCode(editor, "gantt\n  section Section\n  A task :a1, 2014-01-01, 30d\n");
+
+  await element(editor, "task-1").click();
+  const nameField = editor.getByLabel("Task name");
+  await expect(nameField).toHaveValue("A task");
+
+  // `title Plan :30d` is read back as the chart title, task and all
+  await nameField.fill("title Plan");
+  await expect(editor.getByText(/cannot start with a mermaid keyword/)).toBeVisible();
+  await expectCode(editor).toContain("A task");
+
+  await nameField.fill("");
+  await expect(editor.getByText("task name cannot be empty")).toBeVisible();
+  await expectCode(editor).toContain("A task");
+});

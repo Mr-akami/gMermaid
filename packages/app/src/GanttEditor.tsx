@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   applyGanttAction,
   emptyGantt,
+  ganttTaskNameRejection,
   newSectionId,
   newTaskId,
   type GanttIR,
@@ -55,6 +56,8 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
   });
   const h = useDiagramHistory(() => initial.ir, applyGanttAction);
   const [view, setView] = useState<ViewState>({});
+  // reducer rejections must be visible, not silent no-ops (L2)
+  const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
   // pan/zoom is ViewState (ADR 0001), held apart from the selection
   const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   const ir = h.ir;
@@ -215,9 +218,13 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
         {selection && (
           <GanttPropertyWindow
             selection={selection}
-            onChangeTaskName={(name) =>
-              selectedTask && h.dispatch({ type: "updateTask", id: selectedTask.id, patch: { name } }, `task:${selectedTask.id}:name`)
-            }
+            rejectHint={rejectHint}
+            onChangeTaskName={(name) => {
+              const reason = ganttTaskNameRejection(name);
+              setRejectHint(reason);
+              if (reason === undefined && selectedTask)
+                h.dispatch({ type: "updateTask", id: selectedTask.id, patch: { name } }, `task:${selectedTask.id}:name`);
+            }}
             onChangeTaskId={(taskId) =>
               selectedTask && h.dispatch({ type: "updateTask", id: selectedTask.id, patch: { taskId } }, `task:${selectedTask.id}:id`)
             }

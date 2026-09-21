@@ -3,7 +3,7 @@ import {
   applyUsecaseAction,
   emptyUsecaseDiagram,
   newId,
-  USECASE_NAME_RE,
+  usecaseNameRejection,
   type BoundaryId,
   type UsecaseIR,
   type UsecaseNodeId,
@@ -63,6 +63,8 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
   });
   const h = useDiagramHistory(() => initial.ir, applyUsecaseAction);
   const [view, setView] = useState<ViewState>({});
+  // reducer rejections must be visible, not silent no-ops (L2)
+  const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
   // pan/zoom is ViewState (ADR 0001), held apart from the selection
   const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // drag-to-connect rubber band: view-transient (ADR 0001)
@@ -234,6 +236,7 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
           <option value="RL">Right→Left</option>
         </select>
         {view.relateFrom !== undefined && <span className="hint">click the target actor or use case…</span>}
+        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
       <div className="canvas">
         <ErrorBoundary>
@@ -255,7 +258,9 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
             selection={selection}
             boundaries={ir.boundaries}
             onChangeName={(name) => {
-              if (!USECASE_NAME_RE.test(name)) return;
+              const reason = usecaseNameRejection(name);
+              setRejectHint(reason);
+              if (reason !== undefined) return;
               if (nodeId !== undefined) h.dispatch({ type: "renameNode", id: nodeId, name }, `uc:${nodeId}:name`);
               else if (selectedBoundary) h.dispatch({ type: "renameBoundary", id: selectedBoundary.id, name }, `uc:${selectedBoundary.id}:name`);
             }}

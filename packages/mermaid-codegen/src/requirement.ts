@@ -30,6 +30,10 @@ const KEYWORDS = new Set<string>([
   "verifymethod",
   "type",
   "docref",
+  // dropped by the parser as accessibility statements, so a bare name here
+  // would take the whole relation line with it
+  "accTitle",
+  "accDescr",
 ]);
 
 /** Mermaid spelling of a node name: bare identifier, or quoted otherwise. */

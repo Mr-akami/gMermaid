@@ -16,9 +16,12 @@ import { omitUndefined } from "./omitUndefined";
 // Mermaid identifies classes by NAME, so names double as the exchange
 // identity: they must be unique and expressible in mermaid. Anything but a
 // backtick / `~` (the generic delimiter) / newline is allowed — codegen
-// wraps non-identifier names in backticks. Internal ClassId stays stable
-// across renames; codegen maps id → name on export.
-export const CLASS_NAME_RE = /^(?=\S)[^`~\r\n]*\S$/;
+// wraps non-identifier names in backticks. `%%` and `:::` are refused too:
+// backticks do not protect them, so a comment marker would cut the
+// declaration in half and a `:::` suffix would be read as a css class and
+// truncate the name. Internal ClassId stays stable across renames; codegen
+// maps id → name on export.
+export const CLASS_NAME_RE = /^(?=\S)(?!.*(?:%%|:::))[^`~\r\n]*\S$/;
 
 // Member names share the identifier grammar: colons, whitespace, brackets
 // or newlines would be re-tokenized as type/params on the next

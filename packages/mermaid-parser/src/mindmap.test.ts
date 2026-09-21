@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mindmapToMermaid } from "@gmermaid/mermaid-codegen";
+import { applyMindmapAction, emptyMindmap, type MindmapIR, type MindmapNodeId } from "@gmermaid/ir";
 import { parseMindmap } from "./mindmap";
 
 /** parse → codegen → parse must land on the same IR, and the text form must
@@ -150,5 +151,38 @@ mindmap
 `;
     const ir = expectRoundTrip(code);
     expect(ir.nodes.map((n) => n.id)).toEqual(["mindmap-2", "mindmap-3", "mindmap-1"]);
+  });
+
+  // The outline form gives the LINE its meaning, so a label may not fake one:
+  // leading space is indentation, `:::` is a class, `%%` is a comment and a
+  // trailing `;` is a terminator. The reducer strips them at the boundary.
+  it("hostile labels the reducer accepts survive emit → parse", () => {
+    let ir: MindmapIR = emptyMindmap();
+    ir = applyMindmapAction(ir, { type: "addNode", node: { id: "root" as MindmapNodeId, label: "Root", shape: "circle" } });
+    ir = applyMindmapAction(ir, {
+      type: "addNode",
+      node: { id: "mindmap-1" as MindmapNodeId, label: "  a:::b %% c;", shape: "default", parent: "root" as MindmapNodeId },
+    });
+    ir = applyMindmapAction(ir, {
+      type: "addNode",
+      node: { id: "mindmap-2" as MindmapNodeId, label: "child", shape: "default", parent: "mindmap-1" as MindmapNodeId },
+    });
+    expect(ir.nodes[1]!.label).toBe("ab  c");
+    const back = parseMindmap(mindmapToMermaid(ir));
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    // the child must still hang off the middle node, not off the root
+    expect(back.ir.nodes.map((n) => [n.label, n.parent])).toEqual(ir.nodes.map((n) => [n.label, n.parent]));
+  });
+
+  it("refuses a label that would leave nothing but indentation on the line", () => {
+    let ir: MindmapIR = emptyMindmap();
+    ir = applyMindmapAction(ir, { type: "addNode", node: { id: "root" as MindmapNodeId, label: "Root", shape: "circle" } });
+    const before = ir;
+    // the node would vanish on re-import and its children would climb a level
+    expect(applyMindmapAction(ir, { type: "updateNode", id: "root" as MindmapNodeId, label: "  " })).toBe(before);
+    expect(
+      applyMindmapAction(ir, { type: "addNode", node: { id: "x" as MindmapNodeId, label: ":::", shape: "default", parent: "root" as MindmapNodeId } }),
+    ).toBe(before);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ganttToMermaid } from "@gmermaid/mermaid-codegen";
+import { applyGanttAction, emptyGantt, type GanttIR, type SectionId, type TaskId } from "@gmermaid/ir";
 import { parseGantt, parseTaskMeta } from "./gantt";
 
 // https://mermaid.js.org/syntax/gantt.html
@@ -164,5 +165,42 @@ describe("parseTaskMeta", () => {
   it("rejects empty and over-long metadata", () => {
     expect(typeof parseTaskMeta("")).toBe("string");
     expect(typeof parseTaskMeta("a, b, c, d")).toBe("string");
+  });
+
+  it("hostile option and task text the reducer accepts survives emit → parse", () => {
+    let ir: GanttIR = emptyGantt();
+    ir = applyGanttAction(ir, {
+      type: "setGanttOptions",
+      patch: { title: "100%% done\nreally", dateFormat: "YYYY-MM-DD", excludes: ["weekends, 2024-01-01", ""] },
+    });
+    expect(ir.title).toBe("100 done really");
+    expect(ir.excludes).toEqual(["weekends", "2024-01-01"]);
+    ir = applyGanttAction(ir, { type: "addSection", section: { id: "section-1" as SectionId, name: "Phase: one" } });
+    ir = applyGanttAction(ir, {
+      type: "addTask",
+      sectionId: "section-1" as SectionId,
+      task: { id: "task-1" as TaskId, name: "50% done: ship it", tags: [], start: { kind: "date", value: "2024-01-01" }, end: { kind: "duration", value: "3d" } },
+    });
+    const back = parseGantt(ganttToMermaid(ir));
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(ir);
+  });
+
+  it("refuses the task names and nameless sections the text cannot carry", () => {
+    let ir: GanttIR = emptyGantt();
+    ir = applyGanttAction(ir, { type: "addSection", section: { id: "section-1" as SectionId, name: "" } });
+    ir = applyGanttAction(ir, { type: "addSection", section: { id: "section-2" as SectionId, name: "Later" } });
+    const task = { id: "task-1" as TaskId, tags: [], start: { kind: "prev" as const }, end: { kind: "duration" as const, value: "1d" } };
+    // a nameless task emits a line starting with `:`; a keyword-led one is
+    // read as that statement and takes the task with it
+    for (const name of ["", "   ", "title Plan", "section Two", "weekend friday"]) {
+      expect(applyGanttAction(ir, { type: "addTask", sectionId: "section-2" as SectionId, task: { ...task, name } }), name).toBe(ir);
+    }
+    ir = applyGanttAction(ir, { type: "addTask", sectionId: "section-2" as SectionId, task: { ...task, name: "Work" } });
+    // a section with no header only exists first, so it can be neither
+    // renamed away nor moved down
+    expect(applyGanttAction(ir, { type: "updateSection", id: "section-2" as SectionId, name: "" })).toBe(ir);
+    expect(applyGanttAction(ir, { type: "moveSection", id: "section-1" as SectionId, delta: 1 })).toBe(ir);
   });
 });

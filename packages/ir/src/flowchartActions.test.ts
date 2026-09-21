@@ -84,6 +84,14 @@ describe("applyFlowchartAction", () => {
       ).toEqual({ id: "edge-2", from: b, to: a, line: "invisible", headStart: "none", headEnd: "none" });
     });
 
+    it("going invisible drops the label: `~~~` has no label slot", () => {
+      const labelled = applyFlowchartAction(base, { type: "updateEdge", id: e1, label: "go" });
+      const invisible = applyFlowchartAction(labelled, { type: "updateEdge", id: e1, line: "invisible" });
+      expect(invisible.edges[0]).not.toHaveProperty("label");
+      // and it cannot be given one back while it stays invisible
+      expect(applyFlowchartAction(invisible, { type: "updateEdge", id: e1, label: "go" })).toBe(invisible);
+    });
+
     it("changing the start head pulls the end head along", () => {
       expect(edgeAfter(base, { type: "updateEdge", id: e1, headStart: "circle" })).toMatchObject({
         headStart: "circle",

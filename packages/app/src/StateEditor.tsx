@@ -5,6 +5,7 @@ import {
   newStateId,
   newId,
   reparentRejection,
+  stateNoteRejection,
   stateRegionCount,
   type StateIR,
   type StateId,
@@ -136,13 +137,14 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   }
 
   function addNote() {
-    if (!selectedState) return;
+    if (!selectedState || noteRejection !== undefined) return;
     const id = newId("note");
     h.dispatch({ type: "addStateNote", note: { id, target: selectedState.id, position: "rightOf", text: "note" } });
     setView({ selectedId: id });
   }
 
   const selectedState = ir.states.find((s) => s.id === view.selectedId);
+  const noteRejection = selectedState ? stateNoteRejection(selectedState) : undefined;
   const selectedTransition = ir.transitions.find((t) => t.id === view.selectedId);
   const selectedNote = ir.notes.find((n) => n.id === view.selectedId);
   const selection: StateSelection | undefined = selectedState
@@ -269,7 +271,9 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         <button onClick={() => addSpecial("choice")}>+ Choice</button>
         <button onClick={() => addSpecial("fork")}>+ Fork</button>
         <button onClick={() => addSpecial("join")}>+ Join</button>
-        <button disabled={selectedState === undefined} onClick={addNote}>+ Note</button>
+        <button disabled={selectedState === undefined || noteRejection !== undefined} title={noteRejection} onClick={addNote}>
+          + Note
+        </button>
         <button
           disabled={selectedState === undefined}
           onClick={() => selectedState && setView({ ...view, transitionFrom: selectedState.id })}

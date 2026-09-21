@@ -14,6 +14,8 @@ export type GanttSelection =
 export interface GanttPropertyWindowProps {
   readonly selection: GanttSelection;
   readonly onChangeTaskName: (name: string) => void;
+  /** Why the last name edit was refused (empty, keyword prefix), or undefined. */
+  readonly rejectHint?: string | undefined;
   readonly onChangeTaskId: (taskId: string) => void;
   readonly onToggleTag: (tag: GanttTag, on: boolean) => void;
   readonly onChangeStart: (start: GanttTaskStart) => void;
@@ -178,6 +180,7 @@ export function GanttPropertyWindow(props: GanttPropertyWindowProps) {
           ↓ Later
         </button>
       </div>
+      {props.rejectHint !== undefined && <div className="hint">{props.rejectHint}</div>}
       <button className="danger" onClick={props.onDelete}>
         Delete {selection.kind}
       </button>

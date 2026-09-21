@@ -1,5 +1,5 @@
 import type { SectionId, TaskId } from "./ids";
-import { sanitizeJourneyText, type JourneyIR, type JourneySection, type JourneyTask } from "./journey";
+import { journeyTaskNameRejection, sanitizeJourneyText, type JourneyIR, type JourneySection, type JourneyTask } from "./journey";
 import { omitUndefined } from "./omitUndefined";
 
 // Same contract as the other diagram actions: intent-carrying, immutable,
@@ -97,7 +97,7 @@ export function applyJourneyAction(ir: JourneyIR, action: JourneyAction): Journe
       if (ir.sections.some((s) => s.tasks.some((t) => t.id === action.task.id))) return ir;
       if (!Number.isFinite(action.task.score)) return ir;
       const task = cleanTask(action.task);
-      if (task.name === "") return ir;
+      if (journeyTaskNameRejection(task.name) !== undefined) return ir;
       const s = ir.sections[index]!;
       const at = action.afterTaskId !== undefined ? s.tasks.findIndex((t) => t.id === action.afterTaskId) + 1 : s.tasks.length;
       const tasks = [...s.tasks];
@@ -113,7 +113,8 @@ export function applyJourneyAction(ir: JourneyIR, action: JourneyAction): Journe
       const name = action.name !== undefined ? sanitizeJourneyText(action.name) : t.name;
       const score = action.score !== undefined && Number.isFinite(action.score) ? action.score : t.score;
       const actors = action.actors !== undefined ? sanitizeActors(action.actors) : t.actors;
-      if (name === "" || (name === t.name && score === t.score && sameList(actors, t.actors))) return ir;
+      if (journeyTaskNameRejection(name) !== undefined) return ir;
+      if (name === t.name && score === t.score && sameList(actors, t.actors)) return ir;
       const next: JourneyTask = { id: t.id, name, score, actors };
       return replaceSection(ir, pos.section, { ...s, tasks: s.tasks.map((x) => (x.id === t.id ? next : x)) });
     }

@@ -208,4 +208,19 @@ requirementDiagram
     if (!result.ok) return;
     expect(result.ir.requirements.map((r) => r.name)).toEqual(["a"]);
   });
+
+  // `accTitle - traces -> e` is thrown away as an accessibility statement,
+  // so the name has to be quoted like the other statement keywords.
+  it("a requirement named after a dropped statement keyword keeps its relations", () => {
+    const ir: RequirementIR = {
+      kind: "requirement",
+      requirements: [{ id: Q("accTitle"), name: "accTitle", type: "requirement" }],
+      elements: [{ id: E("e"), name: "e" }],
+      relations: [{ id: R("relation-1"), from: Q("accTitle"), to: E("e"), type: "traces" }],
+    };
+    const back = parseRequirementDiagram(requirementToMermaid(ir));
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(ir);
+  });
 });

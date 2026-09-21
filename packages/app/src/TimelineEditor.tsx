@@ -6,6 +6,7 @@ import {
   periodOfEvent,
   sectionOfPeriod,
   timelineTextRejection,
+  timelineTitleRejection,
   type EventId,
   type PeriodId,
   type SectionId,
@@ -67,6 +68,7 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
   const [viewport, setViewport] = useState<Viewport | undefined>(undefined);
   // reducer rejections must be visible, not silent no-ops (L2)
   const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
+  const [titleHint, setTitleHint] = useState<string | undefined>(undefined);
   const ir = h.ir;
 
   const layout = useMemo(() => layoutTimeline(ir, measurer), [ir]);
@@ -189,9 +191,14 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
             value={ir.title ?? ""}
             onFocus={() => {}}
             onBlur={h.endEdit}
-            onChange={(e) => h.dispatch({ type: "setTitle", title: e.target.value }, "timeline:title")}
+            onChange={(e) => {
+              const reason = timelineTitleRejection(e.target.value);
+              setTitleHint(reason);
+              if (reason === undefined) h.dispatch({ type: "setTitle", title: e.target.value }, "timeline:title");
+            }}
           />
         </label>
+        {titleHint !== undefined && <span className="hint">{titleHint}</span>}
       </div>
       <div className="canvas">
         <ErrorBoundary>

@@ -32,13 +32,27 @@ export function emptyJourney(): JourneyIR {
 }
 
 /** Task / section / actor names and the title are free text in mermaid, but
- * `:` splits the task fields, `#` opens a comment, `;` ends a statement and
- * `,` separates actors — none can survive a text round trip, so they are
- * removed at the IR boundary (GUI input). */
+ * `:` splits the task fields, `#` opens a comment, `;` ends a statement,
+ * `%%` opens a comment that swallows the rest of the line and `,` separates
+ * actors — none can survive a text round trip, so they are removed at the IR
+ * boundary (GUI input).
+ *
+ * `%%` is stripped last: dropping a `:` can push two lone `%` together. */
 export function sanitizeJourneyText(text: string, opts: { readonly actor?: boolean } = {}): string {
   let cleaned = text.replaceAll(/[:#;\r\n]/g, "");
   if (opts.actor) cleaned = cleaned.replaceAll(",", "");
-  return cleaned.replaceAll(/\s+/g, " ").trim();
+  return cleaned.replaceAll(/%%+/g, "").replaceAll(/\s+/g, " ").trim();
+}
+
+/** A task line is `<name>: <score>: <actors>`, but mermaid reads a line
+ * opening with `title ` as the chart title first — such a task would be
+ * swallowed whole and would overwrite the title. Nothing else collides:
+ * `section X` still carries a `:` and stays a task. Shared by the reducer
+ * (reject) and the UI (show the reason). */
+export function journeyTaskNameRejection(name: string): string | undefined {
+  if (sanitizeJourneyText(name) === "") return "task name cannot be empty";
+  if (/^title(\s|$)/.test(sanitizeJourneyText(name))) return "a task name cannot start with `title` (mermaid keyword)";
+  return undefined;
 }
 
 /** Actors in first-appearance order — drives legend order and colours. */

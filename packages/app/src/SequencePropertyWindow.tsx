@@ -301,12 +301,23 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
           </label>
           <label>
             Position
-            <select value={selection.note.position} onChange={(e) => props.onChangeNotePosition(e.target.value as NotePosition)}>
+            <select
+              aria-label="Note position"
+              value={selection.note.position}
+              onChange={(e) => props.onChangeNotePosition(e.target.value as NotePosition)}
+            >
               <option value="over">Over</option>
               <option value="leftOf">Left of</option>
               <option value="rightOf">Right of</option>
             </select>
           </label>
+          {/* mermaid spans a pair of lifelines with `over` only, so say what
+              the coupling will do before the reducer does it */}
+          <div className="hint">
+            {selection.note.lifelines.length > 1
+              ? `over ${selection.note.lifelines.join(", ")} — Left of / Right of keeps only ${selection.note.lifelines[0]}`
+              : `on ${selection.note.lifelines.join(", ")}`}
+          </div>
         </>
       )}
       {selection.kind === "branch" && (

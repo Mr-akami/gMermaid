@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { journeyToMermaid } from "@gmermaid/mermaid-codegen";
+import { applyJourneyAction, emptyJourney, type JourneyIR, type SectionId, type TaskId } from "@gmermaid/ir";
 import { parseJourney } from "./journey";
 
 const DOCS_SAMPLE = `journey
@@ -80,5 +81,36 @@ describe("parseJourney", () => {
     expect(bad.errors.map((e) => e.line)).toEqual([2, 3]);
     const wrongHeader = parseJourney("flowchart TD\nA-->B");
     expect(wrongHeader.ok).toBe(false);
+  });
+
+  // The reducer sanitizes at the IR boundary; this is the other half of that
+  // contract — whatever it lets through has to survive the text.
+  it("hostile text the reducer accepts still survives emit → parse", () => {
+    let ir: JourneyIR = emptyJourney();
+    ir = applyJourneyAction(ir, { type: "setJourneyTitle", title: "100%% sure: really; #1" });
+    ir = applyJourneyAction(ir, { type: "addSection", section: { id: "section-1" as SectionId, name: "Phase %% one" } });
+    ir = applyJourneyAction(ir, {
+      type: "addTask",
+      sectionId: "section-1" as SectionId,
+      task: { id: "task-1" as TaskId, name: "50%% off: today", score: 3, actors: ["A%%B", "C,D"] },
+    });
+    expect(ir.title).toBe("100 sure really 1");
+    const back = parseJourney(journeyToMermaid(ir));
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    // ids are minted on import (mermaid text has none), so match the minting
+    expect(back.ir).toEqual(ir);
+  });
+
+  it("refuses a task name mermaid would read as the chart title", () => {
+    let ir: JourneyIR = emptyJourney();
+    ir = applyJourneyAction(ir, { type: "addSection", section: { id: "section-1" as SectionId, name: "S" } });
+    const before = ir;
+    ir = applyJourneyAction(ir, {
+      type: "addTask",
+      sectionId: "section-1" as SectionId,
+      task: { id: "task-1" as TaskId, name: "title Plan", score: 3, actors: [] },
+    });
+    expect(ir).toBe(before);
   });
 });

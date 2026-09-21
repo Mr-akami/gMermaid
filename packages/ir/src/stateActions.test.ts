@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { StateId, TransitionId } from "./ids";
 import type { StateIR } from "./statediagram";
 import { stateRegionCount } from "./statediagram";
-import { applyStateAction, newStateId, reparentRejection, STATE_NAME_RE } from "./stateActions";
+import { applyStateAction, newStateId, reparentRejection, stateNoteRejection, STATE_NAME_RE } from "./stateActions";
 
 const S = (s: string) => s as StateId;
 const T = (s: string) => s as TransitionId;
@@ -179,6 +179,25 @@ describe("applyStateAction", () => {
     const moved = applyStateAction(withNote, { type: "updateStateNote", id: N("n1"), position: "leftOf" });
     expect(moved.notes[0]!.position).toBe("leftOf");
     expect(applyStateAction(moved, { type: "removeStateNote", id: N("n1") }).notes).toEqual([]);
+  });
+});
+
+describe("states the mermaid text cannot spell", () => {
+  it("a pseudo-state is stored with the label it will read back with", () => {
+    // `[*]` has no name in the text and `state X <<choice>>` has no label
+    // slot, so a label typed here would change on every save
+    const withChoice = applyStateAction(base, { type: "addState", state: { id: S("c1"), label: "pick one", role: "choice" } });
+    expect(withChoice.states.find((x) => x.id === "c1")!.label).toBe("c1");
+    const withEnd = applyStateAction(base, { type: "addState", state: { id: S("e1"), label: "done", role: "end" } });
+    expect(withEnd.states.find((x) => x.id === "e1")!.label).toBe("");
+  });
+
+  it("refuses a note on a `[*]`: it has no name to attach one to", () => {
+    const start = base.states.find((x) => x.role === "start")!;
+    expect(stateNoteRejection(start)).toBeDefined();
+    expect(applyStateAction(base, { type: "addStateNote", note: { id: N("n1"), target: S("state_start"), position: "rightOf", text: "hi" } })).toBe(base);
+    const ok = applyStateAction(base, { type: "addStateNote", note: { id: N("n1"), target: S("A"), position: "rightOf", text: "hi" } });
+    expect(ok.notes).toHaveLength(1);
   });
 });
 

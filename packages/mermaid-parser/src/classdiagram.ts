@@ -251,9 +251,9 @@ export function parseClassDiagram(code: string): ParseResult<ClassIR> {
         line: lineTok === "--" ? "solid" : "dashed",
         headFrom: headFromTok !== undefined ? HEAD_FROM[headFromTok]! : "none",
         headTo: headToTok !== undefined ? HEAD_TO[headToTok]! : "none",
-        ...(label !== undefined ? { label: label.trim() } : {}),
-        ...(fromCard !== undefined ? { fromCardinality: fromCard } : {}),
-        ...(toCard !== undefined ? { toCardinality: toCard } : {}),
+        ...(label !== undefined ? { label: unescapeLabel(label.trim()) } : {}),
+        ...(fromCard !== undefined ? { fromCardinality: unescapeLabel(fromCard) } : {}),
+        ...(toCard !== undefined ? { toCardinality: unescapeLabel(toCard) } : {}),
       });
       continue;
     }

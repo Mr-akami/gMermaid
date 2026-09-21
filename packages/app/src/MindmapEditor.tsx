@@ -3,6 +3,7 @@ import {
   applyMindmapAction,
   emptyMindmap,
   mindmapChildren,
+  mindmapLabelRejection,
   mindmapMoveRejection,
   mindmapRoot,
   newId,
@@ -210,7 +211,11 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
             node={selected}
             canMoveUp={siblingAt > 0}
             canMoveDown={siblingAt >= 0 && siblingAt < siblings.length - 1}
-            onChangeLabel={(label) => h.dispatch({ type: "updateNode", id: selected.id, label }, `mm:${selected.id}:label`)}
+            onChangeLabel={(label) => {
+              const reason = mindmapLabelRejection(label);
+              setRejectHint(reason);
+              if (reason === undefined) h.dispatch({ type: "updateNode", id: selected.id, label }, `mm:${selected.id}:label`);
+            }}
             onChangeShape={(shape) => h.dispatch({ type: "updateNode", id: selected.id, shape })}
             onChangeIcon={(icon) => h.dispatch({ type: "updateNode", id: selected.id, icon }, `mm:${selected.id}:icon`)}
             onMove={(delta) => h.dispatch({ type: "reorderNode", id: selected.id, delta })}

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { StateId, StateIR, TransitionId } from "@gmermaid/ir";
 import { stateToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseStateDiagram } from "./statediagram";
 
+const S = (x: string) => x as StateId;
 const sortById = <T extends { id: string }>(xs: readonly T[]) => [...xs].toSorted((a, b) => a.id.localeCompare(b.id));
 const edgeSet = (ts: readonly { from: string; to: string; label?: string }[]) =>
   ts.map((t) => `${t.from}→${t.to}:${t.label ?? ""}`).toSorted();
@@ -241,5 +243,27 @@ stateDiagram;
       ["日本", "説明"],
       ["svc.api", "svc.api"],
     ]);
+  });
+
+  // `state c1 <<choice>>` has no label slot and `[*]` has no name at all, so
+  // the reducer stores exactly what these read back as — check it does
+  it("pseudo-state labels are a fixpoint", () => {
+    const ir: StateIR = {
+      kind: "state",
+      states: [
+        { id: S("state_start"), label: "", role: "start" },
+        { id: S("c1"), label: "c1", role: "choice" },
+        { id: S("A"), label: "A", role: "normal" },
+      ],
+      transitions: [
+        { id: "transition-1" as TransitionId, from: S("state_start"), to: S("c1") },
+        { id: "transition-2" as TransitionId, from: S("c1"), to: S("A") },
+      ],
+      notes: [],
+    };
+    const back = parseStateDiagram(stateToMermaid(ir));
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(sortById(back.ir.states)).toEqual(sortById(ir.states));
   });
 });
