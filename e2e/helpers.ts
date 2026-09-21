@@ -13,7 +13,12 @@ export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
   return editor;
 }
 
-/** The mermaid text currently shown in the code pane of the visible editor. */
+/** The mermaid text currently shown in the code pane of the visible editor.
+ *
+ * Reads once. After anything is typed into the pane, the CodeMirror wrapper
+ * holds back external value updates while it believes the user is still
+ * typing (a 200ms latch), so the pane trails the IR for a moment. Assert
+ * with `expectCode` instead of comparing a single read. */
 export async function codeText(editor: Locator): Promise<string> {
   const cm = editor.locator(".cm-content");
   await expect(cm).toBeVisible();
