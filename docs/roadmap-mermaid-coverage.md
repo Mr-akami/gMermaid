@@ -42,9 +42,12 @@ auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
   namespaces, lollipop.
 
 ## Phase 3 — new diagram kinds (parallel, one PR per kind)
-Gantt, Requirement, Usecase, User Journey. Each: IR + actions, parser,
-codegen, layout, renderer, editor + property window, registry entry,
-mermaid.js integration test, e2e spec.
+Wave 1: Gantt, Requirement, User Journey.
+Wave 2: Mindmap, Timeline, Usecase (`usecase-beta`, needs mermaid ≥ 12 for
+validation — dev dependency bumped to 12.0.0; existing integration tests
+still pass).
+Each: IR + actions, parser, codegen, layout, renderer, editor + property
+window, registry entry, mermaid.js integration test, e2e spec.
 
 ## Phase 4 — polish
 - Cross-kind: shared `<br/>` multi-line text rendering, README/coverage
