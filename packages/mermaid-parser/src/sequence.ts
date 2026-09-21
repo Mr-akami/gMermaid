@@ -15,9 +15,17 @@ import type {
   SequenceEvent,
   SequenceIR,
 } from "@gmermaid/ir";
-import { unescapeLabel, type ParseError, type ParseResult } from "./common";
+import { prepareLines, unescapeLabel, type ParseError, type ParseResult } from "./common";
 
-const ID = "[A-Za-z0-9_-]+";
+// Dialect the IR cannot hold is DISCARDED by design, same as `%%` comments:
+// frontmatter, `%%{init}%%` directives, `title`, `accTitle` / `accDescr`,
+// trailing `;` terminators.
+
+const DROPPED = ["title", "accTitle", "accDescr"];
+
+// mermaid actor ids may hold any letter/digit (incl. non-ASCII), `_`, `-`, `.`
+const ID = "[\\p{L}\\p{N}_.-]+";
+const ID_RE = new RegExp(`^${ID}$`, "u");
 
 // longest-first so "-->>" wins over "-->" and "->" (earliest match in the
 // line wins; ties fall back to this list order via the stable sort)
@@ -46,7 +54,7 @@ function splitLoopSpec(raw: string): { condition: string; loopBounds?: LoopBound
 
 export function parseSequence(code: string): ParseResult<SequenceIR> {
   const errors: ParseError[] = [];
-  const lines = code.split("\n");
+  const lines = prepareLines(code, { drop: DROPPED });
 
   const lifelines: Lifeline[] = [];
   const seen = new Set<string>();
@@ -86,11 +94,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
   let headerSeen = false;
   let autonumber: { start: number; step: number } | undefined;
 
-  for (let i = 0; i < lines.length; i++) {
-    const lineNo = i + 1;
-    const line = lines[i]!.trim();
-    if (line === "" || line.startsWith("%%")) continue;
-
+  for (const { text: line, line: lineNo } of lines) {
     if (!headerSeen) {
       if (line !== "sequenceDiagram") {
         errors.push({ line: lineNo, message: "expected `sequenceDiagram` header" });
@@ -106,13 +110,13 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
       continue;
     }
 
-    const part = line.match(new RegExp(`^(participant|actor)\\s+(${ID})(?:\\s+as\\s+(.+))?$`));
+    const part = line.match(new RegExp(`^(participant|actor)\\s+(${ID})(?:\\s+as\\s+(.+))?$`, "u"));
     if (part) {
       declareLifeline(part[2]!, part[3] !== undefined ? unescapeLabel(part[3]) : undefined, part[1] === "actor", true);
       continue;
     }
 
-    const note = line.match(new RegExp(`^[Nn]ote\\s+(left of|right of|over)\\s+(${ID}(?:\\s*,\\s*${ID})?)\\s*:\\s*(.*)$`));
+    const note = line.match(new RegExp(`^[Nn]ote\\s+(left of|right of|over)\\s+(${ID}(?:\\s*,\\s*${ID})?)\\s*:\\s*(.*)$`, "u"));
     if (note) {
       const position = note[1] === "left of" ? "leftOf" : note[1] === "right of" ? "rightOf" : "over";
       const ids = note[2]!.split(",").map((s) => s.trim());
@@ -197,7 +201,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
       const colon = rest.indexOf(":");
       const to = (colon >= 0 ? rest.slice(0, colon) : rest).trim();
       const label = colon >= 0 ? unescapeLabel(rest.slice(colon + 1).trim()) : "";
-      if (!new RegExp(`^${ID}$`).test(from) || !new RegExp(`^${ID}$`).test(to)) {
+      if (!ID_RE.test(from) || !ID_RE.test(to)) {
         errors.push({ line: lineNo, message: "cannot parse message endpoints" });
         continue;
       }

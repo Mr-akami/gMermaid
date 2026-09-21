@@ -104,3 +104,42 @@ describe("parseClassDiagram", () => {
     expect(back.ir).toEqual(result.ir);
   });
 });
+
+describe("parseClassDiagram dialect leniency", () => {
+  it("accepts frontmatter, init directives, trailing `;`/`%%` comments, and drops cssClass/style/classDef/click", () => {
+    const result = parseClassDiagram(`---
+title: Classes
+---
+%%{init: {'theme':'dark'}}%%
+classDiagram;
+  class A:::hot {
+    +run() %% comment
+  }
+  A --|> B; %% inherit
+  A : +x : int;
+  cssClass "A,B" hot
+  classDef hot fill:#f00
+  style A fill:#f9f
+  click A href "https://x"
+  accTitle: t
+  accDescr { multi }
+`);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.classes.map((c) => c.name)).toEqual(["A", "B"]);
+    expect(result.ir.classes[0]!.methods.map((m) => m.name)).toEqual(["run"]);
+    expect(result.ir.classes[0]!.attributes.map((a) => [a.name, a.type])).toEqual([["x", "int"]]);
+    expect(result.ir.relations.map((r) => r.type)).toEqual(["inheritance"]);
+    const back = parseClassDiagram(classToMermaid(result.ir));
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.ir).toEqual(result.ir);
+  });
+
+  it("still treats `class` as a declaration (not dropped)", () => {
+    const result = parseClassDiagram("classDiagram\n  class Foo\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.classes.map((c) => c.name)).toEqual(["Foo"]);
+  });
+});

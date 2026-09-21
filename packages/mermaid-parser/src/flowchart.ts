@@ -11,13 +11,20 @@ import type {
   NodeId,
   SubgraphId,
 } from "@gmermaid/ir";
-import { unescapeLabel, unquote, type ParseError, type ParseResult } from "./common";
+import { prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult } from "./common";
 
 // Recognizes the flowchart subset gMermaid emits plus common hand-written
-// variants (unquoted labels, bare node ids, `graph` keyword).
+// variants (unquoted labels, bare node ids, `graph` keyword, `;` separators,
+// bare `flowchart` header = TB). Dialect the IR cannot hold is DISCARDED by
+// design, same as `%%` comments: frontmatter, `%%{init}%%` directives,
+// `style` / `classDef` / `class` / `linkStyle` / `click` statements,
+// `accTitle` / `accDescr`, and `:::className` suffixes on nodes.
 
-const ID = "[A-Za-z0-9_-]+";
-const ID_RE = new RegExp(`^${ID}$`);
+const DROPPED = ["style", "classDef", "class", "linkStyle", "click", "accTitle", "accDescr"];
+
+// mermaid ids may hold any letter/digit (incl. non-ASCII), `_`, `-` and `.`
+const ID = "[\\p{L}\\p{N}_.-]+";
+const ID_RE = new RegExp(`^${ID}$`, "u");
 
 // shape brackets, longest-open-first so `(((` wins over `((` wins over `(`;
 // same-open pairs (`[/…/]` vs `[/…\]`) are told apart by their closer
@@ -63,7 +70,7 @@ interface NodeRef {
 /** Parse `id`, `id["label"]`, `id(label)`, … Returns null if not a node term. */
 function parseNodeTerm(term: string): NodeRef | null {
   const t = term.trim();
-  const m = t.match(new RegExp(`^(${ID})(.*)$`));
+  const m = t.match(new RegExp(`^(${ID})(.*)$`, "u"));
   if (!m) return null;
   const id = m[1]!;
   const rest = m[2]!.trim();
@@ -140,7 +147,7 @@ function parseEdgeLine(line: string): { groups: NodeRef[][]; links: Link[] } | s
 
 export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   const errors: ParseError[] = [];
-  const lines = code.split("\n");
+  const lines = prepareLines(code, { drop: DROPPED, splitSemicolons: true, stripClassSuffix: true });
 
   let direction: FlowchartDirection = "TB";
   let headerSeen = false;
@@ -178,24 +185,21 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
     }
   };
 
-  for (let i = 0; i < lines.length; i++) {
-    const lineNo = i + 1;
-    const line = lines[i]!.trim();
-    if (line === "" || line.startsWith("%%")) continue;
-
+  for (const { text: line, line: lineNo } of lines) {
     if (!headerSeen) {
-      const h = line.match(/^(?:flowchart|graph)\s+(TB|TD|LR|BT|RL)\s*$/);
+      // direction is optional (mermaid defaults to TB); `TD` is an alias of TB
+      const h = line.match(/^(?:flowchart|graph)(?:\s+(TB|TD|LR|BT|RL))?$/);
       if (!h) {
         errors.push({ line: lineNo, message: "expected `flowchart <TB|LR|BT|RL>` header" });
         return { ok: false, errors };
       }
-      direction = h[1] === "TD" ? "TB" : (h[1] as FlowchartDirection);
+      direction = h[1] === undefined || h[1] === "TD" ? "TB" : (h[1] as FlowchartDirection);
       headerSeen = true;
       continue;
     }
 
     // subgraph id / subgraph id[title] … end (nested)
-    const sub = line.match(new RegExp(`^subgraph\\s+(${ID})\\s*(?:\\[(.*)\\])?$`));
+    const sub = line.match(new RegExp(`^subgraph\\s+(${ID})\\s*(?:\\[(.*)\\])?$`, "u"));
     if (sub) {
       const id = sub[1]!;
       if (nodes.has(id)) {

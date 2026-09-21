@@ -102,3 +102,65 @@ describe("parseStateDiagram", () => {
     expect(result.errors[0]!.line).toBe(4);
   });
 });
+
+const roundTripLenient = (code: string) => {
+  const result = parseStateDiagram(code);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+  if (!result.ok) throw new Error("unreachable");
+  const regen = stateToMermaid(result.ir);
+  const back = parseStateDiagram(regen);
+  expect(back.ok, regen).toBe(true);
+  if (!back.ok) throw new Error("unreachable");
+  expect(back.ir).toEqual(result.ir);
+  return result.ir;
+};
+
+describe("parseStateDiagram dialect leniency", () => {
+  it("strips `:::className` from state ids instead of mis-parsing them as labels", () => {
+    const ir = roundTripLenient(`stateDiagram-v2
+  [*] --> Still:::notMoving
+  Still --> Moving:::movement
+  Crash:::badBadEvent --> [*]
+  classDef notMoving fill:white
+  classDef badBadEvent fill:#f00,color:white
+  class Still notMoving
+`);
+    expect(ir.states.map((s) => [s.id, s.label])).toEqual([
+      ["state_start", ""],
+      ["Still", "Still"],
+      ["Moving", "Moving"],
+      ["Crash", "Crash"],
+      ["state_end", ""],
+    ]);
+    expect(edgeSet(ir.transitions)).toEqual(["Crash→state_end:", "Still→Moving:", "state_start→Still:"]);
+  });
+
+  it("accepts frontmatter, init directives, `stateDiagram` header, trailing `;`/`%%`, style, accTitle/accDescr", () => {
+    const ir = roundTripLenient(`---
+title: S
+---
+%%{init: {'theme':'dark'}}%%
+stateDiagram;
+  accTitle: t
+  accDescr {
+    d
+  }
+  hide empty description
+  A --> B : go; %% comment
+  style A fill:#f9f
+`);
+    expect(edgeSet(ir.transitions)).toEqual(["A→B:go"]);
+  });
+
+  it("accepts non-ASCII ids and `.` inside ids", () => {
+    const ir = roundTripLenient(`stateDiagram-v2
+  state "説明" as 日本
+  日本 --> svc.api
+  note right of svc.api : n
+`);
+    expect(ir.states.map((s) => [s.id, s.label])).toEqual([
+      ["日本", "説明"],
+      ["svc.api", "svc.api"],
+    ]);
+  });
+});

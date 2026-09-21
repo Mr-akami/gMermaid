@@ -1,6 +1,6 @@
 import type { ClassIR, FlowchartIR, SequenceIR, StateIR } from "@gmermaid/ir";
 import { parseClassDiagram } from "./classdiagram";
-import type { ParseResult } from "./common";
+import { firstStatement, type ParseResult } from "./common";
 import { parseFlowchart } from "./flowchart";
 import { parseSequence } from "./sequence";
 import { parseStateDiagram } from "./statediagram";
@@ -21,28 +21,8 @@ const HEADERS: Record<DiagramKind, readonly string[]> = {
   state: ["stateDiagram"],
 };
 
-/** First non-empty line that is not a `%%` comment / directive or part of a
- * leading `---` frontmatter block. */
-export function headerLine(code: string): string {
-  const lines = code.split("\n");
-  let i = 0;
-  // frontmatter
-  while (i < lines.length && lines[i]!.trim() === "") i++;
-  if (lines[i]?.trim() === "---") {
-    i++;
-    while (i < lines.length && lines[i]!.trim() !== "---") i++;
-    i++;
-  }
-  for (; i < lines.length; i++) {
-    const t = lines[i]!.trim();
-    if (t === "" || t.startsWith("%%")) continue;
-    return t;
-  }
-  return "";
-}
-
 export function detectDiagramKind(code: string): DiagramKind | undefined {
-  const head = headerLine(code);
+  const head = firstStatement(code) ?? "";
   for (const kind of DIAGRAM_KINDS) {
     if (HEADERS[kind].some((h) => head.startsWith(h))) return kind;
   }

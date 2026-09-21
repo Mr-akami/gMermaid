@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StateId, TransitionId } from "./ids";
 import type { StateIR } from "./statediagram";
-import { applyStateAction, newStateId, reparentRejection } from "./stateActions";
+import { applyStateAction, newStateId, reparentRejection, STATE_NAME_RE } from "./stateActions";
 
 const S = (s: string) => s as StateId;
 const T = (s: string) => s as TransitionId;
@@ -124,5 +124,12 @@ describe("applyStateAction", () => {
     const moved = applyStateAction(withNote, { type: "updateStateNote", id: N("n1"), position: "leftOf" });
     expect(moved.notes[0]!.position).toBe("leftOf");
     expect(applyStateAction(moved, { type: "removeStateNote", id: N("n1") }).notes).toEqual([]);
+  });
+});
+
+describe("STATE_NAME_RE", () => {
+  it("accepts any-script letters, digits, `_` and `.`; rejects `-`, spaces and a leading digit", () => {
+    for (const ok of ["Still", "state_ab12cd34", "日本", "svc.api", "_x"]) expect(STATE_NAME_RE.test(ok), ok).toBe(true);
+    for (const bad of ["a-b", "a b", "1a", "", "[*]"]) expect(STATE_NAME_RE.test(bad), bad).toBe(false);
   });
 });

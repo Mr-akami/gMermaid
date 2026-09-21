@@ -186,3 +186,83 @@ describe("parseFlowchart", () => {
     expect(result.ir.edges).toHaveLength(1);
   });
 });
+
+const roundTripLenient = (code: string) => {
+  const result = parseFlowchart(code);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+  if (!result.ok) throw new Error("unreachable");
+  const regen = flowchartToMermaid(result.ir);
+  const back = parseFlowchart(regen);
+  expect(back.ok, regen).toBe(true);
+  if (!back.ok) throw new Error("unreachable");
+  expect(back.ir).toEqual(result.ir);
+  return result.ir;
+};
+
+describe("parseFlowchart dialect leniency", () => {
+  it("accepts frontmatter and init directives before the header", () => {
+    const ir = roundTripLenient(`---
+title: Flow
+---
+%%{init: {'theme':'dark'}}%%
+flowchart LR
+  A --> B
+`);
+    expect(ir.edges.map((e) => [e.from, e.to])).toEqual([["A", "B"]]);
+  });
+
+  it("accepts a bare `flowchart` header (= TB) and `graph TD;`", () => {
+    expect(roundTripLenient("flowchart\n  A --> B").direction).toBe("TB");
+    expect(roundTripLenient("graph TD;\n  A-->B").direction).toBe("TB");
+    expect(roundTripLenient("graph LR ;\n  A-->B").direction).toBe("LR");
+  });
+
+  it("splits `;`-separated statements and drops trailing `%%` comments", () => {
+    const ir = roundTripLenient(`graph TD;
+  A-->B; B-->C; %% chain
+  C["x; y"] --> D;
+`);
+    expect(ir.edges.map((e) => `${e.from}>${e.to}`)).toEqual(["A>B", "B>C", "C>D"]);
+    expect(ir.nodes.find((n) => n.id === "C")!.label).toBe("x; y");
+  });
+
+  it("drops style / classDef / class / linkStyle / click / accTitle / accDescr and `:::class`", () => {
+    const ir = roundTripLenient(`flowchart LR
+  accTitle: Access title
+  accDescr {
+    multi line
+    description
+  }
+  A:::hot --> B["Bee"]:::cold
+  style A fill:#f9f,stroke:#333
+  classDef hot fill:#f00
+  class B cold
+  linkStyle 0 stroke:red
+  click A callback "tip"
+`);
+    expect(ir.nodes.map((n) => [n.id, n.label])).toEqual([
+      ["A", "A"],
+      ["B", "Bee"],
+    ]);
+    expect(ir.edges).toHaveLength(1);
+  });
+
+  it("accepts non-ASCII ids and `.` inside ids", () => {
+    const ir = roundTripLenient(`flowchart LR
+  日本["日本語"] --> ユーザ
+  a.b --> svc.api
+  subgraph 領域["x"]
+    ユーザ --> a.b
+  end
+`);
+    expect(ir.nodes.map((n) => n.id)).toEqual(["日本", "ユーザ", "a.b", "svc.api"]);
+    expect(ir.subgraphs.map((s) => s.id)).toEqual(["領域"]);
+  });
+
+  it("keeps original line numbers in errors after preamble", () => {
+    const result = parseFlowchart("---\nt: x\n---\nflowchart LR\n  A --> B\n  ???\n");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors[0]!.line).toBe(6);
+  });
+});

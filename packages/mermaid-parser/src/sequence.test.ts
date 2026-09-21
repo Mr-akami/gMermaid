@@ -241,3 +241,46 @@ describe("parseSequence", () => {
     expect(frag.branches[0]).toMatchObject({ condition: "(1,2) foo", loopBounds: { min: "4", max: "9" } });
   });
 });
+
+const roundTripLenient = (code: string) => {
+  const result = parseSequence(code);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+  if (!result.ok) throw new Error("unreachable");
+  const regen = sequenceToMermaid(result.ir);
+  const back = parseSequence(regen);
+  expect(back.ok, regen).toBe(true);
+  if (!back.ok) throw new Error("unreachable");
+  expect(back.ir).toEqual(result.ir);
+  return result.ir;
+};
+
+describe("parseSequence dialect leniency", () => {
+  it("accepts frontmatter, init directives, `title`, trailing `;` and trailing `%%` comments", () => {
+    const ir = roundTripLenient(`---
+title: Seq
+---
+%%{init: {'theme':'dark'}}%%
+sequenceDiagram;
+  title My title
+  accTitle: acc
+  accDescr: desc
+  participant A as Alice;
+  A->>B: hi %% greet
+  B-->>A: yo;
+`);
+    expect(ir.lifelines.map((l) => [l.id, l.name])).toEqual([
+      ["A", "Alice"],
+      ["B", "B"],
+    ]);
+    expect(ir.events.map((e) => (e.kind === "message" ? e.label : e.kind))).toEqual(["hi", "yo"]);
+  });
+
+  it("accepts non-ASCII ids and `.` inside ids", () => {
+    const ir = roundTripLenient(`sequenceDiagram
+  participant ユーザ as User
+  ユーザ->>A.svc: x
+  Note over A.svc,ユーザ: n
+`);
+    expect(ir.lifelines.map((l) => l.id)).toEqual(["ユーザ", "A.svc"]);
+  });
+});
