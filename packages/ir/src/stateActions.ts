@@ -9,10 +9,10 @@ import { omitUndefined } from "./omitUndefined";
  * Letters (any script), digits, `_` and `.`; mirrors the parser's state ID. */
 export const STATE_NAME_RE = /^[\p{L}_][\p{L}\p{N}_.]*$/u;
 
-/** State ids appear verbatim in mermaid text, which rejects hyphens —
- * generated ids use underscores instead of newId's `kind-hash` form. */
+/** Kept as its own name because state ids are the one id kind mermaid spells
+ * as a bare identifier everywhere; newId already mints a form it accepts. */
 export function newStateId(): StateId {
-  return newId("state").replaceAll("-", "_") as string as StateId;
+  return newId("state");
 }
 
 export type StateAction =
