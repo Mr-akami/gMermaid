@@ -5,8 +5,9 @@ import { omitUndefined } from "./omitUndefined";
 // Same contract as the other diagram actions: intent-carrying, immutable,
 // identity-preserving on no-ops.
 
-/** State ids are the exchange identity in mermaid text — keep them id-safe. */
-export const STATE_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** State ids are the exchange identity in mermaid text — keep them id-safe.
+ * Letters (any script), digits, `_` and `.`; mirrors the parser's state ID. */
+export const STATE_NAME_RE = /^[\p{L}_][\p{L}\p{N}_.]*$/u;
 
 /** State ids appear verbatim in mermaid text, which rejects hyphens —
  * generated ids use underscores instead of newId's `kind-hash` form. */

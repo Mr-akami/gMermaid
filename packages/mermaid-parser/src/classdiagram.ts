@@ -9,7 +9,14 @@ import type {
   RelationType,
   Visibility,
 } from "@gmermaid/ir";
-import type { ParseError, ParseResult } from "./common";
+import { prepareLines, type ParseError, type ParseResult } from "./common";
+
+// Dialect the IR cannot hold is DISCARDED by design, same as `%%` comments:
+// frontmatter, `%%{init}%%` directives, `cssClass` / `style` / `classDef`,
+// `click` / `callback` / `link`, `accTitle` / `accDescr`, trailing `;`, and
+// `:::className` suffixes. (`class` itself is a declaration here — kept.)
+
+const DROPPED = ["cssClass", "style", "classDef", "click", "callback", "link", "accTitle", "accDescr"];
 
 const NAME = "[A-Za-z_][A-Za-z0-9_]*";
 
@@ -52,7 +59,7 @@ export function parseMemberLine(line: string): { attribute?: ClassMember; method
 
 export function parseClassDiagram(code: string): ParseResult<ClassIR> {
   const errors: ParseError[] = [];
-  const lines = code.split("\n");
+  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true });
 
   const classes = new Map<string, ClassNode>();
   const order: string[] = [];
@@ -68,11 +75,7 @@ export function parseClassDiagram(code: string): ParseResult<ClassIR> {
     classes.set(name, { id: name as ClassId, name, attributes: [], methods: [] });
   };
 
-  for (let i = 0; i < lines.length; i++) {
-    const lineNo = i + 1;
-    const line = lines[i]!.trim();
-    if (line === "" || line.startsWith("%%")) continue;
-
+  for (const { text: line, line: lineNo } of lines) {
     if (!headerSeen) {
       if (line !== "classDiagram") {
         errors.push({ line: lineNo, message: "expected `classDiagram` header" });
@@ -170,7 +173,7 @@ export function parseClassDiagram(code: string): ParseResult<ClassIR> {
     errors.push({ line: lineNo, message: `cannot parse: ${line}` });
   }
 
-  if (openClass !== null) errors.push({ line: lines.length, message: `unclosed class block: ${openClass}` });
+  if (openClass !== null) errors.push({ line: lines[lines.length - 1]?.line ?? 1, message: `unclosed class block: ${openClass}` });
   if (!headerSeen) errors.push({ line: 1, message: "empty diagram: missing header" });
   if (errors.length > 0) return { ok: false, errors };
 

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { ParseResult } from "@gmermaid/mermaid-parser";
+import { firstStatement, type ParseResult } from "@gmermaid/mermaid-parser";
 
 // .mmd open/save via the File System Access API where available (Chromium),
 // falling back to download / <input type=file>. Work in progress is also
@@ -168,7 +168,8 @@ export interface StoredEntry {
 }
 
 function detectKind(code: string): StoredEntry["kind"] {
-  const head = code.trimStart();
+  // skip frontmatter / `%%{init}%%` / comments the same way the parsers do
+  const head = firstStatement(code) ?? "";
   if (head.startsWith("flowchart") || head.startsWith("graph")) return "flowchart";
   if (head.startsWith("sequenceDiagram")) return "sequence";
   if (head.startsWith("classDiagram")) return "class";

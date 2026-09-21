@@ -8,19 +8,26 @@ import type {
   StateTransition,
   TransitionId,
 } from "@gmermaid/ir";
-import { unescapeLabel, type ParseError, type ParseResult } from "./common";
+import { prepareLines, unescapeLabel, type ParseError, type ParseResult } from "./common";
 
 // stateDiagram-v2 subset: simple states, `state "desc" as id`, `id : desc`,
 // [*] start/end (scoped per composite block), composite `state X { … }`,
-// <<choice>>/<<fork>>/<<join>>, and notes. Concurrency (`--` regions) and
-// classDef styling are not recognized. `%%` comments are skipped (mermaid's
-// own parser discards them too).
+// <<choice>>/<<fork>>/<<join>>, and notes. Concurrency (`--` regions) is not
+// recognized. Dialect the IR cannot hold is DISCARDED by design, same as `%%`
+// comments: frontmatter, `%%{init}%%` directives, `style` / `classDef` /
+// `class` statements, `hide empty description`, `accTitle` / `accDescr`,
+// trailing `;`, and `:::className` suffixes on state ids.
 
-const ID = "[A-Za-z_][A-Za-z0-9_]*";
+const DROPPED = ["style", "classDef", "class", "hide", "accTitle", "accDescr"];
+
+// letters incl. non-ASCII, digits, `_`, `.` — no `-` (mermaid's state grammar
+// rejects it, and it would be ambiguous with `-->`). Mirrors ir's STATE_NAME_RE.
+const ID = "[\\p{L}_][\\p{L}\\p{N}_.]*";
+const ID_RE = new RegExp(`^${ID}$`, "u");
 
 export function parseStateDiagram(code: string): ParseResult<StateIR> {
   const errors: ParseError[] = [];
-  const lines = code.split("\n");
+  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true });
 
   const states = new Map<string, StateNode>();
   const order: string[] = [];
@@ -68,9 +75,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
   };
 
   for (let i = 0; i < lines.length; i++) {
-    const lineNo = i + 1;
-    const line = lines[i]!.trim();
-    if (line === "" || line.startsWith("%%")) continue;
+    const { text: line, line: lineNo } = lines[i]!;
 
     if (!headerSeen) {
       if (line !== "stateDiagram-v2" && line !== "stateDiagram") {
@@ -95,7 +100,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     }
 
     // transition: A --> B [: label], either side may be [*]
-    const trans = line.match(new RegExp(`^(\\[\\*\\]|${ID})\\s*-->\\s*(\\[\\*\\]|${ID})\\s*(?::\\s*(.+))?$`));
+    const trans = line.match(new RegExp(`^(\\[\\*\\]|${ID})\\s*-->\\s*(\\[\\*\\]|${ID})\\s*(?::\\s*(.+))?$`, "u"));
     if (trans) {
       const resolve = (token: string, role: "start" | "end"): StateId => {
         if (token === "[*]") return pseudo(role);
@@ -115,7 +120,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     }
 
     // note left of X : text   /   note right of X (block form) … end note
-    const note = line.match(new RegExp(`^[Nn]ote\\s+(left of|right of)\\s+(${ID})\\s*(?::\\s*(.*))?$`));
+    const note = line.match(new RegExp(`^[Nn]ote\\s+(left of|right of)\\s+(${ID})\\s*(?::\\s*(.*))?$`, "u"));
     if (note) {
       const position = note[1] === "left of" ? "leftOf" : "rightOf";
       declare(note[2]!);
@@ -128,7 +133,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
         let closed = false;
         while (i + 1 < lines.length) {
           i += 1;
-          const inner = lines[i]!.trim();
+          const inner = lines[i]!.text;
           if (inner === "end note") {
             closed = true;
             break;
@@ -147,14 +152,14 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     }
 
     // state id <<choice|fork|join>>
-    const special = line.match(new RegExp(`^state\\s+(${ID})\\s+<<(choice|fork|join)>>$`));
+    const special = line.match(new RegExp(`^state\\s+(${ID})\\s+<<(choice|fork|join)>>$`, "u"));
     if (special) {
       declare(special[1]!, undefined, special[2] as StateRole);
       continue;
     }
 
     // state "description" as id [{]
-    const aliased = line.match(new RegExp(`^state\\s+"([^"]*)"\\s+as\\s+(${ID})\\s*(\\{)?$`));
+    const aliased = line.match(new RegExp(`^state\\s+"([^"]*)"\\s+as\\s+(${ID})\\s*(\\{)?$`, "u"));
     if (aliased) {
       declare(aliased[2]!, unescapeLabel(aliased[1]!));
       if (aliased[3] !== undefined) stack.push({ id: aliased[2] as StateId, openedAt: lineNo });
@@ -162,7 +167,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     }
 
     // state id [{]
-    const decl = line.match(new RegExp(`^state\\s+(${ID})\\s*(\\{)?$`));
+    const decl = line.match(new RegExp(`^state\\s+(${ID})\\s*(\\{)?$`, "u"));
     if (decl) {
       declare(decl[1]!);
       if (decl[2] !== undefined) stack.push({ id: decl[1] as StateId, openedAt: lineNo });
@@ -170,14 +175,14 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     }
 
     // id : description
-    const desc = line.match(new RegExp(`^(${ID})\\s*:\\s*(.+)$`));
+    const desc = line.match(new RegExp(`^(${ID})\\s*:\\s*(.+)$`, "u"));
     if (desc) {
       declare(desc[1]!, unescapeLabel(desc[2]!.trim()));
       continue;
     }
 
     // bare id
-    if (new RegExp(`^${ID}$`).test(line)) {
+    if (ID_RE.test(line)) {
       declare(line);
       continue;
     }

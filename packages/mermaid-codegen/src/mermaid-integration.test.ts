@@ -272,3 +272,49 @@ describe("mermaid.js accepts generated state diagrams", () => {
     await expectMermaidAccepts(stateToMermaid(ir));
   });
 });
+
+// The parsers accept non-ASCII letters and `.` in ids (mermaid does too);
+// codegen emits ids verbatim, so the widened charset must survive a real parse.
+describe("mermaid.js accepts generated diagrams with non-ASCII / dotted ids", () => {
+  it("flowchart", async () => {
+    const ir: FlowchartIR = {
+      kind: "flowchart",
+      direction: "LR",
+      nodes: [
+        { id: N("日本"), label: "日本語", shape: "rect" },
+        { id: N("svc.api"), label: "api", shape: "rounded", parent: G("領域") },
+      ],
+      edges: [{ id: "e1" as EdgeId, from: N("日本"), to: N("svc.api"), arrow: "arrow", label: "呼ぶ" }],
+      subgraphs: [{ id: G("領域"), label: "領域" }],
+    };
+    await expectMermaidAccepts(flowchartToMermaid(ir));
+  });
+
+  it("sequence", async () => {
+    const ir: SequenceIR = {
+      kind: "sequence",
+      lifelines: [
+        { id: L("ユーザ"), name: "User", isActor: true },
+        { id: L("A.svc"), name: "A.svc", isActor: false },
+      ],
+      events: [
+        { kind: "message", id: "m1" as MessageId, from: L("ユーザ"), to: L("A.svc"), label: "x", arrow: "solid" },
+        { kind: "note", id: "n1" as NoteId, position: "over", lifelines: [L("ユーザ"), L("A.svc")], text: "n" },
+      ],
+    };
+    await expectMermaidAccepts(sequenceToMermaid(ir));
+  });
+
+  it("state", async () => {
+    const ir: StateIR = {
+      kind: "state",
+      states: [
+        { id: S("日本"), label: "説明", role: "normal" },
+        { id: S("svc.api"), label: "svc.api", role: "normal" },
+      ],
+      transitions: [{ id: "t1" as TransitionId, from: S("日本"), to: S("svc.api"), label: "go" }],
+      notes: [{ id: "n1" as NoteId, target: S("svc.api"), position: "rightOf", text: "n" }],
+    };
+    await expectMermaidAccepts(stateToMermaid(ir));
+  });
+});
