@@ -1,44 +1,79 @@
 import dagre from "@dagrejs/dagre";
 import {
-  formatAttribute,
-  formatMethod,
+  displayAttribute,
+  displayMethod,
+  genericToAngle,
   type ClassIR,
   type ClassId,
+  type NamespaceId,
+  type NoteId,
+  type RelationHead,
+  type RelationLine,
   type RelationId,
-  type RelationType,
 } from "@gmermaid/ir";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
 
 const NAME_FONT = { fontSize: 14, fontFamily: "sans-serif", bold: true } as const;
 const MEMBER_FONT = { fontSize: 12, fontFamily: "monospace" } as const;
+const NOTE_FONT = { fontSize: 12, fontFamily: "sans-serif" } as const;
 const PAD_X = 12;
 const HEADER_PAD_Y = 8;
 const MEMBER_LINE_H = 18;
 const COMPARTMENT_PAD_Y = 5;
 const MIN_W = 110;
+const NOTE_PAD = 8;
+// visual breathing room around a namespace frame; the extra top holds the title
+const NS_PAD = 10;
+const NS_TITLE_H = 24;
 // self-relation detour geometry (right side of the node)
 const SELF_REL_W = 30;
 const SELF_REL_H = 26;
 const SELF_REL_STEP = 14;
 
+/** One rendered member line: classifiers survive as styling, not as text. */
+export interface MemberLine {
+  readonly text: string;
+  /** mermaid `$` — underlined. */
+  readonly static: boolean;
+  /** mermaid `*` — italic. */
+  readonly abstract: boolean;
+}
+
 export interface ClassBox {
   readonly id: ClassId;
   readonly rect: Rect;
+  /** Display text: the `["label"]` when present, else the (generic) name. */
   readonly name: string;
-  readonly stereotype?: string;
-  readonly attributes: readonly string[];
-  readonly methods: readonly string[];
+  readonly stereotypes: readonly string[];
+  readonly attributes: readonly MemberLine[];
+  readonly methods: readonly MemberLine[];
   /** y of the line under the name compartment. */
   readonly headerBottom: number;
   /** y of the line under the attributes compartment. */
   readonly attributesBottom: number;
 }
 
+export interface NamespaceFrame {
+  readonly id: NamespaceId;
+  readonly name: string;
+  readonly rect: Rect;
+}
+
+export interface ClassNoteBox {
+  readonly id: NoteId;
+  readonly rect: Rect;
+  readonly text: string;
+  /** dashed connector to the target class; absent for a free note. */
+  readonly link?: readonly Point[];
+}
+
 export interface RelationPath {
   readonly id: RelationId;
   readonly points: readonly Point[];
-  readonly type: RelationType;
+  readonly line: RelationLine;
+  readonly headFrom: RelationHead;
+  readonly headTo: RelationHead;
   readonly label?: string;
   readonly labelPos?: Point;
   readonly fromCardinality?: string;
@@ -52,36 +87,41 @@ export interface ClassLayout {
   readonly size: { readonly w: number; readonly h: number };
   readonly classes: readonly ClassBox[];
   readonly relations: readonly RelationPath[];
+  readonly notes: readonly ClassNoteBox[];
+  readonly namespaces: readonly NamespaceFrame[];
 }
 
 export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLayout {
-  const g = new dagre.graphlib.Graph({ multigraph: true });
+  // compound: namespaces are dagre clusters (cf. composite states)
+  const g = new dagre.graphlib.Graph({ multigraph: true, compound: true });
   g.setGraph({ rankdir: ir.direction ?? "TB", nodesep: 50, ranksep: 60 });
   g.setDefaultEdgeLabel(() => ({}));
 
+  const usedNamespaces = ir.namespaces.filter((ns) => ir.classes.some((c) => c.namespace === ns.id));
+  for (const ns of usedNamespaces) g.setNode(ns.id, {});
+
   const rendered = new Map<
     ClassId,
-    { attributes: string[]; methods: string[]; headerH: number; attrsH: number; methodsH: number }
+    { title: string; attributes: MemberLine[]; methods: MemberLine[]; headerH: number; attrsH: number; methodsH: number }
   >();
 
   for (const c of ir.classes) {
-    const attributes = c.attributes.map(formatAttribute);
-    const methods = c.methods.map(formatMethod);
-    const headerH =
-      HEADER_PAD_Y * 2 +
-      measure.measure(c.name, NAME_FONT).h +
-      (c.stereotype !== undefined ? MEMBER_LINE_H : 0);
+    const title = c.label ?? `${c.name}${c.generic !== undefined ? genericToAngle(`~${c.generic}~`) : ""}`;
+    const attributes = c.attributes.map((a) => ({ text: displayAttribute(a), static: a.static ?? false, abstract: false }));
+    const methods = c.methods.map((m) => ({ text: displayMethod(m), static: m.static ?? false, abstract: m.abstract ?? false }));
+    const headerH = HEADER_PAD_Y * 2 + measure.measure(title, NAME_FONT).h + c.stereotypes.length * MEMBER_LINE_H;
     const attrsH = COMPARTMENT_PAD_Y * 2 + attributes.length * MEMBER_LINE_H;
     const methodsH = COMPARTMENT_PAD_Y * 2 + methods.length * MEMBER_LINE_H;
     const widths = [
-      measure.measure(c.name, NAME_FONT).w,
-      c.stereotype !== undefined ? measure.measure(`«${c.stereotype}»`, MEMBER_FONT).w : 0,
-      ...attributes.map((s) => measure.measure(s, MEMBER_FONT).w),
-      ...methods.map((s) => measure.measure(s, MEMBER_FONT).w),
+      measure.measure(title, NAME_FONT).w,
+      ...c.stereotypes.map((s) => measure.measure(`«${s}»`, MEMBER_FONT).w),
+      ...attributes.map((s) => measure.measure(s.text, MEMBER_FONT).w),
+      ...methods.map((s) => measure.measure(s.text, MEMBER_FONT).w),
     ];
     const w = Math.max(MIN_W, Math.max(...widths) + PAD_X * 2);
-    rendered.set(c.id, { attributes, methods, headerH, attrsH, methodsH });
+    rendered.set(c.id, { title, attributes, methods, headerH, attrsH, methodsH });
     g.setNode(c.id, { width: w, height: headerH + attrsH + methodsH });
+    if (c.namespace !== undefined && g.hasNode(c.namespace)) g.setParent(c.id, c.namespace);
   }
 
   for (const r of ir.relations) {
@@ -94,6 +134,19 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     if (r.from !== r.to) g.setEdge(r.from, r.to, {}, r.id);
   }
 
+  // notes take part in the layout as ordinary nodes: an attached note is
+  // pulled next to its target by an (invisible) edge, a free note floats as
+  // its own component
+  const noteSize = new Map<NoteId, { w: number; h: number }>();
+  for (const n of ir.notes) {
+    const m = measure.measure(n.text, NOTE_FONT);
+    const w = m.w + NOTE_PAD * 2;
+    const h = Math.max(26, m.h + NOTE_PAD * 2);
+    noteSize.set(n.id, { w, h });
+    g.setNode(n.id, { width: w, height: h });
+    if (n.target !== undefined && g.hasNode(n.target)) g.setEdge(n.id, n.target, {}, n.id);
+  }
+
   dagre.layout(g);
 
   const classes: ClassBox[] = ir.classes.map((c) => {
@@ -103,13 +156,28 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     const y = pos.y - pos.height / 2;
     return {
       id: c.id,
-      name: c.name,
-      ...(c.stereotype !== undefined ? { stereotype: c.stereotype } : {}),
+      name: parts.title,
+      stereotypes: c.stereotypes,
       attributes: parts.attributes,
       methods: parts.methods,
       rect: { x, y, w: pos.width, h: pos.height },
       headerBottom: y + parts.headerH,
       attributesBottom: y + parts.headerH + parts.attrsH,
+    };
+  });
+
+  const namespaces: NamespaceFrame[] = usedNamespaces.map((ns) => {
+    const pos = g.node(ns.id);
+    // cluster rects come back tight around members — expand for border + title
+    return {
+      id: ns.id,
+      name: ns.name,
+      rect: {
+        x: pos.x - pos.width / 2 - NS_PAD,
+        y: pos.y - pos.height / 2 - NS_TITLE_H,
+        w: pos.width + NS_PAD * 2,
+        h: pos.height + NS_TITLE_H + NS_PAD,
+      },
     };
   });
 
@@ -148,7 +216,9 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     return {
       id: r.id,
       points,
-      type: r.type,
+      line: r.line,
+      headFrom: r.headFrom,
+      headTo: r.headTo,
       ...(r.label !== undefined ? { label: r.label, labelPos } : {}),
       ...(r.fromCardinality !== undefined
         ? { fromCardinality: r.fromCardinality, fromCardinalityPos: { x: first.x + 8, y: first.y + 14 } }
@@ -159,17 +229,34 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
     };
   });
 
+  const notes: ClassNoteBox[] = ir.notes.map((n) => {
+    const pos = g.node(n.id);
+    const size = noteSize.get(n.id)!;
+    const rect = { x: pos.x - size.w / 2, y: pos.y - size.h / 2, w: size.w, h: size.h };
+    const link =
+      n.target !== undefined && g.hasEdge(n.id, n.target, n.id)
+        ? g.edge(n.id, n.target, n.id).points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }))
+        : undefined;
+    return { id: n.id, rect, text: n.text, ...(link !== undefined ? { link } : {}) };
+  });
+
   const graph = g.graph();
   // dagre reports -Infinity for an empty graph — clamp to a sane empty canvas.
   // Self-relation detours (and their labels) stick out past dagre's extent,
   // so they widen the canvas too (same class of oversight as the -Infinity).
   const baseW = graph.width !== undefined && Number.isFinite(graph.width) ? graph.width : 200;
-  const w = Math.max(baseW, selfMaxRight);
-  const hgt = graph.height !== undefined && Number.isFinite(graph.height) ? graph.height : 100;
+  let w = Math.max(baseW, selfMaxRight);
+  let h = graph.height !== undefined && Number.isFinite(graph.height) ? graph.height : 100;
+  for (const ns of namespaces) {
+    w = Math.max(w, ns.rect.x + ns.rect.w);
+    h = Math.max(h, ns.rect.y + ns.rect.h);
+  }
   return {
     kind: "class",
-    size: { w, h: hgt },
+    size: { w, h },
     classes,
     relations,
+    notes,
+    namespaces,
   };
 }

@@ -18,6 +18,7 @@ export type RelationId = Id<"relation">;
 export type StateId = Id<"state">;
 export type TransitionId = Id<"transition">;
 export type SubgraphId = Id<"subgraph">;
+export type NamespaceId = Id<"namespace">;
 export type SectionId = Id<"section">;
 export type PeriodId = Id<"period">;
 export type EventId = Id<"event">;
@@ -41,6 +42,7 @@ export type AnyId =
   | StateId
   | TransitionId
   | SubgraphId
+  | NamespaceId
   | SectionId
   | PeriodId
   | EventId
