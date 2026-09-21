@@ -1,0 +1,154 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutGantt > matches the committed golden layout 1`] = `
+{
+  "axisY": 58,
+  "bars": [
+    {
+      "id": "t1",
+      "label": "A task",
+      "labelRect": {
+        "h": 22,
+        "w": 144,
+        "x": 0,
+        "y": 66,
+      },
+      "milestone": false,
+      "rect": {
+        "h": 22,
+        "w": 408,
+        "x": 144,
+        "y": 66,
+      },
+      "tags": [],
+      "unresolved": false,
+    },
+    {
+      "id": "t2",
+      "label": "Another task",
+      "labelRect": {
+        "h": 22,
+        "w": 144,
+        "x": 0,
+        "y": 94,
+      },
+      "milestone": false,
+      "rect": {
+        "h": 22,
+        "w": 272,
+        "x": 552,
+        "y": 94,
+      },
+      "tags": [],
+      "unresolved": false,
+    },
+    {
+      "id": "t3",
+      "label": "Task in Another",
+      "labelRect": {
+        "h": 22,
+        "w": 144,
+        "x": 0,
+        "y": 130,
+      },
+      "milestone": false,
+      "rect": {
+        "h": 22,
+        "w": 163.2,
+        "x": 293.6,
+        "y": 130,
+      },
+      "tags": [],
+      "unresolved": false,
+    },
+    {
+      "id": "t4",
+      "label": "another task",
+      "labelRect": {
+        "h": 22,
+        "w": 144,
+        "x": 0,
+        "y": 158,
+      },
+      "milestone": false,
+      "rect": {
+        "h": 22,
+        "w": 326.3999999999999,
+        "x": 456.8,
+        "y": 158,
+      },
+      "tags": [],
+      "unresolved": false,
+    },
+  ],
+  "chartW": 680,
+  "chartX": 144,
+  "kind": "gantt",
+  "rowsBottom": 194,
+  "rowsTop": 66,
+  "sections": [
+    {
+      "id": "s1",
+      "index": 0,
+      "name": "Section",
+      "rect": {
+        "h": 62,
+        "w": 824,
+        "x": 0,
+        "y": 60,
+      },
+    },
+    {
+      "id": "s2",
+      "index": 1,
+      "name": "Another",
+      "rect": {
+        "h": 62,
+        "w": 824,
+        "x": 0,
+        "y": 124,
+      },
+    },
+  ],
+  "size": {
+    "h": 206,
+    "w": 836,
+  },
+  "ticks": [
+    {
+      "label": "2014-01-02",
+      "x": 157.6,
+    },
+    {
+      "label": "2014-01-09",
+      "x": 252.8,
+    },
+    {
+      "label": "2014-01-16",
+      "x": 348,
+    },
+    {
+      "label": "2014-01-23",
+      "x": 443.2,
+    },
+    {
+      "label": "2014-01-30",
+      "x": 538.4,
+    },
+    {
+      "label": "2014-02-06",
+      "x": 633.5999999999999,
+    },
+    {
+      "label": "2014-02-13",
+      "x": 728.8,
+    },
+    {
+      "label": "2014-02-20",
+      "x": 824,
+    },
+  ],
+  "title": "A Gantt Diagram",
+  "verts": [],
+}
+`;

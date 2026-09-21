@@ -99,6 +99,10 @@ body { margin: 0; font-family: sans-serif; }
 .toolbar button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
 .toolbar-field { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .property-window .row-buttons { display: flex; gap: 6px; margin-top: 10px; }
+/* gantt task tags: a compact wrap of checkboxes, not one row per tag */
+.property-window .tag-row { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; }
+.property-window .tag-check { display: flex; align-items: center; gap: 3px; margin: 0; }
+.property-window .tag-check input { width: auto; margin: 0; }
 
 .review-app {
   display: flex;

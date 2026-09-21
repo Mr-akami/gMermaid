@@ -10,6 +10,7 @@ import type {
   FlowchartEdge,
   FlowchartIR,
   FragmentId,
+  GanttIR,
   JourneyIR,
   LifecycleId,
   LifelineId,
@@ -29,6 +30,7 @@ import { FLOWCHART_SHAPES } from "@gmermaid/ir";
 import mermaid from "mermaid";
 import { flowchartToMermaid } from "./flowchart";
 import { classToMermaid } from "./classdiagram";
+import { ganttToMermaid } from "./gantt";
 import { journeyToMermaid } from "./journey";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
@@ -491,6 +493,56 @@ describe("mermaid.js accepts generated requirement diagrams", () => {
       ],
     };
     await expectMermaidAccepts(requirementToMermaid(ir));
+  });
+});
+
+describe("mermaid.js accepts generated gantt charts", () => {
+  it("parses every diagram setting, tag, id and start/end form", async () => {
+    const ir: GanttIR = {
+      kind: "gantt",
+      title: "Adding GANTT diagram functionality to mermaid",
+      dateFormat: "YYYY-MM-DD",
+      axisFormat: "%d/%m",
+      tickInterval: "1week",
+      excludes: ["weekends", "2014-01-10"],
+      weekend: "friday",
+      todayMarker: "stroke-width:5px,stroke:#0f0,opacity:0.5",
+      inclusiveEndDates: true,
+      sections: [
+        {
+          id: "s1" as SectionId,
+          name: "A section",
+          tasks: [
+            { id: "t1" as TaskId, name: "Completed task", taskId: "des1", tags: ["done"], start: { kind: "date", value: "2014-01-06" }, end: { kind: "date", value: "2014-01-08" } },
+            { id: "t2" as TaskId, name: "Active task", taskId: "des2", tags: ["active"], start: { kind: "date", value: "2014-01-09" }, end: { kind: "duration", value: "3d" } },
+            { id: "t3" as TaskId, name: "Critical path", tags: ["crit", "done"], start: { kind: "after", ids: ["des1", "des2"] }, end: { kind: "duration", value: "2d" } },
+            { id: "t4" as TaskId, name: "Add to mermaid", tags: [], start: { kind: "prev" }, end: { kind: "until", ids: ["isadded"] } },
+            { id: "t5" as TaskId, name: "Functionality added", taskId: "isadded", tags: ["milestone"], start: { kind: "date", value: "2014-01-25" }, end: { kind: "duration", value: "0d" } },
+            { id: "t6" as TaskId, name: "Deadline", taskId: "v1", tags: ["vert"], start: { kind: "date", value: "2014-01-28" }, end: { kind: "duration", value: "0d" } },
+          ],
+        },
+      ],
+    };
+    await expectMermaidAccepts(ganttToMermaid(ir));
+  });
+
+  it("parses a bare chart, a nameless leading section and `todayMarker off`", async () => {
+    await expectMermaidAccepts(ganttToMermaid({ kind: "gantt", sections: [] }));
+    const ir: GanttIR = {
+      kind: "gantt",
+      todayMarker: "off",
+      sections: [
+        {
+          id: "s0" as SectionId,
+          name: "",
+          tasks: [
+            { id: "t1" as TaskId, name: "apple", taskId: "a", tags: [], start: { kind: "date", value: "2017-07-20" }, end: { kind: "duration", value: "1w" } },
+            { id: "t2" as TaskId, name: "kiwi", taskId: "d", tags: [], start: { kind: "date", value: "2017-07-20" }, end: { kind: "until", ids: ["a"] } },
+          ],
+        },
+      ],
+    };
+    await expectMermaidAccepts(ganttToMermaid(ir));
   });
 });
 
