@@ -17,6 +17,8 @@ export * from "./journey";
 export * from "./journeyActions";
 export * from "./requirement";
 export * from "./requirementActions";
+export * from "./usecase";
+export * from "./usecaseActions";
 
 import type { ClassIR } from "./classdiagram";
 import type { FlowchartIR } from "./flowchart";
@@ -25,5 +27,6 @@ import type { SequenceIR } from "./sequence";
 import type { StateIR } from "./statediagram";
 import type { TimelineIR } from "./timeline";
 import type { JourneyIR } from "./journey";
+import type { UsecaseIR } from "./usecase";
 
-export type DiagramIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR | TimelineIR;
+export type DiagramIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR | TimelineIR | UsecaseIR;

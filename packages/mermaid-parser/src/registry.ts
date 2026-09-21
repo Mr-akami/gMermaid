@@ -1,4 +1,4 @@
-import type { ClassIR, FlowchartIR, JourneyIR, RequirementIR, SequenceIR, StateIR, TimelineIR } from "@gmermaid/ir";
+import type { ClassIR, FlowchartIR, JourneyIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
 import { parseClassDiagram } from "./classdiagram";
 import { firstStatement, type ParseResult } from "./common";
 import { parseFlowchart } from "./flowchart";
@@ -7,14 +7,15 @@ import { parseRequirementDiagram } from "./requirement";
 import { parseSequence } from "./sequence";
 import { parseStateDiagram } from "./statediagram";
 import { parseTimeline } from "./timeline";
+import { parseUsecase } from "./usecase";
 
 // One place that knows every diagram kind gMermaid supports. Adding a
 // diagram = add it here, then register its editor in packages/app.
 
-export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline"] as const;
+export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "usecase"] as const;
 export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
 
-export type AnyIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR | TimelineIR;
+export type AnyIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR | TimelineIR | UsecaseIR;
 
 /** Header keyword(s) that open each diagram kind, in mermaid text. */
 const HEADERS: Record<DiagramKind, readonly string[]> = {
@@ -25,6 +26,9 @@ const HEADERS: Record<DiagramKind, readonly string[]> = {
   timeline: ["timeline"],
   journey: ["journey"],
   requirement: ["requirementDiagram"],
+  // mermaid only knows `usecase-beta`; the bare keyword is accepted as the
+  // obvious typo, since no other kind claims it
+  usecase: ["usecase-beta", "usecase"],
 };
 
 export function detectDiagramKind(code: string): DiagramKind | undefined {
@@ -51,5 +55,7 @@ export function parseDiagram(kind: DiagramKind, code: string): ParseResult<AnyIR
       return parseJourney(code);
     case "requirement":
       return parseRequirementDiagram(code);
+    case "usecase":
+      return parseUsecase(code);
   }
 }

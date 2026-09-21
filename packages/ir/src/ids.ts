@@ -25,6 +25,10 @@ export type EventId = Id<"event">;
 export type TaskId = Id<"task">;
 export type RequirementId = Id<"requirement">;
 export type ElementId = Id<"element">;
+export type ActorId = Id<"actor">;
+export type UseCaseId = Id<"usecase">;
+export type BoundaryId = Id<"boundary">;
+export type UsecaseRelationId = Id<"usecaseRelation">;
 
 export type AnyId =
   | NodeId
@@ -48,7 +52,11 @@ export type AnyId =
   | EventId
   | TaskId
   | RequirementId
-  | ElementId;
+  | ElementId
+  | ActorId
+  | UseCaseId
+  | BoundaryId
+  | UsecaseRelationId;
 
 /**
  * Collision-proof id generation. Parser-imported diagrams carry their own

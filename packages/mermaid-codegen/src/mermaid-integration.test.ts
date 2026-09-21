@@ -25,6 +25,7 @@ import type {
   TaskId,
   TimelineIR,
   TransitionId,
+  UsecaseIR,
 } from "@gmermaid/ir";
 import { FLOWCHART_SHAPES } from "@gmermaid/ir";
 import mermaid from "mermaid";
@@ -35,6 +36,7 @@ import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
 import { timelineToMermaid } from "./timeline";
+import { usecaseToMermaid } from "./usecase";
 
 // C4: our codegen output must be accepted by the REAL mermaid.js parser —
 // the in-repo parser round trips prove self-consistency, not dialect
@@ -599,5 +601,62 @@ describe("mermaid.js accepts generated diagrams with non-ASCII / dotted ids", ()
       notes: [{ id: "n1" as NoteId, target: S("svc.api"), position: "rightOf", text: "n" }],
     };
     await expectMermaidAccepts(stateToMermaid(ir));
+  });
+});
+
+const AC = (s: string) => s as import("@gmermaid/ir").ActorId;
+const UC = (s: string) => s as import("@gmermaid/ir").UseCaseId;
+const BD = (s: string) => s as import("@gmermaid/ir").BoundaryId;
+const UR = (s: string) => s as import("@gmermaid/ir").UsecaseRelationId;
+
+describe("mermaid.js accepts generated use case diagrams", () => {
+  it("parses actors, use case shapes, boundaries, every marker and notes", async () => {
+    const ir: UsecaseIR = {
+      kind: "usecase",
+      direction: "LR",
+      actors: [
+        { id: AC("Customer"), name: "Customer", label: 'the "customer" & <b> #1', variant: "default" },
+        { id: AC("Staff"), name: "Staff", label: "Order staff", variant: "hollow", business: true, stereotype: "Employee" },
+        { id: AC("Robot"), name: "Robot", variant: "awesome" },
+        { id: AC("Clerk"), name: "Clerk", label: "Payment clerk", variant: "default", boundary: BD("ordering") },
+      ],
+      usecases: [
+        { id: UC("Browse"), name: "Browse", label: "Browse products", shape: "ellipse" },
+        { id: UC("Report"), name: "Report", shape: "rect" },
+        { id: UC("Checkout"), name: "Checkout", label: "Checkout", shape: "ellipse", business: true, stereotype: "Core", boundary: BD("ordering") },
+        { id: UC("Payment"), name: "Payment", label: "Process payment", shape: "rect", boundary: BD("ordering") },
+      ],
+      boundaries: [{ id: BD("ordering"), name: "ordering", label: "Ordering System", type: "package" }],
+      relations: [
+        { id: UR("r1"), from: AC("Customer"), to: UC("Browse"), line: "solid", headFrom: "none", headTo: "arrow", label: 'places > "order"' },
+        { id: UR("r2"), from: AC("Customer"), to: UC("Checkout"), line: "solid", headFrom: "arrow", headTo: "none" },
+        { id: UR("r3"), from: AC("Staff"), to: UC("Report"), line: "solid", headFrom: "none", headTo: "circle" },
+        { id: UR("r4"), from: AC("Staff"), to: UC("Report"), line: "solid", headFrom: "circle", headTo: "none", label: "watches" },
+        { id: UR("r5"), from: AC("Staff"), to: UC("Report"), line: "solid", headFrom: "none", headTo: "cross" },
+        { id: UR("r6"), from: AC("Staff"), to: UC("Report"), line: "solid", headFrom: "cross", headTo: "none" },
+        { id: UR("r7"), from: AC("Robot"), to: AC("Staff"), line: "solid", headFrom: "none", headTo: "inheritance" },
+        { id: UR("r8"), from: UC("Browse"), to: UC("Report"), line: "solid", headFrom: "none", headTo: "none" },
+        { id: UR("r9"), from: UC("Checkout"), to: UC("Payment"), line: "dashed", headFrom: "none", headTo: "none", kind: "include" },
+        { id: UR("r10"), from: UC("Browse"), to: UC("Checkout"), line: "dashed", headFrom: "none", headTo: "none", kind: "extend" },
+      ],
+      notes: [{ id: "n1" as NoteId, target: UC("Checkout"), text: 'validates the "cart"\nbefore payment' }],
+    };
+    await expectMermaidAccepts(usecaseToMermaid(ir));
+  });
+
+  it("parses a diagram with nothing but a direction, and an empty boundary", async () => {
+    await expectMermaidAccepts(
+      usecaseToMermaid({ kind: "usecase", direction: "TB", actors: [], usecases: [], boundaries: [], relations: [], notes: [] }),
+    );
+    await expectMermaidAccepts(
+      usecaseToMermaid({
+        kind: "usecase",
+        actors: [],
+        usecases: [],
+        boundaries: [{ id: BD("sb"), name: "sb", label: "Empty frame", type: "default" }],
+        relations: [],
+        notes: [],
+      }),
+    );
   });
 });

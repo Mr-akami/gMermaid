@@ -9,6 +9,7 @@ const kinds = [
   ["Timeline", /^timeline/],
   ["Journey", /^journey/],
   ["Requirement", /^requirementDiagram/],
+  ["Usecase", /^usecase-beta/],
 ] as const;
 
 for (const [kind, head] of kinds) {
