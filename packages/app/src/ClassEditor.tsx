@@ -108,6 +108,10 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
   // recovered draft is never clobbered by the sample it fell back to
   const [codeValid, setCodeValid] = useState(initial.recoveredText === undefined);
   useAutosave(STORAGE_KEY, code, mode === "standalone" && codeValid);
+  // autosave follows OUR parser alone: a diagram the IR already holds is real
+  // work, and must keep being saved even while mermaid refuses its text.
+  // Mermaid's verdict travels separately, and only gates the review submit.
+  const [mermaidValid, setMermaidValid] = useState(true);
   useEffect(() => onCodeChange?.(code), [code, onCodeChange]);
 
   useEffect(() => {
@@ -166,7 +170,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     if (typeof m === "string") return `methods: ${m}`;
     return undefined;
   }, [draftFor]);
-  useEffect(() => onValidityChange?.(codeValid && membersError === undefined), [codeValid, membersError, onValidityChange]);
+  useEffect(() => onValidityChange?.(codeValid && mermaidValid && membersError === undefined), [codeValid, mermaidValid, membersError, onValidityChange]);
 
   function handleMembersChange(id: ClassId, attrs: string, methods: string) {
     const a = parseMembers(attrs);
@@ -375,6 +379,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
         initialDraft={mode === "standalone" ? initial.recoveredText : undefined}
         loadWarnings={load.warnings}
         onValidityChange={setCodeValid}
+        onMermaidValidityChange={setMermaidValid}
       />
     </>
   );
