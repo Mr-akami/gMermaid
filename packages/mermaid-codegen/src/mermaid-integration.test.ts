@@ -18,6 +18,7 @@ import type {
   SequenceIR,
   StateIR,
   TaskId,
+  TimelineIR,
   TransitionId,
 } from "@gmermaid/ir";
 import mermaid from "mermaid";
@@ -27,6 +28,7 @@ import { journeyToMermaid } from "./journey";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
+import { timelineToMermaid } from "./timeline";
 
 // C4: our codegen output must be accepted by the REAL mermaid.js parser —
 // the in-repo parser round trips prove self-consistency, not dialect
@@ -46,6 +48,9 @@ const S = (s: string) => s as import("@gmermaid/ir").StateId;
 const Q = (s: string) => s as import("@gmermaid/ir").RequirementId;
 const EL = (s: string) => s as import("@gmermaid/ir").ElementId;
 const G = (s: string) => s as import("@gmermaid/ir").SubgraphId;
+const TS = (s: string) => s as SectionId;
+const TP = (s: string) => s as import("@gmermaid/ir").PeriodId;
+const TE = (s: string) => s as import("@gmermaid/ir").EventId;
 
 describe("mermaid.js accepts generated flowcharts", () => {
   const base: FlowchartIR = {
@@ -379,6 +384,42 @@ describe("mermaid.js accepts generated requirement diagrams", () => {
       ],
     };
     await expectMermaidAccepts(requirementToMermaid(ir));
+  });
+});
+
+describe("mermaid.js accepts generated timelines", () => {
+  it("parses a title, sections, multi-event periods and a period without events", async () => {
+    const ir: TimelineIR = {
+      kind: "timeline",
+      title: "History of Social Media Platform",
+      sections: [
+        {
+          id: TS("s1"),
+          name: "",
+          periods: [
+            { id: TP("p1"), label: "2002", events: [{ id: TE("e1"), text: "LinkedIn" }] },
+            { id: TP("p2"), label: "2004", events: [{ id: TE("e2"), text: "Facebook" }, { id: TE("e3"), text: "Google" }] },
+          ],
+        },
+        {
+          id: TS("s2"),
+          name: "21st century",
+          periods: [
+            // timeline text is RAW in mermaid, so these characters must reach
+            // it unescaped; a period without events must parse too
+            { id: TP("p3"), label: "Industry 4.0", events: [{ id: TE("e4"), text: 'Internet, "IoT" & <b>3D</b> #print\nsecond line' }] },
+            { id: TP("p4"), label: "Industry 5.0", events: [] },
+          ],
+        },
+        { id: TS("s3"), name: "未来", periods: [{ id: TP("p5"), label: "令和", events: [{ id: TE("e5"), text: "出来事" }] }] },
+      ],
+    };
+    await expectMermaidAccepts(timelineToMermaid(ir));
+  });
+
+  it("parses a bare timeline and a title-only timeline", async () => {
+    await expectMermaidAccepts(timelineToMermaid({ kind: "timeline", sections: [] }));
+    await expectMermaidAccepts(timelineToMermaid({ kind: "timeline", title: "Just a title", sections: [] }));
   });
 });
 

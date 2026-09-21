@@ -10,6 +10,7 @@ describe("detectDiagramKind", () => {
     expect(detectDiagramKind("stateDiagram-v2\n[*] --> A")).toBe("state");
     expect(detectDiagramKind("journey\n  title x")).toBe("journey");
     expect(detectDiagramKind("requirementDiagram\nrequirement a {\n}")).toBe("requirement");
+    expect(detectDiagramKind("timeline\n  2002 : LinkedIn")).toBe("timeline");
     expect(detectDiagramKind("pie\n")).toBeUndefined();
   });
   it("skips frontmatter, comments and init directives", () => {

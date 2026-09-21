@@ -8,6 +8,7 @@ describe("validateDiagram", () => {
     ["class", "classDiagram\n  class Animal"],
     ["state", "stateDiagram-v2\n  A --> B"],
     ["requirement", "requirementDiagram\n  requirement a {\n  }"],
+    ["timeline", "timeline\n  2002 : LinkedIn"],
   ] as const)("accepts a supported %s", (kind, code) => {
     expect(validateDiagram(code)).toEqual({ ok: true, kind });
   });

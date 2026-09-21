@@ -7,6 +7,7 @@ import { JourneyEditor } from "./JourneyEditor";
 import { RequirementEditor } from "./RequirementEditor";
 import { SequenceEditor } from "./SequenceEditor";
 import { StateEditor } from "./StateEditor";
+import { TimelineEditor } from "./TimelineEditor";
 
 export { DIAGRAM_KINDS, type DiagramKind };
 
@@ -33,6 +34,7 @@ export const DIAGRAMS: readonly DiagramDef[] = [
   { kind: "sequence", label: "Sequence", Editor: SequenceEditor },
   { kind: "class", label: "Class", Editor: ClassEditor },
   { kind: "state", label: "State", Editor: StateEditor },
+  { kind: "timeline", label: "Timeline", Editor: TimelineEditor },
   { kind: "journey", label: "Journey", Editor: JourneyEditor },
   { kind: "requirement", label: "Requirement", Editor: RequirementEditor },
 ];
