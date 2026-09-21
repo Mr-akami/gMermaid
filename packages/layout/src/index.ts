@@ -8,3 +8,4 @@ export * from "./statediagram";
 export * from "./timeline";
 export * from "./journey";
 export * from "./requirement";
+export * from "./mindmap";

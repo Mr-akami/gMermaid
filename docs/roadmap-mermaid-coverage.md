@@ -54,7 +54,7 @@ auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
 
 ## Phase 3 — new diagram kinds (parallel, one PR per kind)
 Wave 1: Gantt, Requirement, User Journey.
-Wave 2: Mindmap, Timeline, Usecase (`usecase-beta`, needs mermaid ≥ 12 for
+Wave 2: Mindmap (done), Timeline, Usecase (`usecase-beta`, needs mermaid ≥ 12 for
 validation — dev dependency bumped to 12.0.0; existing integration tests
 still pass).
 Each: IR + actions, parser, codegen, layout, renderer, editor + property

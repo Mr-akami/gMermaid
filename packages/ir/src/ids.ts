@@ -24,6 +24,7 @@ export type EventId = Id<"event">;
 export type TaskId = Id<"task">;
 export type RequirementId = Id<"requirement">;
 export type ElementId = Id<"element">;
+export type MindmapNodeId = Id<"mindmapNode">;
 
 export type AnyId =
   | NodeId
@@ -46,7 +47,8 @@ export type AnyId =
   | EventId
   | TaskId
   | RequirementId
-  | ElementId;
+  | ElementId
+  | MindmapNodeId;
 
 /**
  * Collision-proof id generation. Parser-imported diagrams carry their own
