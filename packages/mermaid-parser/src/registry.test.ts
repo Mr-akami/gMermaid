@@ -1,0 +1,16 @@
+import { describe, expect, it } from "vitest";
+import { detectDiagramKind } from "./registry";
+
+describe("detectDiagramKind", () => {
+  it("reads the header keyword", () => {
+    expect(detectDiagramKind("flowchart LR\nA-->B")).toBe("flowchart");
+    expect(detectDiagramKind("  graph TD\nA-->B")).toBe("flowchart");
+    expect(detectDiagramKind("sequenceDiagram\nA->>B: x")).toBe("sequence");
+    expect(detectDiagramKind("classDiagram\nclass A")).toBe("class");
+    expect(detectDiagramKind("stateDiagram-v2\n[*] --> A")).toBe("state");
+    expect(detectDiagramKind("pie\n")).toBeUndefined();
+  });
+  it("skips frontmatter, comments and init directives", () => {
+    expect(detectDiagramKind("---\ntitle: t\n---\n%%{init: {}}%%\n%% c\nstateDiagram-v2\n")).toBe("state");
+  });
+});

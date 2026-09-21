@@ -2,7 +2,7 @@ import { StrictMode, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App as McpApp } from "@modelcontextprotocol/ext-apps";
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
-import { ReviewApp, type DiagramKind } from "@gmermaid/app/review";
+import { DIAGRAM_KINDS, ReviewApp, type DiagramKind } from "@gmermaid/app/review";
 import "@gmermaid/app/style.css";
 
 interface Bootstrap {
@@ -36,7 +36,7 @@ function EmbeddedReview() {
       const value = result.structuredContent as Partial<Bootstrap> | undefined;
       if (
         typeof value?.sessionId === "string" &&
-        (value.kind === "flowchart" || value.kind === "sequence" || value.kind === "class" || value.kind === "state") &&
+        (DIAGRAM_KINDS as readonly string[]).includes(value.kind as string) &&
         typeof value.mermaid === "string"
       ) {
         setBootstrap(value as Bootstrap);

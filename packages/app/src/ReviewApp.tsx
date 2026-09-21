@@ -1,10 +1,7 @@
 import { useCallback, useState } from "react";
-import { ClassEditor } from "./ClassEditor";
-import { FlowchartEditor } from "./FlowchartEditor";
-import { SequenceEditor } from "./SequenceEditor";
-import { StateEditor } from "./StateEditor";
+import { DIAGRAMS, type DiagramKind } from "./diagrams";
 
-export type DiagramKind = "flowchart" | "sequence" | "class" | "state";
+export type { DiagramKind };
 
 export interface ReviewAppProps {
   readonly sessionId: string;
@@ -62,10 +59,7 @@ export function ReviewApp({ sessionId, kind, mermaid, title, onSubmit }: ReviewA
         </div>
       </header>
       <section className="review-editor">
-        {kind === "flowchart" && <FlowchartEditor {...editorProps} />}
-        {kind === "sequence" && <SequenceEditor {...editorProps} />}
-        {kind === "class" && <ClassEditor {...editorProps} />}
-        {kind === "state" && <StateEditor {...editorProps} />}
+        {DIAGRAMS.filter((d) => d.kind === kind).map((d) => <d.Editor key={d.kind} {...editorProps} />)}
       </section>
     </main>
   );

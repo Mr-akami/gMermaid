@@ -26,5 +26,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm typecheck
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
       - run: pnpm --filter @mr-akami/gmermaid build
       - run: pnpm --dir packages/mcp pack --pack-destination ../../artifacts
