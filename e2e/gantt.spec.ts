@@ -92,6 +92,41 @@ test("the toolbar adds, renames and deletes a section", async ({ page }) => {
   await expectCode(editor).not.toContain("section Rollout");
 });
 
+// The gutter holds two things on one row — the section's name and its first
+// task's name — and the axis can ask for more dates than fit beside each other.
+test("the gutter and the axis stay legible when both are crowded", async ({ page }) => {
+  const editor = await openEditor(page, "Gantt");
+  await setCode(
+    editor,
+    `gantt
+    title A schedule
+    dateFormat YYYY-MM-DD
+    axisFormat %Y-%m-%d
+    section Design
+        A very long task name here :a1, 2024-01-01, 30d
+        Second task :a2, after a1, 20d
+    section Build
+        Third task :b1, 2024-02-20, 10d
+`,
+  );
+  const sectionName = element(editor, "section-1").locator("text");
+  const taskName = element(editor, "task-1").locator("text");
+  await expect(sectionName).toBeVisible();
+  const a = (await sectionName.boundingBox())!;
+  const b = (await taskName.boundingBox())!;
+  expect(a.x + a.width).toBeLessThanOrEqual(b.x + 1);
+
+  // a crowded axis drops dates rather than stacking them on each other
+  const dates = await editor.locator("svg text").filter({ hasText: /^\d{4}-\d\d-\d\d$/ }).all();
+  const boxes = await Promise.all(dates.map(async (d) => (await d.boundingBox())!));
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const [p, q] = [boxes[i]!, boxes[j]!];
+      expect(p.x < q.x + q.width && q.x < p.x + p.width && p.y < q.y + q.height && q.y < p.y + p.height).toBe(false);
+    }
+  }
+});
+
 test("a task name mermaid would read as a statement is refused with a reason", async ({ page }) => {
   const editor = await openEditor(page, "Gantt");
   await setCode(editor, "gantt\n  section Section\n  A task :a1, 2014-01-01, 30d\n");

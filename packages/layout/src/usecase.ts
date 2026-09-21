@@ -12,6 +12,8 @@ import type {
   UsecaseNodeId,
   UsecaseRelationId,
 } from "@gmermaid/ir";
+import { collisionIndex } from "./collision";
+import { placeSelfLoopLabel } from "./compound";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
 
@@ -193,47 +195,6 @@ export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayo
     ...actors.map((a): [string, Rect] => [a.id, a.rect]),
     ...usecases.map((u): [string, Rect] => [u.id, u.rect]),
   ]);
-  const selfCount = new Map<UsecaseNodeId, number>();
-  let selfMaxRight = 0;
-
-  const edges: UsecaseEdgePath[] = ir.relations.map((r) => {
-    let points: Point[];
-    let labelPos: Point;
-    if (r.from === r.to) {
-      const rect = rectById.get(r.from)!;
-      const k = selfCount.get(r.from) ?? 0;
-      selfCount.set(r.from, k + 1);
-      const right = rect.x + rect.w;
-      const reach = right + SELF_W + k * SELF_STEP;
-      const cy = rect.y + Math.min(rect.h / 2, SELF_H * (k + 1.5));
-      points = [
-        { x: right, y: cy - SELF_H / 2 },
-        { x: reach, y: cy - SELF_H / 2 },
-        { x: reach, y: cy + SELF_H / 2 },
-        { x: right, y: cy + SELF_H / 2 },
-      ];
-      labelPos = { x: reach + 6, y: cy };
-      const labelW = r.label !== undefined ? measure.measure(r.label, SMALL_FONT).w + 12 : 0;
-      selfMaxRight = Math.max(selfMaxRight, reach + labelW);
-    } else {
-      const e = g.edge(r.from, r.to, r.id);
-      points = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
-      const mid = points[Math.floor(points.length / 2)]!;
-      labelPos = { x: mid.x, y: mid.y - 6 };
-    }
-    // include / extend name themselves on the edge, as mermaid draws them
-    const text = r.kind !== undefined ? `«${r.kind}»` : r.label;
-    return {
-      id: r.id,
-      points,
-      line: r.line,
-      headFrom: r.headFrom,
-      headTo: r.headTo,
-      ...(text !== undefined ? { label: text, labelPos } : {}),
-      ...(r.kind !== undefined ? { kind: r.kind } : {}),
-    };
-  });
-
   // notes sit beside their target, outside the dagre graph (cf. state notes)
   const noteCount = new Map<UsecaseNodeId, number>();
   const notes: UsecaseNoteBox[] = [];
@@ -254,6 +215,61 @@ export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayo
       anchor: { x1: x, y1: y + h / 2, x2: target.x + target.w, y2: target.y + target.h / 2 },
     });
   }
+
+  const selfCount = new Map<UsecaseNodeId, number>();
+  let selfMaxRight = 0;
+  // dagre reserved room for the labels on the edges it routed; a self-edge is
+  // drawn afterwards, and its right side is where the notes live too.
+  const taken = collisionIndex([
+    ...actors.map((a) => a.rect),
+    ...usecases.map((u) => u.rect),
+    ...notes.map((n) => n.rect),
+  ]);
+
+  const edges: UsecaseEdgePath[] = ir.relations.map((r) => {
+    let points: Point[];
+    let labelPos: Point;
+    if (r.from === r.to) {
+      const rect = rectById.get(r.from)!;
+      const k = selfCount.get(r.from) ?? 0;
+      selfCount.set(r.from, k + 1);
+      const right = rect.x + rect.w;
+      const reach = right + SELF_W + k * SELF_STEP;
+      const cy = rect.y + Math.min(rect.h / 2, SELF_H * (k + 1.5));
+      points = [
+        { x: right, y: cy - SELF_H / 2 },
+        { x: reach, y: cy - SELF_H / 2 },
+        { x: reach, y: cy + SELF_H / 2 },
+        { x: right, y: cy + SELF_H / 2 },
+      ];
+      // include/extend rename the edge, so measure what is actually drawn
+      const drawn = r.kind !== undefined ? `«${r.kind}»` : r.label;
+      if (drawn === undefined) {
+        labelPos = { x: reach + 6, y: cy };
+        selfMaxRight = Math.max(selfMaxRight, reach);
+      } else {
+        const spot = placeSelfLoopLabel(taken, rect, reach, cy, measure.measure(drawn, SMALL_FONT));
+        labelPos = spot.labelPos;
+        selfMaxRight = Math.max(selfMaxRight, spot.right + 6);
+      }
+    } else {
+      const e = g.edge(r.from, r.to, r.id);
+      points = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
+      const mid = points[Math.floor(points.length / 2)]!;
+      labelPos = { x: mid.x, y: mid.y - 6 };
+    }
+    // include / extend name themselves on the edge, as mermaid draws them
+    const text = r.kind !== undefined ? `«${r.kind}»` : r.label;
+    return {
+      id: r.id,
+      points,
+      line: r.line,
+      headFrom: r.headFrom,
+      headTo: r.headTo,
+      ...(text !== undefined ? { label: text, labelPos } : {}),
+      ...(r.kind !== undefined ? { kind: r.kind } : {}),
+    };
+  });
 
   const graph = g.graph();
   // dagre reports -Infinity for an empty graph — clamp to a sane empty canvas

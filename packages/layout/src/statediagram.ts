@@ -3,7 +3,8 @@ import type { NoteId, StateIR, StateId, StateRole, TransitionId } from "@gmermai
 import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
-import { clipPolylineAtRect, selfLoopPoints, SELF_LOOP_REACH } from "./compound";
+import { clipPolylineAtRect, placeSelfLoopLabel, selfLoopPoints, SELF_LOOP_REACH } from "./compound";
+import { collisionIndex } from "./collision";
 
 const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
 const NOTE_STYLE = { fontSize: 12, fontFamily: "sans-serif" } as const;
@@ -322,9 +323,40 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
     }
   }
 
+  // notes sit beside their target, outside the dagre graph
+  const notes: StateNoteBox[] = [];
+  for (const n of ir.notes) {
+    const target = rectOf.get(n.target);
+    if (!target) continue;
+    // multi-line note text: widest line decides the width, the line count
+    // the height (the renderer draws one tspan per line)
+    const textLines = n.text.split("\n");
+    const measured = textLines.map((l) => measure.measure(l, NOTE_STYLE));
+    const w = Math.max(...measured.map((m) => m.w)) + NOTE_PAD * 2;
+    const lineH = measured[0]!.h;
+    const h = Math.max(26, lineH * textLines.length + NOTE_PAD * 2);
+    const y = target.y + target.h / 2 - h / 2;
+    const x = n.position === "rightOf" ? target.x + target.w + NOTE_GAP : target.x - NOTE_GAP - w;
+    const anchorX = n.position === "rightOf" ? target.x + target.w : target.x;
+    notes.push({
+      id: n.id,
+      rect: { x, y, w, h },
+      text: n.text,
+      anchor: {
+        x1: n.position === "rightOf" ? x : x + w,
+        y1: y + h / 2,
+        x2: anchorX,
+        y2: target.y + target.h / 2,
+      },
+    });
+  }
+
   // stacked self-transitions on one state fan outward by index
   const selfCount = new Map<StateId, number>();
   let selfMaxRight = 0;
+  // dagre reserved room for the labels on the edges it routed; a self-loop is
+  // drawn afterwards, next to whatever already sits on that side of the box.
+  const taken = collisionIndex([...states.filter((s) => !s.composite).map((s) => s.rect), ...notes.map((n) => n.rect)]);
 
   const transitions: TransitionPath[] = ir.transitions.map((t) => {
     if (t.from === t.to) {
@@ -333,15 +365,14 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
       selfCount.set(t.from, k + 1);
       const points = selfLoopPoints(rect, k);
       const reach = rect.x + rect.w + SELF_LOOP_REACH(k);
-      const labelW = t.label !== undefined ? measure.measure(t.label, NOTE_STYLE).w + 12 : 0;
-      selfMaxRight = Math.max(selfMaxRight, reach + labelW);
-      return {
-        id: t.id,
-        points,
-        ...(t.label !== undefined
-          ? { label: t.label, labelPos: { x: reach + 6, y: points[1]!.y + (points[2]!.y - points[1]!.y) / 2 } }
-          : {}),
-      };
+      const cy = points[1]!.y + (points[2]!.y - points[1]!.y) / 2;
+      if (t.label === undefined) {
+        selfMaxRight = Math.max(selfMaxRight, reach);
+        return { id: t.id, points };
+      }
+      const spot = placeSelfLoopLabel(taken, rect, reach, cy, measure.measure(t.label, NOTE_STYLE));
+      selfMaxRight = Math.max(selfMaxRight, spot.right + 6);
+      return { id: t.id, points, label: t.label, labelPos: spot.labelPos };
     }
     const e = g.edge(anchor(t.from), anchor(t.to), t.id);
     let points: Point[] = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
@@ -370,34 +401,6 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
         : {}),
     };
   });
-
-  // notes sit beside their target, outside the dagre graph
-  const notes: StateNoteBox[] = [];
-  for (const n of ir.notes) {
-    const target = rectOf.get(n.target);
-    if (!target) continue;
-    // multi-line note text: widest line decides the width, the line count
-    // the height (the renderer draws one tspan per line)
-    const textLines = n.text.split("\n");
-    const measured = textLines.map((l) => measure.measure(l, NOTE_STYLE));
-    const w = Math.max(...measured.map((m) => m.w)) + NOTE_PAD * 2;
-    const lineH = measured[0]!.h;
-    const h = Math.max(26, lineH * textLines.length + NOTE_PAD * 2);
-    const y = target.y + target.h / 2 - h / 2;
-    const x = n.position === "rightOf" ? target.x + target.w + NOTE_GAP : target.x - NOTE_GAP - w;
-    const anchorX = n.position === "rightOf" ? target.x + target.w : target.x;
-    notes.push({
-      id: n.id,
-      rect: { x, y, w, h },
-      text: n.text,
-      anchor: {
-        x1: n.position === "rightOf" ? x : x + w,
-        y1: y + h / 2,
-        x2: anchorX,
-        y2: target.y + target.h / 2,
-      },
-    });
-  }
 
   const graph = g.graph();
   // dagre reports -Infinity for an empty graph — clamp to a sane empty canvas

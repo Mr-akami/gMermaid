@@ -1,5 +1,7 @@
 import type { LifelineId, SequenceEvent, SequenceIR } from "@gmermaid/ir";
+import { collisionIndex } from "./collision";
 import type { TextMeasurer } from "./measurer";
+import type { Rect } from "./result";
 import type {
   ActivationBar,
   BoxFrame,
@@ -33,6 +35,10 @@ const FRAG_DIVIDER = 38;
 const FRAG_SIDE_PAD = 20; // frame padding around its involved lifelines
 const FRAG_NEST_PAD = 12; // extra margin a parent keeps around child frames
 const SELF_MSG_EXTRA = 14;
+// How far a message label may slide along its own arrow to clear an
+// activation bar, and how close to the arrow's ends it may get.
+const LABEL_SLIDE_STEP = 12;
+const LABEL_SLIDE_MARGIN = 6;
 const MIN_GAP = 60;
 const BOTTOM_MARGIN = 24;
 const BAR_W = 10;
@@ -306,6 +312,31 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
     while (stack.length > 0) popBar(id, destroyedAt.get(id) ?? spineBottom);
   }
 
+  // An activation bar is only known once its lifeline deactivates, so a label
+  // centred on its arrow can land on a bar belonging to a lifeline the arrow
+  // merely passes over. Slide it along its own arrow to the nearest clear
+  // spot: the label stays on the message it names, which is what it means.
+  const barRoom = collisionIndex(activations.map((a) => a.rect));
+  const placedMessages: MessageRow[] = messages.map((m) => {
+    if (m.label === "" || m.fromX === m.toX) return m;
+    const size = block(m.label);
+    const lineH = size.h / size.lines;
+    const boxAt = (cx: number): Rect => ({ x: cx - size.w / 2, y: m.labelPos.y - lineH * 0.8, w: size.w, h: size.h });
+    const lo = Math.min(m.fromX, m.toX) + LABEL_SLIDE_MARGIN;
+    const hi = Math.max(m.fromX, m.toX) - LABEL_SLIDE_MARGIN;
+    // how far the centre may move and still keep the whole label on the arrow
+    const room = (hi - lo - size.w) / 2;
+    const offsets = [0];
+    for (let d = LABEL_SLIDE_STEP; d < room; d += LABEL_SLIDE_STEP) offsets.push(-d, d);
+    if (room > 0) offsets.push(-room, room);
+    const onArrow = offsets
+      .map((d) => m.labelPos.x + d)
+      .filter((cx) => cx - size.w / 2 >= lo - 0.001 && cx + size.w / 2 <= hi + 0.001);
+    // a label wider than its own arrow has nowhere to go: keep it centred
+    const spot = barRoom.place((onArrow.length > 0 ? onArrow : [m.labelPos.x]).map(boxAt));
+    return { ...m, labelPos: { x: spot.rect.x + spot.rect.w / 2, y: m.labelPos.y } };
+  });
+
   const lifelines: LifelineColumn[] = ir.lifelines.map((l) => {
     const w = headW.get(l.id)!;
     const cx = colX.get(l.id)!;
@@ -350,7 +381,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
     lifelines,
     boxes,
     activations,
-    messages,
+    messages: placedMessages,
     fragments,
     notes,
     slots,

@@ -1,20 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { parseClassDiagram, parseFlowchart, parseStateDiagram } from "@gmermaid/mermaid-parser";
+import {
+  parseClassDiagram,
+  parseFlowchart,
+  parseGantt,
+  parseJourney,
+  parseMindmap,
+  parseRequirementDiagram,
+  parseSequence,
+  parseStateDiagram,
+  parseTimeline,
+  parseUsecase,
+  type ParseResult,
+} from "@gmermaid/mermaid-parser";
 import {
   fixedWidthMeasurer,
   layoutClassDiagram,
   layoutFlowchart,
+  layoutGantt,
+  layoutJourney,
+  layoutMindmap,
+  layoutRequirementDiagram,
+  layoutSequence,
   layoutStateDiagram,
+  layoutTimeline,
+  layoutUsecase,
   type Point,
   type Rect,
 } from "@gmermaid/layout";
 
-// Labels are the one thing a graph layout does not place for you: dagre only
-// keeps a gap clear for an edge label when it is told the label's size. These
-// diagrams have labels long enough to land on their own nodes if it is not.
+// Labels are the one thing a graph layout does not place for you. dagre only
+// keeps a gap clear for an edge label when it is told the label's size, and it
+// never sees the labels a layout synthesizes afterwards at all: self-loops,
+// axis ticks, gutter titles. Each diagram below is built to crowd exactly
+// those, and the test asserts that nothing drawn shares area with anything
+// else — naming the pair when it does.
 
 const measure = fixedWidthMeasurer(8);
-const LABEL = { fontSize: 14, fontFamily: "sans-serif" } as const;
+const S = (fontSize: number) => ({ fontSize, fontFamily: "sans-serif" }) as const;
 
 interface Box extends Rect {
   readonly what: string;
@@ -24,10 +46,34 @@ function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-function labelBox(label: string, at: Point, what: string): Box {
-  const m = measure.measure(label, LABEL);
-  return { x: at.x - m.w / 2, y: at.y - m.h / 2, w: m.w, h: m.h, what };
+type Anchor = "start" | "middle" | "end";
+
+/** The box a renderer's <text> covers: x follows textAnchor, and y is a
+ * baseline unless the element sets dominantBaseline="central". */
+function textBox(
+  text: string,
+  at: Point,
+  what: string,
+  opt: { fontSize?: number; anchor?: Anchor; central?: boolean } = {},
+): Box {
+  const fontSize = opt.fontSize ?? 12;
+  const m = measure.measure(text, S(fontSize));
+  const anchor = opt.anchor ?? "middle";
+  const x = anchor === "start" ? at.x : anchor === "end" ? at.x - m.w : at.x - m.w / 2;
+  const y = opt.central ? at.y - m.h / 2 : at.y - m.h * 0.8;
+  return { x, y, w: m.w, h: m.h, what };
 }
+
+const lbl = (text: string, at: Point, what: string, fontSize = 12): Box => textBox(text, at, what, { fontSize });
+
+/** A frame's title, drawn inside its top-left corner. */
+const frameTitle = (text: string, rect: Rect, what: string, fontSize: number): Box => ({
+  x: rect.x,
+  y: rect.y,
+  w: measure.measure(text, S(fontSize)).w,
+  h: measure.measure(text, S(fontSize)).h,
+  what,
+});
 
 /** Every pair of boxes that share area, named so a failure says what hit what. */
 function collisions(boxes: readonly Box[]): string[] {
@@ -40,6 +86,11 @@ function collisions(boxes: readonly Box[]): string[] {
   return hits;
 }
 
+function parsed<T>(result: ParseResult<T>, what: string): T {
+  if (!result.ok) throw new Error(`${what} did not parse: ${JSON.stringify(result.errors)}`);
+  return result.ir;
+}
+
 describe("edge labels keep clear of the nodes they run between", () => {
   it("flowchart", () => {
     const src = `flowchart LR
@@ -49,13 +100,11 @@ describe("edge labels keep clear of the nodes they run between", () => {
   c -->|"fourth label text"| d["D"]
   a -->|"fifth"| d
 `;
-    const parsed = parseFlowchart(src);
-    if (!parsed.ok) throw new Error("sample did not parse");
-    const layout = layoutFlowchart(parsed.ir, measure);
+    const layout = layoutFlowchart(parsed(parseFlowchart(src), "flowchart"), measure);
     const boxes: Box[] = [
       ...layout.nodes.map((n) => ({ ...n.rect, what: `node ${n.label}` })),
       ...layout.edges.flatMap((e) =>
-        e.label !== undefined && e.labelPos !== undefined ? [labelBox(e.label, e.labelPos, `label "${e.label}"`)] : [],
+        e.label !== undefined && e.labelPos !== undefined ? [lbl(e.label, e.labelPos, `label "${e.label}"`, 14)] : [],
       ),
     ];
     expect(collisions(boxes)).toEqual([]);
@@ -67,13 +116,11 @@ describe("edge labels keep clear of the nodes they run between", () => {
   Running --> Paused : another long trigger
   Paused --> Idle : third long trigger
 `;
-    const parsed = parseStateDiagram(src);
-    if (!parsed.ok) throw new Error("sample did not parse");
-    const layout = layoutStateDiagram(parsed.ir, measure);
+    const layout = layoutStateDiagram(parsed(parseStateDiagram(src), "state"), measure);
     const boxes: Box[] = [
       ...layout.states.filter((s) => !s.composite).map((s) => ({ ...s.rect, what: `state ${s.id}` })),
       ...layout.transitions.flatMap((t) =>
-        t.label !== undefined && t.labelPos !== undefined ? [labelBox(t.label, t.labelPos, `label "${t.label}"`)] : [],
+        t.label !== undefined && t.labelPos !== undefined ? [lbl(t.label, t.labelPos, `label "${t.label}"`, 14)] : [],
       ),
     ];
     expect(collisions(boxes)).toEqual([]);
@@ -88,15 +135,331 @@ describe("edge labels keep clear of the nodes they run between", () => {
   Beta --> Gamma : another long one
   Alpha --> Gamma : third relation label
 `;
-    const parsed = parseClassDiagram(src);
-    if (!parsed.ok) throw new Error("sample did not parse");
-    const layout = layoutClassDiagram(parsed.ir, measure);
+    const layout = layoutClassDiagram(parsed(parseClassDiagram(src), "class"), measure);
     const boxes: Box[] = [
       ...layout.classes.map((c) => ({ ...c.rect, what: `class ${c.name}` })),
       ...layout.relations.flatMap((r) =>
-        r.label !== undefined && r.labelPos !== undefined ? [labelBox(r.label, r.labelPos, `label "${r.label}"`)] : [],
+        r.label !== undefined && r.labelPos !== undefined ? [lbl(r.label, r.labelPos, `label "${r.label}"`)] : [],
       ),
     ];
     expect(collisions(boxes)).toEqual([]);
+  });
+});
+
+describe("labels dagre never saw find a free spot", () => {
+  it("flowchart: subgraph titles, nested clusters and edges crossing a border", () => {
+    const src = `flowchart LR
+  subgraph s1["A subgraph with a long title"]
+    a["Alpha"] -->|"edge inside"| b["Beta"]
+  end
+  subgraph s2["Second group"]
+    c["Gamma"]
+  end
+  b -->|"crosses the cluster border"| c
+  b -->|"back edge with a long label"| a
+  c -->|"long label out"| d["Delta"]
+  subgraph s3["Third group with a long name"]
+    subgraph s4["Nested"]
+      e["Epsilon"] -->|"nested edge label"| f["Zeta"]
+    end
+    g["Eta"]
+  end
+  d -->|"into the nest"| e
+  f -->|"out of the nest again"| g
+`;
+    const l = layoutFlowchart(parsed(parseFlowchart(src), "flowchart"), measure);
+    expect(
+      collisions([
+        ...l.nodes.map((n) => ({ ...n.rect, what: `node ${n.label}` })),
+        ...l.subgraphs.map((s) => frameTitle(s.label, s.rect, `subgraph title ${s.label}`, 14)),
+        ...l.edges.flatMap((e) =>
+          e.label !== undefined && e.labelPos !== undefined ? [lbl(e.label, e.labelPos, `edge "${e.label}"`, 14)] : [],
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("state: self-transition labels, notes and a composite title", () => {
+    const src = `stateDiagram-v2
+  [*] --> Idle
+  Idle --> Idle : retry the whole thing
+  Idle --> Running : a fairly long trigger
+  state Composite {
+    [*] --> Inner
+    Inner --> Inner : inner self loop
+  }
+  Running --> Composite : go in
+  note right of Idle : a note about idling
+  note left of Running : another note here
+  Composite --> [*]
+`;
+    const l = layoutStateDiagram(parsed(parseStateDiagram(src), "state"), measure);
+    expect(
+      collisions([
+        ...l.states.filter((s) => !s.composite).map((s) => ({ ...s.rect, what: `state ${s.label || s.id}` })),
+        ...l.states
+          .filter((s) => s.composite)
+          .map((s) => frameTitle(s.label, s.rect, `composite title ${s.label}`, 14)),
+        ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+        ...l.transitions.flatMap((t) =>
+          t.label !== undefined && t.labelPos !== undefined ? [lbl(t.label, t.labelPos, `trans "${t.label}"`, 14)] : [],
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("class: cardinalities, a note, a namespace frame and a self-relation", () => {
+    const src = `classDiagram
+  class Alpha {
+    +int id
+    +run() void
+  }
+  class Beta
+  class Gamma
+  Alpha "1" --> "0..*" Beta : a long relation label
+  Beta "1..*" --> "1" Gamma : another long one
+  Alpha --> Alpha : recurses
+  note for Beta "a note about Beta"
+  namespace Pack {
+    class Delta
+    class Epsilon
+  }
+  Gamma --> Delta : crosses into the namespace
+`;
+    const l = layoutClassDiagram(parsed(parseClassDiagram(src), "class"), measure);
+    expect(
+      collisions([
+        ...l.classes.map((c) => ({ ...c.rect, what: `class ${c.name}` })),
+        ...l.namespaces.map((n) => frameTitle(n.name, n.rect, `namespace title ${n.name}`, 14)),
+        ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+        ...l.relations.flatMap((r) => [
+          ...(r.label !== undefined && r.labelPos !== undefined ? [lbl(r.label, r.labelPos, `rel "${r.label}"`)] : []),
+          // cardinalities are drawn left-anchored from their end of the line
+          ...(r.fromCardinality !== undefined && r.fromCardinalityPos !== undefined
+            ? [textBox(r.fromCardinality, r.fromCardinalityPos, `card-from "${r.fromCardinality}" (${r.id})`, { fontSize: 11, anchor: "start" })]
+            : []),
+          ...(r.toCardinality !== undefined && r.toCardinalityPos !== undefined
+            ? [textBox(r.toCardinality, r.toCardinalityPos, `card-to "${r.toCardinality}" (${r.id})`, { fontSize: 11, anchor: "start" })]
+            : []),
+        ]),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("sequence: notes, activation bars, fragment tabs and a self-message", () => {
+    const src = `sequenceDiagram
+  participant A as Alice
+  participant B as Bob
+  participant C as Carol
+  A->>B: a reasonably long message
+  activate B
+  Note right of A: a note beside Alice
+  B->>B: talks to itself at length
+  alt is it sunny?
+    B->>C: forward the request onwards
+    Note over C: note inside the fragment
+  else it is raining
+    C->>A: reply back the long way
+  end
+  deactivate B
+  Note over A,C: a spanning note
+  Note left of B: a note left of Bob
+  loop every day
+    A->>C: a long looping message here
+    Note right of C: note right at the border
+  end
+`;
+    const l = layoutSequence(parsed(parseSequence(src), "sequence"), measure);
+    expect(
+      collisions([
+        ...l.lifelines.map((x) => ({ ...x.headRect, what: `head ${x.name}` })),
+        ...l.activations.map((a, i) => ({ ...a.rect, what: `activation ${a.lifeline}#${i}` })),
+        ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+        ...l.fragments.map((f) => ({ ...f.labelTab, what: `tab ${f.fragmentKind}` })),
+        ...l.fragments.flatMap((f) =>
+          f.branches.map((b) => textBox(b.condition, b.conditionPos, `cond "${b.condition}"`, { fontSize: 11, anchor: "start" })),
+        ),
+        // a self-message's label hangs off the right of its own detour
+        ...l.messages.map((m) =>
+          m.fromX === m.toX
+            ? textBox(m.label, { x: m.fromX + 44, y: m.y + 9 }, `msg "${m.label}"`, { anchor: "start" })
+            : lbl(m.label, m.labelPos, `msg "${m.label}"`),
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("requirement: relation labels and a self-relation", () => {
+    const src = `requirementDiagram
+  requirement first_req {
+    id: 1
+    text: the first requirement
+    risk: high
+    verifymethod: test
+  }
+  requirement second_req {
+    id: 2
+    text: the second requirement
+    risk: low
+    verifymethod: analysis
+  }
+  element some_element {
+    type: simulation
+  }
+  first_req - satisfies -> second_req
+  second_req - traces -> some_element
+  some_element - derives -> first_req
+  first_req - contains -> first_req
+  first_req - refines -> some_element
+`;
+    const l = layoutRequirementDiagram(parsed(parseRequirementDiagram(src), "requirement"), measure);
+    expect(
+      collisions([
+        ...l.boxes.map((b) => ({ ...b.rect, what: `box ${b.name}` })),
+        ...l.edges.map((e) => lbl(e.label, e.labelPos, `edge "${e.label}"`)),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("usecase: a boundary title, a note and a self-relation", () => {
+    const src = `usecase-beta
+direction LR
+actor Customer("Customer")
+actor Admin("Administrator")
+systemBoundary "Order system"
+  Checkout("Place an order")
+  Track("Track the order")
+  Refund("Refund an order")
+end
+Customer -- "initiates" --> Checkout
+Customer -- "follows up on" --> Track
+Admin -- "handles the case" --> Refund
+Checkout -- "retries itself" --> Checkout
+note for Checkout "validates the cart"
+`;
+    const l = layoutUsecase(parsed(parseUsecase(src), "usecase"), measure);
+    expect(
+      collisions([
+        ...l.actors.map((a) => ({ ...a.rect, what: `actor ${a.label}` })),
+        ...l.usecases.map((u) => ({ ...u.rect, what: `usecase ${u.label}` })),
+        ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+        ...l.boundaries.map((b) => frameTitle(b.label, b.rect, `boundary title ${b.label}`, 13)),
+        ...l.edges.flatMap((e) =>
+          e.label !== undefined && e.labelPos !== undefined ? [lbl(e.label, e.labelPos, `edge "${e.label}"`, 11)] : [],
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("gantt: gutter names against section titles, and a crowded axis", () => {
+    const src = `gantt
+  title A schedule
+  dateFormat YYYY-MM-DD
+  axisFormat %Y-%m-%d
+  section Design
+    A very long task name here :a1, 2024-01-01, 30d
+    Second task :a2, after a1, 20d
+  section Build
+    Third task :b1, 2024-02-20, 10d
+    A milestone :milestone, m1, 2024-03-01, 0d
+`;
+    const l = layoutGantt(parsed(parseGantt(src), "gantt"), measure, Date.parse("2024-02-01"));
+    expect(
+      collisions([
+        ...l.bars.map((b) => ({ ...b.rect, what: `bar ${b.label}` })),
+        // the gutter name is right-aligned in its own column
+        ...l.bars.map((b) =>
+          textBox(b.label, { x: b.labelRect.x + b.labelRect.w - 10, y: b.labelRect.y + b.labelRect.h / 2 }, `task label ${b.label}`, {
+            anchor: "end",
+            central: true,
+          }),
+        ),
+        ...l.sections.map((s) => textBox(s.name, { x: s.rect.x + 8, y: s.rect.y + 14 }, `section title ${s.name}`, { anchor: "start" })),
+        ...l.ticks.flatMap((t) =>
+          t.label === undefined ? [] : [textBox(t.label, { x: t.x, y: l.axisY - 8 }, `tick "${t.label}"`, { fontSize: 11 })],
+        ),
+      ]),
+    ).toEqual([]);
+    // thinning drops labels, never the gridlines they belong to
+    expect(l.ticks.some((t) => t.label === undefined)).toBe(true);
+  });
+
+  it("journey: task titles, actor circles, section titles and the legend", () => {
+    const src = `journey
+  title My working day
+  section Go to work
+    Make tea: 5: Me
+    Go upstairs and sit down: 3: Me, Cat
+    Do work in the morning: 1: Me, Cat, Dog
+  section Go home
+    Go downstairs: 5: Me
+    Sit down for dinner: 5: Me, Cat, Dog, Bird, Fish
+  section A section with a rather long name
+    A task with a very long name indeed: 2: Me, Cat, Dog, Bird, Fish, Hamster
+`;
+    const l = layoutJourney(parsed(parseJourney(src), "journey"), measure);
+    expect(
+      collisions([
+        ...l.tasks.map((t) => ({ ...t.rect, what: `task ${t.name}` })),
+        ...l.tasks.flatMap((t) =>
+          t.actors.map((a) => ({ x: a.center.x - a.r, y: a.center.y - a.r, w: a.r * 2, h: a.r * 2, what: `actor ${a.name}@${t.name}` })),
+        ),
+        ...l.sections.map((s) => frameTitle(s.name, s.rect, `section title ${s.name}`, 13)),
+        ...l.legend.map((g) => ({ ...g.swatch, what: `legend swatch ${g.name}` })),
+        ...l.legend.map((g) => textBox(g.name, g.textPos, `legend text ${g.name}`, { anchor: "start", central: true })),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("timeline: period boxes, event boxes and section bands", () => {
+    const src = `timeline
+  title History of Social Media
+  section Ancient
+    2002 : LinkedIn launches
+    2004 : Facebook : Google
+  section Modern
+    2005 : YouTube
+    2006 : Twitter and a much longer event text : A second event : A third event here
+    2008 : Short
+  section A section with a very long name indeed
+    2010 : Instagram
+`;
+    const l = layoutTimeline(parsed(parseTimeline(src), "timeline"), measure);
+    expect(
+      collisions([
+        ...l.periods.map((p) => ({ ...p.rect, what: `period ${p.label}` })),
+        ...l.events.map((e) => ({ ...e.rect, what: `event ${e.text}` })),
+        ...l.sections.map((s) => frameTitle(s.name, s.rect, `section title ${s.name}`, 14)),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("mindmap: both sides of the root, and a deep subtree", () => {
+    const src = `mindmap
+  root((Root idea))
+    Origins
+      Long history of the thing
+      Popularisation efforts
+    Research
+      On effectiveness
+      On features
+    Tools
+      Pen and paper
+      Mermaid
+    Uses
+      Creative techniques
+      Strategic planning
+      Argument mapping
+    Extras
+      A rather long leaf label here
+      Another rather long leaf label
+      Short
+    More
+      Deep
+        Deeper
+          Deepest leaf with a long name
+`;
+    const l = layoutMindmap(parsed(parseMindmap(src), "mindmap"), measure);
+    expect(collisions(l.nodes.map((n) => ({ ...n.rect, what: `node ${n.label}` })))).toEqual([]);
   });
 });

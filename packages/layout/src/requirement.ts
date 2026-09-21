@@ -1,5 +1,7 @@
 import dagre from "@dagrejs/dagre";
 import type { ElementId, RelationId, RequirementIR, RequirementRelationType, RequirementId } from "@gmermaid/ir";
+import { collisionIndex } from "./collision";
+import { placeSelfLoopLabel } from "./compound";
 import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
@@ -131,6 +133,9 @@ export function layoutRequirementDiagram(ir: RequirementIR, measure: TextMeasure
   const rectById = new Map<string, Rect>(boxes.map((b) => [b.id, b.rect]));
   const selfCount = new Map<string, number>();
   let selfMaxRight = 0;
+  // dagre reserved room for the labels on the edges it routed; a self-edge is
+  // drawn afterwards, next to whatever already sits on that side of the box.
+  const taken = collisionIndex(boxes.map((b) => b.rect));
 
   const edges: RequirementEdge[] = ir.relations.map((r) => {
     const label = `«${r.type}»`;
@@ -149,8 +154,9 @@ export function layoutRequirementDiagram(ir: RequirementIR, measure: TextMeasure
         { x: reach, y: cy + SELF_REL_H / 2 },
         { x: right, y: cy + SELF_REL_H / 2 },
       ];
-      labelPos = { x: reach + 6, y: cy };
-      selfMaxRight = Math.max(selfMaxRight, reach + measure.measure(label, BODY_FONT).w + 12);
+      const spot = placeSelfLoopLabel(taken, rect, reach, cy, measure.measure(label, BODY_FONT));
+      labelPos = spot.labelPos;
+      selfMaxRight = Math.max(selfMaxRight, spot.right + 6);
     } else {
       const e = g.edge(r.from, r.to, r.id);
       points = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));

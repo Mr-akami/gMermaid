@@ -7,6 +7,7 @@ import {
   type SectionId,
   type TaskId,
 } from "@gmermaid/ir";
+import { collisionIndex, inflate, labelRect } from "./collision";
 import type { TextMeasurer } from "./measurer";
 import type { Rect } from "./result";
 import { chooseTickStep, DAY_MS, formatGanttDate, parseGanttDate, parseGanttDuration, parseTickInterval } from "./ganttTime";
@@ -25,6 +26,13 @@ const ROW_H = 22;
 const ROW_GAP = 6;
 const SECTION_GAP = 8;
 const SECTION_LABEL_PAD = 6;
+/** Where the renderer starts a section's name inside its band. */
+const SECTION_TEXT_X = 8;
+/** Baseline of an axis tick label, above the axis line. */
+const TICK_TEXT_DY = 8;
+const TICK_STYLE = { fontSize: 11, fontFamily: "sans-serif" } as const;
+/** Clear space either side of a tick label before it counts as crowded. */
+const TICK_GAP = 6;
 const CHART_W = 680;
 const MIN_LABEL_W = 110;
 const MAX_LABEL_W = 260;
@@ -66,7 +74,8 @@ export interface GanttSectionBand {
 
 export interface GanttTick {
   readonly x: number;
-  readonly label: string;
+  /** Absent when the axis is too dense for this one — the gridline stays. */
+  readonly label?: string;
 }
 
 export interface GanttLayout {
@@ -106,14 +115,18 @@ export function layoutGantt(ir: GanttIR, measure: TextMeasurer, now: number = Da
   const [domainStart, domainEnd] = domainOf(times);
   const scale = (ms: number): number => chartX + ((ms - domainStart) / (domainEnd - domainStart)) * CHART_W;
 
-  const labelW = Math.min(
-    MAX_LABEL_W,
-    Math.max(
-      MIN_LABEL_W,
-      ...ir.sections.map((s) => measure.measure(s.name, LABEL_STYLE).w + LABEL_PAD * 2),
-      ...tasks.map((t) => measure.measure(t.name, LABEL_STYLE).w + LABEL_PAD * 2),
-    ),
+  // The gutter is two columns, not one: a section's name is drawn at the top
+  // left of its band, on the same row as its first task's right-aligned name.
+  // One shared column puts them on top of each other, so each gets its own.
+  const sectionW = Math.max(
+    0,
+    ...ir.sections.map((s) => (s.name === "" ? 0 : measure.measure(s.name, LABEL_STYLE).w + SECTION_TEXT_X + SECTION_LABEL_PAD)),
   );
+  const taskW = Math.min(
+    MAX_LABEL_W,
+    Math.max(MIN_LABEL_W, ...tasks.map((t) => measure.measure(t.name, LABEL_STYLE).w + LABEL_PAD * 2)),
+  );
+  const labelW = sectionW + taskW;
   const chartX = labelW;
   const titleH = ir.title !== undefined ? TITLE_H : 0;
   const axisY = titleH + AXIS_H;
@@ -131,7 +144,7 @@ export function layoutGantt(ir: GanttIR, measure: TextMeasurer, now: number = Da
         verts.push({ id: task.id, label: task.name, x: scale(t.start!), unresolved: t.unresolved });
         continue;
       }
-      bars.push(bar(task, t, y, scale, labelW));
+      bars.push(bar(task, t, y, scale, sectionW, taskW));
       y += ROW_H + ROW_GAP;
     }
     // an empty section still needs a visible, clickable band
@@ -151,8 +164,21 @@ export function layoutGantt(ir: GanttIR, measure: TextMeasurer, now: number = Da
   const ticks: GanttTick[] = [];
   const step = (ir.tickInterval !== undefined ? parseTickInterval(ir.tickInterval) : undefined)
     ?? chooseTickStep(domainEnd - domainStart, MAX_TICKS);
+  // A tick step chosen from the time domain says nothing about how wide the
+  // formatted dates are, so the labels can still crowd. Keep the gridlines and
+  // thin the labels out left to right: the first one always wins, and a later
+  // one is dropped only when it would land on a label already kept.
+  const axisRoom = collisionIndex();
   for (let t = Math.ceil(domainStart / step) * step; t <= domainEnd; t += step) {
-    ticks.push({ x: scale(t), label: formatGanttDate(t, axisFormat) });
+    const x = scale(t);
+    const label = formatGanttDate(t, axisFormat);
+    const box = inflate(labelRect({ x, y: axisY - TICK_TEXT_DY }, measure.measure(label, TICK_STYLE)), TICK_GAP);
+    // a dropped label is not drawn, so it must not block the next one either
+    if (axisRoom.hits(box)) ticks.push({ x });
+    else {
+      axisRoom.add(box);
+      ticks.push({ x, label });
+    }
   }
 
   const showToday = ir.todayMarker !== "off" && now >= domainStart && now <= domainEnd;
@@ -179,7 +205,8 @@ function bar(
   t: ResolvedTime,
   y: number,
   scale: (ms: number) => number,
-  labelW: number,
+  sectionW: number,
+  taskW: number,
 ): GanttBar {
   const milestone = task.tags.includes("milestone");
   // mermaid puts a milestone at start + duration / 2, as a point
@@ -192,7 +219,7 @@ function bar(
     tags: task.tags,
     milestone,
     unresolved: t.unresolved,
-    labelRect: { x: 0, y, w: labelW, h: ROW_H },
+    labelRect: { x: sectionW, y, w: taskW, h: ROW_H },
   };
 }
 

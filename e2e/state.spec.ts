@@ -159,3 +159,24 @@ test("+ Child state is refused for a pseudo-state", async ({ page }) => {
   await element(editor, "state_start").click();
   await expect(editor.getByRole("button", { name: "+ Child state" })).toBeDisabled();
 });
+
+// dagre never sees a self-transition, so its label used to be dropped at a
+// fixed offset — straight onto the note that sits on that same side.
+test("a self-transition label keeps clear of the note beside its state", async ({ page }) => {
+  const editor = await openEditor(page, "State");
+  await setCode(
+    editor,
+    `stateDiagram-v2
+  [*] --> Idle
+  Idle --> Idle : retry the whole thing
+  Idle --> Running : a fairly long trigger
+  note right of Idle : a note about idling
+`,
+  );
+  const label = editor.locator("svg text", { hasText: "retry the whole thing" }).first();
+  await expect(label).toBeVisible();
+  const note = element(editor, "note-1").locator("rect");
+  const a = (await label.boundingBox())!;
+  const b = (await note.boundingBox())!;
+  expect(a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height).toBe(false);
+});
