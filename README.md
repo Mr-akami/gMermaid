@@ -16,12 +16,28 @@ mermaid.js itself in the test suite.
 | Flowchart | `flowchart` / `graph` | 37 node shapes incl. `@{ shape: … }`, line style and both arrow heads, edge length, subgraphs with direction |
 | Sequence | `sequenceDiagram` | activations, `box`, `rect`, `create`/`destroy`, 8 participant types, autonumber, notes |
 | Class | `classDiagram` | reversed, two-way and lollipop relations, generics, `*`/`$` classifiers, annotations, notes, namespaces |
-| State | `stateDiagram-v2` | composites, concurrency regions, choice/fork/join, self-transitions, block notes |
+| State | `stateDiagram-v2` | composites, concurrency regions, choice/fork/join, self-transitions, block notes, **editable as an XState v5 machine** |
 | Requirement | `requirementDiagram` | 6 requirement types, elements, 7 relation types, risk and verify method |
 | User journey | `journey` | sections, tasks, scores, actors |
 | Timeline | `timeline` | sections, periods, multiple events per period |
 | Gantt | `gantt` | date formats, durations, `after`/`until` dependencies, milestones, excludes |
 | Mindmap | `mindmap` | indentation hierarchy, 7 node shapes, icons, drag to re-parent |
+
+### State diagrams are also XState machines
+
+The State tab's code pane has two tabs, Mermaid and XState. Both are
+projections of the same model (see `docs/adr/0002-*.md`): type an XState v5
+machine and the canvas and the Mermaid text follow; edit the Mermaid text and
+the machine follows. Detail mermaid has no syntax for — `entry`/`exit`
+actions, `invoke`, guards, delays, `context`, the `setup({ … })` block — is
+kept in the model, so a GUI or Mermaid edit does not quietly delete it.
+
+The XState text is read as data, never executed: the config must be plain
+literals, with actions, guards, actors and delays named in `setup({ … })` and
+referenced as strings. Anything outside that subset is refused by name rather
+than dropped, and what the XState projection itself cannot say (notes, layout
+direction, a concurrency region holding several states) is reported under the
+pane.
 
 Styling and interaction syntax (`classDef`, `style`, `:::`, `click`, `%%`
 comments) is accepted on import and dropped: it carries no meaning in the

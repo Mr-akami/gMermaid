@@ -6,6 +6,7 @@
     { "path": "packages/mermaid-codegen" },
     { "path": "packages/renderer" },
     { "path": "packages/mermaid-parser" },
+    { "path": "packages/xstate" },
     { "path": "packages/app" }
   ]
 }

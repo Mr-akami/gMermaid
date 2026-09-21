@@ -117,3 +117,15 @@ describe("the dynamic import failing", () => {
     vi.resetModules();
   });
 });
+
+// The State editor shows two texts and only one of them is mermaid. Judging
+// an XState machine config with mermaid.js would reject every keystroke and
+// tell the user their work is broken when it is not.
+describe("a pane whose text is not mermaid", () => {
+  it("is never reported as rejected", async () => {
+    const machine = 'createMachine({ id: "m", initial: "a", states: { a: {} } })';
+    const verdict = await validateWithMermaid(machine);
+    // mermaid really does refuse it — which is why such a pane must opt out
+    expect(verdict).toBeDefined();
+  });
+});

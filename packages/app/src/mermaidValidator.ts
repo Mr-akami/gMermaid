@@ -129,7 +129,9 @@ export function createMermaidValidator(
 }
 
 /** Mermaid's verdict on `text`, kept up to date as `text` changes. */
-export function useMermaidVerdict(text: string, options?: MermaidValidatorOptions): MermaidVerdict {
+/** `text` is undefined for a pane whose contents are not mermaid at all; it
+ * then reports `unavailable`, which counts as valid and displays nothing. */
+export function useMermaidVerdict(text: string | undefined, options?: MermaidValidatorOptions): MermaidVerdict {
   const [verdict, setVerdict] = useState<MermaidVerdict>({ status: "pending" });
   const validator = useRef<MermaidValidator | undefined>(undefined);
   const latestOptions = useRef(options);
@@ -145,6 +147,10 @@ export function useMermaidVerdict(text: string, options?: MermaidValidatorOption
   }, []);
 
   useEffect(() => {
+    if (text === undefined) {
+      setVerdict({ status: "unavailable" });
+      return;
+    }
     validator.current?.check(text);
   }, [text]);
 

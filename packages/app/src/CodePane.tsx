@@ -25,9 +25,18 @@ export interface CodePaneProps<T> {
    * diagram families have had such codegen bugs). So autosave follows
    * `onValidityChange`, and only the MCP review submit follows this one. */
   readonly onMermaidValidityChange?: ((valid: boolean) => void) | undefined;
+  /** False for a pane whose text is not mermaid at all (the XState tab):
+   * mermaid.js would reject it every keystroke and the message would be a
+   * lie. Such a pane reports itself mermaid-valid and shows nothing. */
+  readonly mermaidText?: boolean | undefined;
   /** What the LAST load (file, Files panel, autosave) threw away. Shown until
    * the user starts editing, at which point their own draft speaks instead. */
   readonly loadWarnings?: readonly ParseWarning[] | undefined;
+  /** What THIS projection cannot say about the current IR — produced by
+   * codegen, not by a parse, so it has no line to point at. Only shown while
+   * the pane mirrors the canonical code: once the user has a draft, the text
+   * on screen is theirs and the canonical losses are not about it. */
+  readonly codeWarnings?: readonly string[] | undefined;
 }
 
 // While focused the pane always shows its own draft (never reformatted
@@ -50,7 +59,9 @@ export function CodePane<T>({
   initialDraft,
   onValidityChange,
   onMermaidValidityChange,
+  mermaidText = true,
   loadWarnings,
+  codeWarnings,
 }: CodePaneProps<T>) {
   const [draft, setDraft] = useState<Draft | null>(() =>
     initialDraft !== undefined ? { text: initialDraft, base: code } : null,
@@ -78,7 +89,7 @@ export function CodePane<T>({
   // mechanism — a hand-typed diagram we accept but mermaid does not, and code
   // our codegen produced that mermaid cannot read.
   const shownCode = active?.text ?? code;
-  const mermaidVerdict = useMermaidVerdict(shownCode);
+  const mermaidVerdict = useMermaidVerdict(mermaidText ? shownCode : undefined);
 
   const valid = errors.length === 0 && !staleWhileFocused;
   // "pending"/"unavailable" deliberately count as valid: validation is async
@@ -184,13 +195,14 @@ export function CodePane<T>({
           <strong>Mermaid.js が解釈できません:</strong> {mermaidVerdict.message}
         </div>
       )}
-      {shownWarnings.length > 0 && (
+      {(shownWarnings.length > 0 || (active === null && (codeWarnings?.length ?? 0) > 0)) && (
         <div className="code-warnings">
           {shownWarnings.map((w, i) => (
             <div key={i}>
               line {w.line}: {w.message}
             </div>
           ))}
+          {active === null && codeWarnings?.map((w, i) => <div key={`c${i}`}>{w}</div>)}
         </div>
       )}
     </div>

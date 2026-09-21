@@ -1,4 +1,5 @@
 import type { NoteId, StateId, TransitionId } from "./ids";
+import type { StateMachineXState, StateNodeXState, StateTransitionXState } from "./xstateMeta";
 
 // State diagrams (stateDiagram-v2): simple states, [*] start/end
 // pseudo-states, <<choice>>/<<fork>>/<<join>>, composite states (a state is
@@ -32,6 +33,9 @@ export interface StateNode {
   /** `direction X` inside this state's block. Only emitted while the state
    * is composite. */
   readonly direction?: StateDirection;
+  /** XState-only detail (entry/exit actions, invoke, final/history/parallel
+   * types …). Mermaid cannot spell any of it; see ADR 0002. */
+  readonly xstate?: StateNodeXState;
 }
 
 export interface StateTransition {
@@ -39,6 +43,9 @@ export interface StateTransition {
   readonly from: StateId;
   readonly to: StateId;
   readonly label?: string;
+  /** XState-only detail of this transition (internal / reenter). The event,
+   * guard and actions live in `label` as `EVENT [guard] / actions`. */
+  readonly xstate?: StateTransitionXState;
 }
 
 export type StateNotePosition = "leftOf" | "rightOf";
@@ -60,6 +67,9 @@ export interface StateIR {
   readonly states: readonly StateNode[];
   readonly transitions: readonly StateTransition[];
   readonly notes: readonly StateNote[];
+  /** Machine-level XState detail: the machine id, `context`, the verbatim
+   * `setup({ … })` argument, and the root node's own actions. */
+  readonly xstate?: StateMachineXState;
 }
 
 export function emptyStateDiagram(): StateIR {

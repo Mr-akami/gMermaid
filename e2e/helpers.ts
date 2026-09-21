@@ -20,15 +20,27 @@ export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
  * typing (a 200ms latch), so the pane trails the IR for a moment. Assert
  * with `expectCode` instead of comparing a single read. */
 export async function codeText(editor: Locator): Promise<string> {
-  const cm = editor.locator(".cm-content");
+  const cm = visibleCode(editor);
   await expect(cm).toBeVisible();
   // CodeMirror renders one .cm-line per line; innerText keeps the breaks
   return (await cm.innerText()).replace(/ /g, " ").trimEnd();
 }
 
+/** The code editor currently on screen. The State editor keeps a second,
+ * hidden pane mounted (Mermaid / XState tabs), so a bare `.cm-content` would
+ * match two elements there. */
+export function visibleCode(editor: Locator): Locator {
+  return editor.locator(".cm-content:visible");
+}
+
+/** Switch the code pane to one of its projections (State editor only). */
+export async function codeTab(editor: Locator, name: "Mermaid" | "XState"): Promise<void> {
+  await editor.getByRole("tab", { name, exact: true }).click();
+}
+
 /** Replace the code pane text and blur so the draft is applied to the IR. */
 export async function setCode(editor: Locator, text: string): Promise<void> {
-  const cm = editor.locator(".cm-content");
+  const cm = visibleCode(editor);
   await cm.click();
   await cm.press("ControlOrMeta+a");
   await cm.press("Delete");
