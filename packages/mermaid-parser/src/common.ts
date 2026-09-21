@@ -149,10 +149,13 @@ function splitStatements(text: string): string[] {
   return parts;
 }
 
-/** Remove every `:::name` outside quotes. */
-function stripClassSuffix(text: string): string {
+/** Remove every `:::name` outside quotes, reporting each one: a class
+ * suffix is styling, so it is dropped like a `classDef` statement and the
+ * user has to be told, not left to discover it after saving. */
+function stripClassSuffix(text: string): { text: string; stripped: boolean } {
   let out = "";
   let inQuote = false;
+  let stripped = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i]!;
     if (c === '"') inQuote = !inQuote;
@@ -160,11 +163,12 @@ function stripClassSuffix(text: string): string {
       let j = i + 3;
       while (j < text.length && /[\p{L}\p{N}_-]/u.test(text[j]!)) j += 1;
       i = j - 1;
+      stripped = true;
       continue;
     }
     out += c;
   }
-  return out;
+  return { text: out, stripped };
 }
 
 /** The keyword this statement is dropped for, or undefined to keep it. */
@@ -217,7 +221,11 @@ export function prepareLines(code: string, opts: PrepareOptions = {}): PreparedL
     if (line.startsWith("%%")) continue;
     const cut = commentStart(line);
     if (cut >= 0) line = line.slice(0, cut).trimEnd();
-    if (opts.stripClassSuffix) line = stripClassSuffix(line);
+    if (opts.stripClassSuffix) {
+      const s = stripClassSuffix(line);
+      if (s.stripped) opts.warnings?.push(droppedWarning(":::", i + 1));
+      line = s.text;
+    }
 
     const statements = opts.splitSemicolons
       ? splitStatements(line)

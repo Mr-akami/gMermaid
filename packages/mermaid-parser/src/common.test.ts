@@ -96,3 +96,20 @@ describe("firstStatement", () => {
     expect(firstStatement("%% only a comment\n")).toBeUndefined();
   });
 });
+
+describe("class suffixes are reported, not silently stripped", () => {
+  it("warns once per `:::` it removes and keeps the statement", () => {
+    const warnings: ParseWarning[] = [];
+    const lines = prepareLines("flowchart LR\n  A:::hot --> B:::cold\n", { stripClassSuffix: true, warnings });
+    expect(lines.map((l) => l.text)).toEqual(["flowchart LR", "A --> B"]);
+    expect(warnings.map((w) => w.line)).toEqual([2]);
+    expect(warnings[0]?.message).toContain(":::");
+  });
+
+  it("leaves a quoted `:::` alone and stays silent", () => {
+    const warnings: ParseWarning[] = [];
+    const lines = prepareLines('flowchart LR\n  A["a:::b"] --> B\n', { stripClassSuffix: true, warnings });
+    expect(lines[1]?.text).toBe('A["a:::b"] --> B');
+    expect(warnings).toEqual([]);
+  });
+});
