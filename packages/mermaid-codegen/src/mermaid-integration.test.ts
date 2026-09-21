@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it } from "vitest";
 import type {
+  ActivationId,
+  BoxId,
   BranchId,
   ClassIR,
   ClassId,
   EdgeId,
   FlowchartIR,
   FragmentId,
+  LifecycleId,
   LifelineId,
   MessageId,
   NodeId,
@@ -164,9 +167,10 @@ describe("mermaid.js accepts generated sequence diagrams", () => {
   it("parses lifelines, arrows, notes and nested fragments with loop bounds", async () => {
     const ir: SequenceIR = {
       kind: "sequence",
+      boxes: [],
       lifelines: [
-        { id: L("a"), name: "Alice & <co> #1", isActor: true },
-        { id: L("b"), name: "Bob", isActor: false },
+        { id: L("a"), name: "Alice & <co> #1", kind: "actor" },
+        { id: L("b"), name: "Bob", kind: "participant" },
       ],
       events: [
         { kind: "message", id: "m1" as MessageId, from: L("a"), to: L("b"), label: "hi > there", arrow: "solid" },
@@ -193,10 +197,11 @@ describe("mermaid.js accepts generated sequence diagrams", () => {
     const arrows = ["cross", "dottedCross", "dottedAsync", "bidirectional", "dottedBidirectional"] as const;
     const ir: SequenceIR = {
       kind: "sequence",
+      boxes: [],
       autonumber: { start: 10, step: 2 },
       lifelines: [
-        { id: L("a"), name: "a", isActor: false },
-        { id: L("b"), name: "b", isActor: false },
+        { id: L("a"), name: "a", kind: "participant" },
+        { id: L("b"), name: "b", kind: "participant" },
       ],
       events: [
         ...arrows.map((arrow, i) => ({ kind: "message", id: `m${i}` as MessageId, from: L("a"), to: L("b"), label: arrow, arrow }) as const),
@@ -220,6 +225,53 @@ describe("mermaid.js accepts generated sequence diagrams", () => {
       ],
     };
     await expectMermaidAccepts(sequenceToMermaid(ir));
+  });
+
+  it("parses activation, boxes, rect, create/destroy, participant types and multi-line text", async () => {
+    const ir: SequenceIR = {
+      kind: "sequence",
+      lifelines: [
+        { id: L("user"), name: "User", kind: "actor" },
+        { id: L("api"), name: "API", kind: "control" },
+        { id: L("db"), name: "Store", kind: "database" },
+        { id: L("q"), name: "q", kind: "queue" },
+        { id: L("w"), name: "Worker", kind: "participant" },
+      ],
+      boxes: [{ id: "box-1" as BoxId, name: "Back end", color: "rgb(200,220,255)", lifelines: [L("api"), L("db")] }],
+      events: [
+        { kind: "message", id: "m1" as MessageId, from: L("user"), to: L("api"), label: "login\nwith SSO", arrow: "solid", activate: "start" },
+        {
+          kind: "fragment",
+          id: "r1" as FragmentId,
+          fragmentKind: "rect",
+          branches: [
+            {
+              id: "rb" as BranchId,
+              condition: "rgba(0, 0, 255, .1)",
+              events: [
+                { kind: "message", id: "m2" as MessageId, from: L("api"), to: L("db"), label: "read", arrow: "solid" },
+                { kind: "activation", id: "act-1" as ActivationId, lifeline: L("q"), on: true },
+                { kind: "message", id: "m3" as MessageId, from: L("api"), to: L("q"), label: "enqueue", arrow: "async" },
+                { kind: "activation", id: "act-2" as ActivationId, lifeline: L("q"), on: false },
+              ],
+            },
+          ],
+        },
+        { kind: "create", id: "lc-1" as LifecycleId, lifeline: L("w") },
+        { kind: "message", id: "m4" as MessageId, from: L("q"), to: L("w"), label: "work", arrow: "solid" },
+        { kind: "destroy", id: "lc-2" as LifecycleId, lifeline: L("w") },
+        { kind: "message", id: "m5" as MessageId, from: L("w"), to: L("api"), label: "done", arrow: "dotted" },
+        { kind: "note", id: "n1" as NoteId, position: "over", lifelines: [L("user"), L("api")], text: "two\nlines" },
+        { kind: "message", id: "m6" as MessageId, from: L("api"), to: L("user"), label: "token", arrow: "dotted", activate: "end" },
+      ],
+    };
+    const code = sequenceToMermaid(ir);
+    expect(code).toContain("user->>+api: login<br/>with SSO");
+    expect(code).toContain("box rgb(200,220,255) Back end");
+    expect(code).toContain('participant db@{ "type": "database" } as Store');
+    expect(code).toContain("create participant w as Worker");
+    expect(code).toContain("destroy w");
+    await expectMermaidAccepts(code);
   });
 });
 
@@ -293,9 +345,10 @@ describe("mermaid.js accepts generated diagrams with non-ASCII / dotted ids", ()
   it("sequence", async () => {
     const ir: SequenceIR = {
       kind: "sequence",
+      boxes: [],
       lifelines: [
-        { id: L("ユーザ"), name: "User", isActor: true },
-        { id: L("A.svc"), name: "A.svc", isActor: false },
+        { id: L("ユーザ"), name: "User", kind: "actor" },
+        { id: L("A.svc"), name: "A.svc", kind: "participant" },
       ],
       events: [
         { kind: "message", id: "m1" as MessageId, from: L("ユーザ"), to: L("A.svc"), label: "x", arrow: "solid" },

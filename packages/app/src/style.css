@@ -92,6 +92,7 @@ body { margin: 0; font-family: sans-serif; }
 .property-window h3 { margin: 0 0 8px; font-size: 13px; }
 .property-window label { display: block; font-size: 12px; margin-top: 8px; }
 .property-window input[type="text"], .property-window input:not([type]), .property-window select { width: 100%; margin-top: 2px; }
+.property-window textarea { width: 100%; margin-top: 2px; font: inherit; resize: vertical; }
 .property-window .danger { margin-top: 12px; color: #b00; }
 .hint { color: #888; font-size: 12px; }
 

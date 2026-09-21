@@ -2,6 +2,8 @@
 
 exports[`layoutSequence > matches the committed golden layout 1`] = `
 {
+  "activations": [],
+  "boxes": [],
   "fragments": [
     {
       "branches": [
@@ -50,7 +52,7 @@ exports[`layoutSequence > matches the committed golden layout 1`] = `
         "y": 10,
       },
       "id": "a",
-      "isActor": true,
+      "kind": "actor",
       "name": "Alice",
       "spineBottom": 350,
       "spineTop": 46,
@@ -64,7 +66,7 @@ exports[`layoutSequence > matches the committed golden layout 1`] = `
         "y": 10,
       },
       "id": "b",
-      "isActor": false,
+      "kind": "participant",
       "name": "Bob",
       "spineBottom": 350,
       "spineTop": 46,
@@ -78,7 +80,7 @@ exports[`layoutSequence > matches the committed golden layout 1`] = `
         "y": 10,
       },
       "id": "c",
-      "isActor": false,
+      "kind": "participant",
       "name": "Charlie",
       "spineBottom": 350,
       "spineTop": 46,

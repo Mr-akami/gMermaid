@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   applySequenceAction,
+  boxOf,
   emptySequence,
   findEventPosition,
   findSequenceBranch,
   findSequenceEvent,
   getContainerEvents,
+  hasLifecycle,
   messagesTouching,
   newId,
   type EventContainer,
@@ -20,7 +22,7 @@ import { measurer } from "./measurer";
 import { formatParseErrors, loadInitial, openMmd, saveMmd, useAutosave } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { SequencePropertyWindow, type SequenceSelection } from "./SequencePropertyWindow";
+import { SequencePropertyWindow, type BoxChoice, type SequenceSelection } from "./SequencePropertyWindow";
 import { useDiagramHistory } from "./useDiagramHistory";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
@@ -28,12 +30,14 @@ import type { EditorRuntimeProps } from "./editorRuntime";
 function initialIR(): SequenceIR {
   const sample = `sequenceDiagram
   actor user as User
-  participant app as App
-  participant api as API
+  box rgb(226,236,250) Service
+    participant app as App
+    participant api as API
+  end
   user->>app: login
-  app->>api: authenticate
+  app->>+api: authenticate
   alt success
-    api-->>app: token
+    api-->>-app: token
     opt remember me
       app->>app: store token
     end
@@ -141,7 +145,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
 
   function addLifeline() {
     const id = newId("lifeline");
-    h.dispatch({ type: "addLifeline", lifeline: { id, name: "Participant", isActor: false } });
+    h.dispatch({ type: "addLifeline", lifeline: { id, name: "Participant", kind: "participant" } });
     setView({ selectedId: id });
   }
 
@@ -251,14 +255,15 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
     h.endEdit();
   }
 
-  function wrapSelected(kind: "alt" | "opt" | "loop" | "par") {
+  function wrapSelected(kind: "alt" | "opt" | "loop" | "par" | "rect") {
     if (selection?.kind !== "message") return;
     h.dispatch({
       type: "wrapInFragment",
       fragmentId: newId("fragment"),
       branchId: newId("branch"),
       fragmentKind: kind,
-      condition: kind === "loop" ? "until done" : kind === "par" ? "" : "condition",
+      // a rect keeps its fill color where other fragments keep a condition
+      condition: kind === "loop" ? "until done" : kind === "par" ? "" : kind === "rect" ? "rgb(220,235,255)" : "condition",
       ...(kind === "loop" ? { loopBounds: { min: "1", max: "3" } } : {}),
       eventIds: [selection.message.id],
     });
@@ -352,6 +357,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
         <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("alt")}>Wrap in alt</button>
         <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("opt")}>opt</button>
         <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("loop")}>loop</button>
+        <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("rect")}>rect</button>
         <button onClick={addNote}>+ Note</button>
         <label className="hint" style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <input
@@ -361,6 +367,40 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
           />
           autonumber
         </label>
+        {ir.autonumber !== undefined && (
+          <>
+            <label className="hint">
+              start
+              <input
+                style={{ width: 44, marginLeft: 4 }}
+                inputMode="numeric"
+                value={ir.autonumber.start}
+                onChange={(e) =>
+                  h.dispatch(
+                    { type: "setAutonumber", autonumber: { start: Number(e.target.value.replaceAll(/[^0-9]/g, "")) || 0, step: ir.autonumber!.step } },
+                    "autonumber",
+                  )
+                }
+                onBlur={h.endEdit}
+              />
+            </label>
+            <label className="hint">
+              step
+              <input
+                style={{ width: 44, marginLeft: 4 }}
+                inputMode="numeric"
+                value={ir.autonumber.step}
+                onChange={(e) =>
+                  h.dispatch(
+                    { type: "setAutonumber", autonumber: { start: ir.autonumber!.start, step: Number(e.target.value.replaceAll(/[^0-9]/g, "")) || 0 } },
+                    "autonumber",
+                  )
+                }
+                onBlur={h.endEdit}
+              />
+            </label>
+          </>
+        )}
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
         {view.messageFrom !== undefined && <span className="hint">click a target lifeline…</span>}
@@ -401,8 +441,42 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
               selection.kind === "lifeline" &&
               h.dispatch({ type: "updateLifeline", id: selection.lifeline.id, name }, `lifeline:${selection.lifeline.id}:name`)
             }
-            onToggleActor={(isActor) =>
-              selection.kind === "lifeline" && h.dispatch({ type: "updateLifeline", id: selection.lifeline.id, isActor })
+            onChangeLifelineKind={(kind) =>
+              selection.kind === "lifeline" && h.dispatch({ type: "updateLifeline", id: selection.lifeline.id, kind })
+            }
+            boxes={ir.boxes}
+            lifelineBox={selection.kind === "lifeline" ? boxOf(ir, selection.lifeline.id) : undefined}
+            onChangeLifelineBox={(choice: BoxChoice) => {
+              if (selection.kind !== "lifeline") return;
+              if (choice === "new") {
+                const id = newId("box");
+                h.dispatch({ type: "addBox", box: { id, name: "Group", lifelines: [selection.lifeline.id] } });
+                return;
+              }
+              h.dispatch({ type: "setLifelineBox", id: selection.lifeline.id, box: choice });
+            }}
+            onChangeBoxName={(name) => {
+              if (selection.kind !== "lifeline") return;
+              const box = boxOf(ir, selection.lifeline.id);
+              if (box) h.dispatch({ type: "updateBox", id: box.id, name }, `box:${box.id}:name`);
+            }}
+            onChangeBoxColor={(color) => {
+              if (selection.kind !== "lifeline") return;
+              const box = boxOf(ir, selection.lifeline.id);
+              if (box) h.dispatch({ type: "updateBox", id: box.id, color: color === "" ? null : color }, `box:${box.id}:color`);
+            }}
+            lifelineCreated={selection.kind === "lifeline" && hasLifecycle(ir, selection.lifeline.id, "create")}
+            lifelineDestroyed={selection.kind === "lifeline" && hasLifecycle(ir, selection.lifeline.id, "destroy")}
+            onToggleCreated={(on) =>
+              selection.kind === "lifeline" &&
+              h.dispatch({ type: "setLifecycle", lifeline: selection.lifeline.id, which: "create", eventId: newId("lifecycle"), on })
+            }
+            onToggleDestroyed={(on) =>
+              selection.kind === "lifeline" &&
+              h.dispatch({ type: "setLifecycle", lifeline: selection.lifeline.id, which: "destroy", eventId: newId("lifecycle"), on })
+            }
+            onChangeMessageActivation={(activate) =>
+              selection.kind === "message" && h.dispatch({ type: "updateMessage", id: selection.message.id, activate })
             }
             onChangeMessageLabel={(label) =>
               selection.kind === "message" &&

@@ -1,7 +1,8 @@
-import type { Branch, Fragment, Message, Note, SequenceEvent, SequenceIR } from "./sequence";
+import type { LifelineId } from "./ids";
+import type { Box, Branch, Fragment, Message, SequenceEvent, SequenceIR } from "./sequence";
 
-export function findSequenceEvent(ir: SequenceIR, id: string): Message | Fragment | Note | undefined {
-  const search = (events: readonly SequenceEvent[]): Message | Fragment | Note | undefined => {
+export function findSequenceEvent(ir: SequenceIR, id: string): SequenceEvent | undefined {
+  const search = (events: readonly SequenceEvent[]): SequenceEvent | undefined => {
     for (const e of events) {
       if (e.id === id) return e;
       if (e.kind === "fragment") {
@@ -65,4 +66,30 @@ export function findSequenceBranch(
     return undefined;
   };
   return search(ir.events);
+}
+
+/** Every message touching a lifeline, in document order (depth-first). */
+export function messagesOf(ir: SequenceIR, lifeline: LifelineId): Message[] {
+  const out: Message[] = [];
+  const walk = (events: readonly SequenceEvent[]): void => {
+    for (const e of events) {
+      if (e.kind === "message" && (e.from === lifeline || e.to === lifeline)) out.push(e);
+      else if (e.kind === "fragment") for (const b of e.branches) walk(b.events);
+    }
+  };
+  walk(ir.events);
+  return out;
+}
+
+/** True if a create/destroy event for the lifeline exists anywhere. */
+export function hasLifecycle(ir: SequenceIR, lifeline: LifelineId, which: "create" | "destroy"): boolean {
+  const walk = (events: readonly SequenceEvent[]): boolean =>
+    events.some(
+      (e) => (e.kind === which && e.lifeline === lifeline) || (e.kind === "fragment" && e.branches.some((b) => walk(b.events))),
+    );
+  return walk(ir.events);
+}
+
+export function boxOf(ir: SequenceIR, lifeline: LifelineId): Box | undefined {
+  return ir.boxes.find((b) => b.lifelines.includes(lifeline));
 }

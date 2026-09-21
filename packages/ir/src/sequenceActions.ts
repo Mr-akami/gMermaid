@@ -1,19 +1,23 @@
-import type { BranchId, FragmentId, LifelineId, MessageId, NoteId } from "./ids";
+import type { BoxId, BranchId, FragmentId, LifecycleId, LifelineId, MessageId, NoteId } from "./ids";
 import type {
+  Activation,
   Autonumber,
+  Box,
   Fragment,
   FragmentKind,
+  Lifecycle,
   Lifeline,
   LoopBounds,
   Message,
   MessageArrowType,
   Note,
   NotePosition,
+  ParticipantKind,
   SequenceEvent,
   SequenceIR,
 } from "./sequence";
 import { omitUndefined } from "./omitUndefined";
-import { findEventPosition, findSequenceBranch, findSequenceEvent, getContainerEvents } from "./sequenceQuery";
+import { findEventPosition, findSequenceBranch, findSequenceEvent, getContainerEvents, messagesOf } from "./sequenceQuery";
 
 // Same contract as flowchart actions: intent-carrying, immutable,
 // identity-preserving on no-ops. Fragment membership is structural, so
@@ -21,7 +25,7 @@ import { findEventPosition, findSequenceBranch, findSequenceEvent, getContainerE
 // moveEventOutOfFragment, never as coordinates.
 export type SequenceAction =
   | { type: "addLifeline"; lifeline: Lifeline }
-  | { type: "updateLifeline"; id: LifelineId; name?: string; isActor?: boolean }
+  | { type: "updateLifeline"; id: LifelineId; name?: string; kind?: ParticipantKind }
   | { type: "removeLifeline"; id: LifelineId }
   | { type: "moveLifeline"; id: LifelineId; index: number }
   | { type: "addMessage"; message: Message; afterEventId?: MessageId | FragmentId }
@@ -30,15 +34,25 @@ export type SequenceAction =
   //   moveEventTo: insertion position AFTER the event is removed — moving down
   //                within the same container needs a -1 adjustment by the caller
   //   moveLifeline: final position after removal+insert (= resulting index)
-  | { type: "addEventAt"; event: Message | Note; container: EventContainer; index: number }
-  | { type: "updateMessage"; id: MessageId; label?: string; arrow?: MessageArrowType }
+  | { type: "addEventAt"; event: Message | Note | Activation | Lifecycle; container: EventContainer; index: number }
+  // activate: undefined = keep, null = clear
+  | { type: "updateMessage"; id: MessageId; label?: string; arrow?: MessageArrowType; activate?: "start" | "end" | null }
   | { type: "updateNote"; id: NoteId; text?: string; position?: NotePosition }
-  | { type: "removeEvent"; id: MessageId | FragmentId | NoteId }
+  | { type: "removeEvent"; id: EventId }
   | { type: "updateFragment"; id: FragmentId; fragmentKind?: FragmentKind }
   // loopBounds: undefined = keep, null = clear
   | { type: "updateBranch"; id: BranchId; condition?: string; loopBounds?: LoopBounds | null }
   | { type: "addBranch"; fragmentId: FragmentId; branchId: BranchId; condition: string }
-  | { type: "moveEventTo"; id: MessageId | FragmentId | NoteId; container: EventContainer; index: number }
+  | { type: "moveEventTo"; id: EventId; container: EventContainer; index: number }
+  // null = take the lifeline out of its box; a box left empty disappears
+  | { type: "setLifelineBox"; id: LifelineId; box: BoxId | null }
+  | { type: "addBox"; box: Box }
+  // color: undefined = keep, null = clear
+  | { type: "updateBox"; id: BoxId; name?: string; color?: string | null }
+  | { type: "removeBox"; id: BoxId }
+  // on: insert a create/destroy event right before the first/last message
+  // touching the lifeline; off: remove every such event of that lifeline
+  | { type: "setLifecycle"; lifeline: LifelineId; which: "create" | "destroy"; eventId: LifecycleId; on: boolean }
   // null = numbering off
   | { type: "setAutonumber"; autonumber: Autonumber | null }
   | {
@@ -48,8 +62,10 @@ export type SequenceAction =
       fragmentKind: FragmentKind;
       condition: string;
       loopBounds?: LoopBounds;
-      eventIds: readonly (MessageId | FragmentId | NoteId)[];
+      eventIds: readonly EventId[];
     };
+
+export type EventId = SequenceEvent["id"];
 
 /** Where an event lives: the top level, or inside a fragment branch. */
 export type EventContainer = { kind: "root" } | { kind: "branch"; branchId: BranchId };
@@ -98,8 +114,17 @@ export function messagesTouching(events: Events, lifeline: LifelineId): boolean 
   return events.some((e) => {
     if (e.kind === "message") return e.from === lifeline || e.to === lifeline;
     if (e.kind === "note") return e.lifelines.includes(lifeline);
-    return e.branches.some((b) => messagesTouching(b.events, lifeline));
+    if (e.kind === "fragment") return e.branches.some((b) => messagesTouching(b.events, lifeline));
+    return e.lifeline === lifeline;
   });
+}
+
+/** Drop a lifeline from every box; boxes left empty vanish with it. */
+function withoutMember(boxes: readonly Box[], lifeline: LifelineId): readonly Box[] {
+  if (!boxes.some((b) => b.lifelines.includes(lifeline))) return boxes;
+  return boxes
+    .map((b) => (b.lifelines.includes(lifeline) ? { ...b, lifelines: b.lifelines.filter((l) => l !== lifeline) } : b))
+    .filter((b) => b.lifelines.length > 0);
 }
 
 const sameBounds = (a: LoopBounds | undefined, b: LoopBounds | undefined) =>
@@ -116,11 +141,11 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
       if (!l) return ir;
       const rawName = action.name ?? l.name;
       const name = rawName === "" ? (l.id as string) : rawName; // empty names break the mermaid syntax
-      const isActor = action.isActor ?? l.isActor;
-      if (name === l.name && isActor === l.isActor) return ir;
+      const kind = action.kind ?? l.kind;
+      if (name === l.name && kind === l.kind) return ir;
       return {
         ...ir,
-        lifelines: ir.lifelines.map((x) => (x.id === action.id ? { ...x, name, isActor } : x)),
+        lifelines: ir.lifelines.map((x) => (x.id === action.id ? { ...x, name, kind } : x)),
       };
     }
 
@@ -132,9 +157,15 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
       const events = mapEvents(ir.events, (e) => {
         if (e.kind === "message") return e.from === action.id || e.to === action.id ? null : e;
         if (e.kind === "note") return e.lifelines.includes(action.id) ? null : e;
-        return e;
+        if (e.kind === "fragment") return e;
+        return e.lifeline === action.id ? null : e;
       });
-      return { ...ir, lifelines: ir.lifelines.filter((l) => l.id !== action.id), events };
+      return {
+        ...ir,
+        lifelines: ir.lifelines.filter((l) => l.id !== action.id),
+        boxes: withoutMember(ir.boxes, action.id),
+        events,
+      };
     }
 
     case "moveLifeline": {
@@ -154,6 +185,7 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
       const known = (id: LifelineId) => ir.lifelines.some((l) => l.id === id);
       if (ev.kind === "message" && (!known(ev.from) || !known(ev.to))) return ir;
       if (ev.kind === "note" && (ev.lifelines.length === 0 || !ev.lifelines.every(known))) return ir;
+      if ((ev.kind === "activation" || ev.kind === "create" || ev.kind === "destroy") && !known(ev.lifeline)) return ir;
       const insert = (events: Events): Events => {
         const i = Math.max(0, Math.min(action.index, events.length));
         return [...events.slice(0, i), ev, ...events.slice(i)];
@@ -197,8 +229,9 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         if (e.kind !== "message" || e.id !== action.id) return e;
         const label = action.label ?? e.label;
         const arrow = action.arrow ?? e.arrow;
-        if (label === e.label && arrow === e.arrow) return e;
-        return { ...e, label, arrow };
+        const activate = action.activate === undefined ? e.activate : (action.activate ?? undefined);
+        if (label === e.label && arrow === e.arrow && activate === e.activate) return e;
+        return omitUndefined({ ...e, label, arrow, activate });
       });
       return next === ir.events ? ir : { ...ir, events: next };
     }
@@ -331,6 +364,65 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         return ir;
       }
       return omitUndefined({ ...ir, autonumber: next });
+    }
+
+    case "setLifelineBox": {
+      const self = ir.lifelines.find((l) => l.id === action.id);
+      if (!self) return ir;
+      const current = ir.boxes.find((b) => b.lifelines.includes(action.id));
+      if (action.box === null) {
+        return current === undefined ? ir : { ...ir, boxes: withoutMember(ir.boxes, action.id) };
+      }
+      const target = ir.boxes.find((b) => b.id === action.box);
+      if (!target || current === target) return ir;
+      const boxes = withoutMember(ir.boxes, action.id).map((b) =>
+        b.id === target.id ? { ...b, lifelines: [...b.lifelines, action.id] } : b,
+      );
+      // keep members contiguous: slot in right after the box's last member
+      const lifelines = ir.lifelines.filter((l) => l.id !== action.id);
+      let at = -1;
+      lifelines.forEach((l, i) => {
+        if (target.lifelines.includes(l.id)) at = i;
+      });
+      lifelines.splice(at + 1, 0, self);
+      return { ...ir, lifelines, boxes };
+    }
+
+    case "addBox": {
+      if (ir.boxes.some((b) => b.id === action.box.id)) return ir;
+      const known = (id: LifelineId) => ir.lifelines.some((l) => l.id === id);
+      const members = action.box.lifelines.filter(known);
+      // members leave whatever box they were in — a lifeline lives in one box
+      let boxes: readonly Box[] = ir.boxes;
+      for (const m of members) boxes = withoutMember(boxes, m);
+      return { ...ir, boxes: [...boxes, { ...action.box, lifelines: members }] };
+    }
+
+    case "updateBox": {
+      const b = ir.boxes.find((x) => x.id === action.id);
+      if (!b) return ir;
+      const name = action.name ?? b.name;
+      const color = action.color === undefined ? b.color : (action.color ?? undefined);
+      if (name === b.name && color === b.color) return ir;
+      return { ...ir, boxes: ir.boxes.map((x) => (x.id === action.id ? omitUndefined({ ...x, name, color }) : x)) };
+    }
+
+    case "removeBox": {
+      if (!ir.boxes.some((b) => b.id === action.id)) return ir;
+      return { ...ir, boxes: ir.boxes.filter((b) => b.id !== action.id) };
+    }
+
+    case "setLifecycle": {
+      const removed = mapEvents(ir.events, (e) => (e.kind === action.which && e.lifeline === action.lifeline ? null : e));
+      if (!action.on) return removed === ir.events ? ir : { ...ir, events: removed };
+      if (findSequenceEvent(ir, action.eventId)) return ir;
+      const stripped: SequenceIR = { ...ir, events: removed };
+      const touching = messagesOf(stripped, action.lifeline);
+      const anchor = action.which === "create" ? touching[0] : touching[touching.length - 1];
+      if (!anchor) return ir; // mermaid needs a message to attach to
+      const pos = findEventPosition(stripped, anchor.id)!;
+      const ev: Lifecycle = { kind: action.which, id: action.eventId, lifeline: action.lifeline };
+      return applySequenceAction(stripped, { type: "addEventAt", event: ev, container: pos.container, index: pos.index });
     }
 
     case "wrapInFragment": {
