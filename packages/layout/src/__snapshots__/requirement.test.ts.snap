@@ -1,0 +1,72 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutRequirementDiagram > matches the committed golden layout 1`] = `
+{
+  "boxes": [
+    {
+      "headerBottom": 231.19999999999996,
+      "id": "test_req",
+      "lines": [
+        "Id: 1.1",
+        "Text: the test text.",
+        "Risk: High",
+        "Verify: Test",
+      ],
+      "name": "test_req",
+      "rect": {
+        "h": 149.6,
+        "w": 208,
+        "x": 8,
+        "y": 173.59999999999997,
+      },
+      "stereotype": "«functionalRequirement»",
+    },
+    {
+      "headerBottom": 57.599999999999994,
+      "id": "test_entity",
+      "lines": [
+        "Type: simulation",
+        "Doc Ref: reqs/test_entity",
+      ],
+      "name": "test_entity",
+      "rect": {
+        "h": 113.6,
+        "w": 224,
+        "x": 0,
+        "y": 0,
+      },
+      "stereotype": "«element»",
+    },
+  ],
+  "edges": [
+    {
+      "id": "r1",
+      "label": "«satisfies»",
+      "labelPos": {
+        "x": 112,
+        "y": 137.6,
+      },
+      "points": [
+        {
+          "x": 112,
+          "y": 113.6,
+        },
+        {
+          "x": 112,
+          "y": 143.6,
+        },
+        {
+          "x": 112,
+          "y": 173.59999999999997,
+        },
+      ],
+      "type": "satisfies",
+    },
+  ],
+  "kind": "requirement",
+  "size": {
+    "h": 323.2,
+    "w": 224,
+  },
+}
+`;

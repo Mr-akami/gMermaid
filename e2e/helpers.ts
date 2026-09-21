@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export type Kind = "Flowchart" | "Sequence" | "Class" | "State";
+export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement" | "Journey" | "Timeline";
 
 /** Open the app fresh (no autosave) and switch to a diagram tab. */
 export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
@@ -13,7 +13,12 @@ export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
   return editor;
 }
 
-/** The mermaid text currently shown in the code pane of the visible editor. */
+/** The mermaid text currently shown in the code pane of the visible editor.
+ *
+ * Reads once. After anything is typed into the pane, the CodeMirror wrapper
+ * holds back external value updates while it believes the user is still
+ * typing (a 200ms latch), so the pane trails the IR for a moment. Assert
+ * with `expectCode` instead of comparing a single read. */
 export async function codeText(editor: Locator): Promise<string> {
   const cm = editor.locator(".cm-content");
   await expect(cm).toBeVisible();
@@ -27,13 +32,24 @@ export async function setCode(editor: Locator, text: string): Promise<void> {
   await cm.click();
   await cm.press("ControlOrMeta+a");
   await cm.press("Delete");
-  // insertText avoids CodeMirror auto-indent interfering with pasted lines
+  // dispatching on the view avoids CodeMirror auto-indent mangling pasted
+  // lines; the content DOM carries the view as `cmTile` (older CodeMirror
+  // called it `cmView`), so accept either handle
   await cm.evaluate((el, t) => {
-    const view = (el as unknown as { cmView?: { view: { dispatch: (tr: unknown) => void; state: { doc: { length: number } } } } }).cmView?.view;
+    type Handle = { view: { dispatch: (tr: unknown) => void; state: { doc: { length: number } } } };
+    const host = el as unknown as { cmTile?: Handle; cmView?: Handle };
+    const view = (host.cmTile ?? host.cmView)?.view;
     if (!view) throw new Error("CodeMirror view not found");
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: t } });
   }, text);
   await cm.blur();
+}
+
+/** Assert on the code pane after a GUI edit. The pane defers external value
+ * updates for ~200ms after a local edit, so a single `codeText` read right
+ * after a click or keystroke races that sync — poll instead. */
+export function expectCode(editor: Locator) {
+  return expect.poll(() => codeText(editor), { timeout: 5_000 });
 }
 
 export function element(editor: Locator, id: string): Locator {

@@ -1,4 +1,4 @@
-import type { StateBox, StateLayout, TransitionPath } from "@gmermaid/layout";
+import type { StateBox, StateLayout, StateNoteBox, TransitionPath } from "@gmermaid/layout";
 import { usePointerGestures, type Viewport } from "./usePointerGestures";
 
 export interface StateViewState {
@@ -13,9 +13,16 @@ export interface StateViewProps {
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
   readonly onElementClick?: (id: string) => void;
   readonly onBackgroundClick?: () => void;
+  /** "connect" (default): dragging a state draws a new transition to the drop
+   * target. "move": the same gesture reparents the state into the composite
+   * under the pointer. One gesture, two meanings — the editor toggles it. */
+  readonly dragMode?: "connect" | "move" | undefined;
   /** Dragging from a state = draw a new transition to the drop target. */
   readonly onConnectDrag?: (fromId: string, x: number, y: number) => void;
   readonly onConnectDrop?: (fromId: string, x: number, y: number) => void;
+  /** Same gesture in "move" mode: reparent into the drop target. */
+  readonly onMoveDrag?: (id: string, x: number, y: number) => void;
+  readonly onMoveDrop?: (id: string, x: number, y: number) => void;
   readonly connectLine?: { x1: number; y1: number; x2: number; y2: number } | undefined;
   readonly onGestureCancel?: () => void;
 }
@@ -29,8 +36,11 @@ export function StateView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  dragMode = "connect",
   onConnectDrag,
   onConnectDrop,
+  onMoveDrag,
+  onMoveDrop,
   connectLine,
   onGestureCancel,
 }: StateViewProps) {
@@ -38,11 +48,11 @@ export function StateView({
     padding: PADDING,
     viewport,
     onViewportChange,
-    dragKinds: ["connect"],
+    dragKinds: [dragMode],
     onElementClick,
     onBackgroundClick,
-    onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
-    onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
+    onDrag: (kind, id, x, y) => (kind === "move" ? onMoveDrag?.(id, x, y) : onConnectDrag?.(id, x, y)),
+    onDrop: (kind, id, x, y) => (kind === "move" ? onMoveDrop?.(id, x, y) : onConnectDrop?.(id, x, y)),
     onGestureCancel,
   });
 
@@ -68,23 +78,36 @@ export function StateView({
           .filter((s) => s.composite)
           .toSorted((a, b) => a.depth - b.depth)
           .map((s) => (
-            <CompositeView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+            <CompositeView key={s.id} s={s} selected={viewState.selectedId === s.id} dragMode={dragMode} />
           ))}
+        {/* `--` dividers between concurrency regions */}
+        {layout.regionSeparators.map((sep, i) => (
+          <line
+            key={`${sep.parent}-${i}`}
+            x1={sep.x1}
+            y1={sep.y1}
+            x2={sep.x2}
+            y2={sep.y2}
+            stroke="var(--gm-stroke, #555)"
+            strokeWidth={1}
+            strokeDasharray="5 4"
+            data-region-separator={sep.parent}
+            style={{ pointerEvents: "none" }}
+          />
+        ))}
         {layout.transitions.map((t) => (
           <TransitionView key={t.id} t={t} selected={viewState.selectedId === t.id} />
         ))}
         {layout.states
           .filter((s) => !s.composite)
           .map((s) => (
-            <StateBoxView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+            <StateBoxView key={s.id} s={s} selected={viewState.selectedId === s.id} dragMode={dragMode} />
           ))}
         {layout.notes.map((n) => (
           <g key={n.id} data-element-id={n.id} style={{ cursor: "pointer" }}>
             <line x1={n.anchor.x1} y1={n.anchor.y1} x2={n.anchor.x2} y2={n.anchor.y2} stroke="var(--gm-note-line, #b59a2e)" strokeWidth={1} strokeDasharray="3 3" style={{ pointerEvents: "none" }} />
             <rect x={n.rect.x} y={n.rect.y} width={n.rect.w} height={n.rect.h} rx={3} fill="var(--gm-note-fill, #fdf6d3)" stroke="var(--gm-note-stroke, #c8b25a)" strokeWidth={1} />
-            <text x={n.rect.x + n.rect.w / 2} y={n.rect.y + n.rect.h / 2} textAnchor="middle" dominantBaseline="central" fontSize={12} fontFamily="sans-serif" fill="var(--gm-text, #333)" style={{ pointerEvents: "none", userSelect: "none" }}>
-              {n.text}
-            </text>
+            <NoteText n={n} />
           </g>
         ))}
         {connectLine !== undefined && (
@@ -95,7 +118,31 @@ export function StateView({
   );
 }
 
-function CompositeView({ s, selected }: { s: StateBox; selected: boolean }) {
+/** One `<tspan>` per line: layout already sized the box for the line count. */
+function NoteText({ n }: { n: StateNoteBox }) {
+  const lines = n.text.split("\n");
+  const lineH = 14;
+  const first = n.rect.y + n.rect.h / 2 - ((lines.length - 1) * lineH) / 2;
+  return (
+    <text
+      x={n.rect.x + n.rect.w / 2}
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={12}
+      fontFamily="sans-serif"
+      fill="var(--gm-text, #333)"
+      style={{ pointerEvents: "none", userSelect: "none" }}
+    >
+      {lines.map((line, i) => (
+        <tspan key={i} x={n.rect.x + n.rect.w / 2} y={first + i * lineH}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+}
+
+function CompositeView({ s, selected, dragMode }: { s: StateBox; selected: boolean; dragMode: "connect" | "move" }) {
   const { x, y, w, h } = s.rect;
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #555)";
   return (
@@ -107,7 +154,7 @@ function CompositeView({ s, selected }: { s: StateBox; selected: boolean }) {
         <rect x={x} y={y} width={w} height={h} rx={8} fill="none" stroke={stroke} strokeWidth={selected ? 2 : 1.2} pointerEvents="stroke" />
         <line x1={x} y1={y + 22} x2={x + w} y2={y + 22} stroke={stroke} strokeWidth={1} style={{ pointerEvents: "none" }} />
         <text
-          data-drag="connect"
+          data-drag={dragMode}
           x={x + 10}
           y={y + 15}
           fontSize={12}
@@ -123,7 +170,7 @@ function CompositeView({ s, selected }: { s: StateBox; selected: boolean }) {
   );
 }
 
-function StateBoxView({ s, selected }: { s: StateBox; selected: boolean }) {
+function StateBoxView({ s, selected, dragMode }: { s: StateBox; selected: boolean; dragMode: "connect" | "move" }) {
   const { x, y, w, h } = s.rect;
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
   if (s.role === "start" || s.role === "end") {
@@ -131,7 +178,7 @@ function StateBoxView({ s, selected }: { s: StateBox; selected: boolean }) {
     const cy = y + h / 2;
     const r = Math.min(w, h) / 2;
     return (
-      <g data-element-id={s.id} data-drag="connect" style={{ cursor: "pointer" }}>
+      <g data-element-id={s.id} data-drag={dragMode} style={{ cursor: "pointer" }}>
         {/* start = filled dot, end = bullseye */}
         {s.role === "start" ? (
           <circle cx={cx} cy={cy} r={r} fill="var(--gm-stroke, #333)" stroke={stroke} strokeWidth={selected ? 2.5 : 0} />
@@ -148,7 +195,7 @@ function StateBoxView({ s, selected }: { s: StateBox; selected: boolean }) {
     const cx = x + w / 2;
     const cy = y + h / 2;
     return (
-      <g data-element-id={s.id} data-drag="connect" style={{ cursor: "pointer" }}>
+      <g data-element-id={s.id} data-drag={dragMode} style={{ cursor: "pointer" }}>
         <polygon
           points={`${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}`}
           fill="var(--gm-node-fill, #fff)"
@@ -160,13 +207,13 @@ function StateBoxView({ s, selected }: { s: StateBox; selected: boolean }) {
   }
   if (s.role === "fork" || s.role === "join") {
     return (
-      <g data-element-id={s.id} data-drag="connect" style={{ cursor: "pointer" }}>
+      <g data-element-id={s.id} data-drag={dragMode} style={{ cursor: "pointer" }}>
         <rect x={x} y={y} width={w} height={h} rx={3} fill="var(--gm-stroke, #333)" stroke={stroke} strokeWidth={selected ? 2 : 0} />
       </g>
     );
   }
   return (
-    <g data-element-id={s.id} data-drag="connect" style={{ cursor: "pointer" }}>
+    <g data-element-id={s.id} data-drag={dragMode} style={{ cursor: "pointer" }}>
       <rect x={x} y={y} width={w} height={h} rx={8} fill="var(--gm-node-fill, #fff)" stroke={stroke} strokeWidth={selected ? 2.5 : 1.4} />
       <text
         x={x + w / 2}

@@ -5,6 +5,7 @@ import {
   newStateId,
   newId,
   reparentRejection,
+  stateRegionCount,
   type StateIR,
   type StateId,
 } from "@gmermaid/ir";
@@ -25,8 +26,11 @@ function initialIR(): StateIR {
   [*] --> Still
   Still --> Moving : push
   state Moving {
+    direction LR
     [*] --> Slow
     Slow --> Fast : accelerate
+    --
+    state Wipers
   }
   Moving --> Crash : collision
   Crash --> [*]
@@ -44,6 +48,11 @@ interface ViewState {
    * Click-based (like transitionFrom) — a drag gesture would collide with
    * drag-to-connect, which every state already owns. */
   readonly moveInto?: StateId;
+  /** Move mode re-points the ONE drag gesture a state owns: instead of
+   * drawing a transition, dragging drops the state into the composite frame
+   * under the pointer. A modifier key would be cheaper, but the shared
+   * pointer hook resolves the gesture from `data-drag` alone. */
+  readonly moveMode?: boolean;
 }
 
 const STORAGE_KEY = "gmermaid:doc:state";
@@ -137,7 +146,12 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   const selectedTransition = ir.transitions.find((t) => t.id === view.selectedId);
   const selectedNote = ir.notes.find((n) => n.id === view.selectedId);
   const selection: StateSelection | undefined = selectedState
-    ? { kind: "state", state: selectedState }
+    ? {
+        kind: "state",
+        state: selectedState,
+        parentRegions: selectedState.parent !== undefined ? stateRegionCount(ir, selectedState.parent) : 0,
+        composite: ir.states.some((s) => s.parent === selectedState.id),
+      }
     : selectedTransition
       ? { kind: "transition", transition: selectedTransition }
       : selectedNote
@@ -158,26 +172,68 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   function handleConnectDrop(fromId: string, x: number, y: number) {
     setConnectLine(undefined);
     const from = ir.states.find((s) => s.id === fromId);
-    const target = layout.states.find(
-      (s) => s.id !== fromId && x >= s.rect.x && x <= s.rect.x + s.rect.w && y >= s.rect.y && y <= s.rect.y + s.rect.h,
-    );
+    // a self-transition is legal (`A --> A : tick`), so the source is a
+    // valid drop target too — smallest box under the pointer wins
+    const target = layout.states
+      .filter((s) => x >= s.rect.x && x <= s.rect.x + s.rect.w && y >= s.rect.y && y <= s.rect.y + s.rect.h)
+      .toSorted((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0];
     if (!from || !target) return;
     connect(from.id, target.id as StateId);
+  }
+
+  function handleMoveDrag(id: string, x: number, y: number) {
+    const from = layout.states.find((s) => s.id === id);
+    if (from) setConnectLine({ x1: from.rect.x + from.rect.w / 2, y1: from.rect.y + from.rect.h / 2, x2: x, y2: y });
+  }
+
+  function handleMoveDrop(id: string, x: number, y: number) {
+    setConnectLine(undefined);
+    const inRect = (r: { x: number; y: number; w: number; h: number }) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    // innermost composite frame under the pointer wins; none = top level
+    const target = layout.states
+      .filter((s) => s.composite && s.id !== id && inRect(s.rect))
+      .toSorted((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0];
+    if (!target) {
+      moveInto(id as StateId, null);
+      return;
+    }
+    // dropping inside a specific region band keeps the state in that region
+    const band = layout.regions.filter((r) => r.parent === target.id && inRect(r.rect))[0];
+    moveInto(id as StateId, target.id as StateId, band?.index ?? 0);
   }
 
   // reducer rejections must be visible, not silent no-ops (L2)
   const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
 
-  function moveInto(id: StateId, parent: StateId | null) {
-    const reason = reparentRejection(ir, id, parent);
+  function moveInto(id: StateId, parent: StateId | null, region = 0) {
+    const reason = reparentRejection(ir, id, parent, region);
     if (reason !== undefined) {
       setRejectHint(reason);
-      setView({ selectedId: id });
+      setView({ selectedId: id, moveMode: view.moveMode === true });
       return;
     }
     setRejectHint(undefined);
-    h.dispatch({ type: "setStateParent", id, parent });
-    setView({ selectedId: id });
+    h.dispatch({ type: "setStateParent", id, parent, region });
+    setView({ selectedId: id, moveMode: view.moveMode === true });
+  }
+
+  /** Split a new concurrency region off the selection. Mermaid has no syntax
+   * for an EMPTY region (it emits nothing between two `--`), so a region only
+   * exists once a state lives in it: "+ Region" moves the selected member
+   * into a fresh one, or — when the composite itself is selected — its last
+   * member, which is the same gesture read from the container's side. */
+  function addRegion() {
+    if (!selectedState) return;
+    const member = selectedState.parent !== undefined
+      ? selectedState
+      : ir.states.filter((s) => s.parent === selectedState.id).at(-1);
+    if (!member?.parent) {
+      setRejectHint("select a state inside a composite (or a composite with members)");
+      return;
+    }
+    setRejectHint(undefined);
+    h.dispatch({ type: "setStateRegion", id: member.id, region: stateRegionCount(ir, member.parent) });
+    setView({ selectedId: member.id, moveMode: view.moveMode === true });
   }
 
   function handleElementClick(id: string) {
@@ -190,7 +246,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
       connect(view.transitionFrom, target.id);
       return;
     }
-    setView({ selectedId: id });
+    setView({ selectedId: id, moveMode: view.moveMode === true });
   }
 
   function handleBackgroundClick() {
@@ -199,7 +255,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
       moveInto(view.moveInto, null);
       return;
     }
-    setView({});
+    setView({ moveMode: view.moveMode === true });
   }
 
   return (
@@ -222,9 +278,19 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         </button>
         <button
           disabled={selectedState === undefined}
-          onClick={() => selectedState && setView({ selectedId: selectedState.id, moveInto: selectedState.id })}
+          onClick={() => selectedState && setView({ selectedId: selectedState.id, moveInto: selectedState.id, moveMode: view.moveMode === true })}
         >
           ⊂ Move into…
+        </button>
+        <button disabled={selectedState === undefined} onClick={addRegion}>
+          + Region
+        </button>
+        <button
+          aria-pressed={view.moveMode === true}
+          className={view.moveMode === true ? "active" : undefined}
+          onClick={() => setView({ ...view, moveMode: view.moveMode !== true })}
+        >
+          ⇱ Move mode
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
@@ -237,6 +303,9 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
           <option value="BT">Bottom→Top</option>
           <option value="RL">Right→Left</option>
         </select>
+        {view.moveMode === true && (
+          <span className="hint">drag a state onto a composite frame to move it in (background = top level)</span>
+        )}
         {view.transitionFrom !== undefined && <span className="hint">click a target state…</span>}
         {view.moveInto !== undefined && <span className="hint">click the container state (background = top level)…</span>}
         {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
@@ -250,8 +319,11 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
             onViewportChange={setViewport}
             onElementClick={handleElementClick}
             onBackgroundClick={handleBackgroundClick}
+            dragMode={view.moveMode === true ? "move" : "connect"}
             onConnectDrag={handleConnectDrag}
             onConnectDrop={handleConnectDrop}
+            onMoveDrag={handleMoveDrag}
+            onMoveDrop={handleMoveDrop}
             connectLine={connectLine}
             onGestureCancel={() => setConnectLine(undefined)}
           />
@@ -261,6 +333,10 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
             selection={selection}
             onChangeStateLabel={(label) =>
               selectedState && h.dispatch({ type: "updateState", id: selectedState.id, label }, `state:${selectedState.id}:label`)
+            }
+            onChangeStateRegion={(region) => selectedState && h.dispatch({ type: "setStateRegion", id: selectedState.id, region })}
+            onChangeStateDirection={(direction) =>
+              selectedState && h.dispatch({ type: "setStateDirection", id: selectedState.id, direction })
             }
             onChangeTransitionLabel={(label) =>
               selectedTransition &&
@@ -276,7 +352,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
               if (selectedState) h.dispatch({ type: "removeState", id: selectedState.id });
               if (selectedTransition) h.dispatch({ type: "removeTransition", id: selectedTransition.id });
               if (selectedNote) h.dispatch({ type: "removeStateNote", id: selectedNote.id });
-              setView({});
+              setView({ moveMode: view.moveMode === true });
             }}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}

@@ -9,21 +9,29 @@ import type {
   EdgeId,
   FlowchartIR,
   FragmentId,
+  JourneyIR,
   LifecycleId,
   LifelineId,
   MessageId,
   NodeId,
   NoteId,
   RelationId,
+  SectionId,
+  RequirementIR,
   SequenceIR,
   StateIR,
+  TaskId,
+  TimelineIR,
   TransitionId,
 } from "@gmermaid/ir";
 import mermaid from "mermaid";
 import { flowchartToMermaid } from "./flowchart";
 import { classToMermaid } from "./classdiagram";
+import { journeyToMermaid } from "./journey";
+import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
+import { timelineToMermaid } from "./timeline";
 
 // C4: our codegen output must be accepted by the REAL mermaid.js parser —
 // the in-repo parser round trips prove self-consistency, not dialect
@@ -40,7 +48,12 @@ async function expectMermaidAccepts(code: string): Promise<void> {
 const N = (s: string) => s as NodeId;
 const L = (s: string) => s as LifelineId;
 const S = (s: string) => s as import("@gmermaid/ir").StateId;
+const Q = (s: string) => s as import("@gmermaid/ir").RequirementId;
+const EL = (s: string) => s as import("@gmermaid/ir").ElementId;
 const G = (s: string) => s as import("@gmermaid/ir").SubgraphId;
+const TS = (s: string) => s as SectionId;
+const TP = (s: string) => s as import("@gmermaid/ir").PeriodId;
+const TE = (s: string) => s as import("@gmermaid/ir").EventId;
 
 describe("mermaid.js accepts generated flowcharts", () => {
   const base: FlowchartIR = {
@@ -322,6 +335,143 @@ describe("mermaid.js accepts generated state diagrams", () => {
       ],
     };
     await expectMermaidAccepts(stateToMermaid(ir));
+  });
+
+  it("parses `--` regions with per-region [*], block direction, block notes and self-transitions", async () => {
+    const ir: StateIR = {
+      kind: "state",
+      states: [
+        { id: S("state_start"), label: "", role: "start" },
+        { id: S("Active"), label: "Active", role: "normal", direction: "LR" },
+        { id: S("state_start_Active"), label: "", role: "start", parent: S("Active") },
+        { id: S("NumOff"), label: "NumOff", role: "normal", parent: S("Active") },
+        { id: S("NumOn"), label: "Num & <on> #", role: "normal", parent: S("Active") },
+        { id: S("state_start_Active_r1"), label: "", role: "start", parent: S("Active"), region: 1 },
+        { id: S("CapsOff"), label: "CapsOff", role: "normal", parent: S("Active"), region: 1 },
+        { id: S("state_end_Active_r1"), label: "", role: "end", parent: S("Active"), region: 1 },
+        { id: S("Scroll"), label: "Scroll", role: "normal", parent: S("Active"), region: 2 },
+      ],
+      transitions: [
+        { id: "t1" as TransitionId, from: S("state_start"), to: S("Active") },
+        { id: "t2" as TransitionId, from: S("state_start_Active"), to: S("NumOff") },
+        { id: "t3" as TransitionId, from: S("NumOff"), to: S("NumOn"), label: "press" },
+        { id: "t4" as TransitionId, from: S("state_start_Active_r1"), to: S("CapsOff") },
+        { id: "t5" as TransitionId, from: S("CapsOff"), to: S("state_end_Active_r1") },
+        { id: "t6" as TransitionId, from: S("Scroll"), to: S("Scroll"), label: "tick" },
+      ],
+      notes: [{ id: "n1" as NoteId, target: S("Active"), position: "rightOf", text: 'line <1> #\nline "2"' }],
+    };
+    const code = stateToMermaid(ir);
+    expect(code).toContain("    --\n");
+    expect(code).toContain("  end note\n");
+    await expectMermaidAccepts(code);
+  });
+});
+
+describe("mermaid.js accepts generated user journeys", () => {
+  it("parses title, sections, tasks with and without actors, and an implicit first section", async () => {
+    const ir: JourneyIR = {
+      kind: "journey",
+      title: "My working day & more",
+      sections: [
+        { id: "s0" as SectionId, name: "", tasks: [{ id: "t0" as TaskId, name: "Wake up", score: 2, actors: [] }] },
+        {
+          id: "s1" as SectionId,
+          name: "Go to work",
+          tasks: [
+            { id: "t1" as TaskId, name: "Make tea", score: 5, actors: ["Me"] },
+            { id: "t2" as TaskId, name: "Do work (hard)", score: 1, actors: ["Me", "Cat"] },
+          ],
+        },
+        { id: "s2" as SectionId, name: "日本語 section", tasks: [{ id: "t3" as TaskId, name: "帰る", score: 4, actors: ["私"] }] },
+      ],
+    };
+    await expectMermaidAccepts(journeyToMermaid(ir));
+  });
+});
+
+describe("mermaid.js accepts generated requirement diagrams", () => {
+  it("parses every requirement type, risk, verify method and relation type", async () => {
+    const ir: RequirementIR = {
+      kind: "requirement",
+      requirements: [
+        { id: Q("test_req"), name: "test_req", type: "requirement", reqId: "1", text: "the test text.", risk: "High", verifyMethod: "Test" },
+        { id: Q("r2"), name: "r2", type: "functionalRequirement", reqId: "1.1", risk: "Low", verifyMethod: "Inspection" },
+        { id: Q("r3"), name: "r3", type: "performanceRequirement", risk: "Medium", verifyMethod: "Demonstration" },
+        { id: Q("r4"), name: "r4", type: "interfaceRequirement", verifyMethod: "Analysis" },
+        { id: Q("r5"), name: "r5", type: "physicalRequirement" },
+        { id: Q("r6"), name: "r6", type: "designConstraint" },
+      ],
+      elements: [
+        { id: EL("test_entity"), name: "test_entity", type: "simulation" },
+        { id: EL("e2"), name: "e2", type: "word doc", docRef: "reqs/test_entity" },
+      ],
+      relations: [
+        { id: "x1" as RelationId, from: EL("test_entity"), to: Q("r2"), type: "satisfies" },
+        { id: "x2" as RelationId, from: Q("test_req"), to: Q("r2"), type: "traces" },
+        { id: "x3" as RelationId, from: Q("test_req"), to: Q("r3"), type: "contains" },
+        { id: "x4" as RelationId, from: Q("r3"), to: Q("r4"), type: "derives" },
+        { id: "x5" as RelationId, from: Q("r4"), to: Q("r5"), type: "refines" },
+        { id: "x6" as RelationId, from: EL("e2"), to: Q("r6"), type: "copies" },
+        { id: "x7" as RelationId, from: EL("e2"), to: Q("r5"), type: "verifies" },
+      ],
+    };
+    await expectMermaidAccepts(requirementToMermaid(ir));
+  });
+
+  it("parses direction plus names and free text that must be quoted", async () => {
+    const ir: RequirementIR = {
+      kind: "requirement",
+      direction: "LR",
+      requirements: [
+        // a name with spaces, and text carrying every character codegen escapes
+        { id: Q("my req"), name: "my req", type: "requirement", reqId: "1.2, a", text: 'a: "quoted" > text & #hash\nsecond line', risk: "Low" },
+        // a name that collides with a mermaid keyword must be quoted too
+        { id: Q("element"), name: "element", type: "designConstraint" },
+      ],
+      elements: [{ id: EL("an entity"), name: "an entity", type: "test suite", docRef: "github.com/all_the_tests" }],
+      relations: [
+        { id: "x1" as RelationId, from: EL("an entity"), to: Q("my req"), type: "satisfies" },
+        { id: "x2" as RelationId, from: Q("element"), to: Q("element"), type: "traces" },
+      ],
+    };
+    await expectMermaidAccepts(requirementToMermaid(ir));
+  });
+});
+
+describe("mermaid.js accepts generated timelines", () => {
+  it("parses a title, sections, multi-event periods and a period without events", async () => {
+    const ir: TimelineIR = {
+      kind: "timeline",
+      title: "History of Social Media Platform",
+      sections: [
+        {
+          id: TS("s1"),
+          name: "",
+          periods: [
+            { id: TP("p1"), label: "2002", events: [{ id: TE("e1"), text: "LinkedIn" }] },
+            { id: TP("p2"), label: "2004", events: [{ id: TE("e2"), text: "Facebook" }, { id: TE("e3"), text: "Google" }] },
+          ],
+        },
+        {
+          id: TS("s2"),
+          name: "21st century",
+          periods: [
+            // timeline text is RAW in mermaid, so these characters must reach
+            // it unescaped; a period without events must parse too
+            { id: TP("p3"), label: "Industry 4.0", events: [{ id: TE("e4"), text: 'Internet, "IoT" & <b>3D</b> #print\nsecond line' }] },
+            { id: TP("p4"), label: "Industry 5.0", events: [] },
+          ],
+        },
+        { id: TS("s3"), name: "未来", periods: [{ id: TP("p5"), label: "令和", events: [{ id: TE("e5"), text: "出来事" }] }] },
+      ],
+    };
+    await expectMermaidAccepts(timelineToMermaid(ir));
+  });
+
+  it("parses a bare timeline and a title-only timeline", async () => {
+    await expectMermaidAccepts(timelineToMermaid({ kind: "timeline", sections: [] }));
+    await expectMermaidAccepts(timelineToMermaid({ kind: "timeline", title: "Just a title", sections: [] }));
   });
 });
 

@@ -1,0 +1,180 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutJourney > matches the committed golden layout 1`] = `
+{
+  "kind": "journey",
+  "legend": [
+    {
+      "colorIndex": 0,
+      "name": "Me",
+      "swatch": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 292.2,
+      },
+      "textPos": {
+        "x": 17,
+        "y": 298.2,
+      },
+    },
+    {
+      "colorIndex": 1,
+      "name": "Cat",
+      "swatch": {
+        "h": 12,
+        "w": 12,
+        "x": 51,
+        "y": 292.2,
+      },
+      "textPos": {
+        "x": 68,
+        "y": 298.2,
+      },
+    },
+  ],
+  "sections": [
+    {
+      "colorIndex": 0,
+      "id": "s1",
+      "name": "Go to work",
+      "rect": {
+        "h": 26,
+        "w": 194,
+        "x": 0,
+        "y": 34,
+      },
+    },
+    {
+      "colorIndex": 1,
+      "id": "s2",
+      "name": "Go home",
+      "rect": {
+        "h": 26,
+        "w": 90,
+        "x": 208,
+        "y": 34,
+      },
+    },
+  ],
+  "size": {
+    "h": 308.2,
+    "w": 298,
+  },
+  "tasks": [
+    {
+      "actors": [
+        {
+          "center": {
+            "x": 45,
+            "y": 116.2,
+          },
+          "colorIndex": 0,
+          "name": "Me",
+          "r": 7,
+        },
+      ],
+      "facePos": {
+        "x": 45,
+        "y": 153.2,
+      },
+      "faceR": 11,
+      "id": "t1",
+      "mood": "happy",
+      "name": "Make tea",
+      "rect": {
+        "h": 34.2,
+        "w": 90,
+        "x": 0,
+        "y": 70,
+      },
+      "score": 5,
+      "track": {
+        "x": 45,
+        "y1": 104.2,
+        "y2": 142.2,
+      },
+    },
+    {
+      "actors": [
+        {
+          "center": {
+            "x": 140,
+            "y": 116.2,
+          },
+          "colorIndex": 0,
+          "name": "Me",
+          "r": 7,
+        },
+        {
+          "center": {
+            "x": 158,
+            "y": 116.2,
+          },
+          "colorIndex": 1,
+          "name": "Cat",
+          "r": 7,
+        },
+      ],
+      "facePos": {
+        "x": 149,
+        "y": 257.2,
+      },
+      "faceR": 11,
+      "id": "t2",
+      "mood": "sad",
+      "name": "Do work",
+      "rect": {
+        "h": 34.2,
+        "w": 90,
+        "x": 104,
+        "y": 70,
+      },
+      "score": 1,
+      "track": {
+        "x": 149,
+        "y1": 104.2,
+        "y2": 246.2,
+      },
+    },
+    {
+      "actors": [
+        {
+          "center": {
+            "x": 253,
+            "y": 116.2,
+          },
+          "colorIndex": 0,
+          "name": "Me",
+          "r": 7,
+        },
+      ],
+      "facePos": {
+        "x": 253,
+        "y": 205.2,
+      },
+      "faceR": 11,
+      "id": "t3",
+      "mood": "neutral",
+      "name": "Sit down",
+      "rect": {
+        "h": 34.2,
+        "w": 90,
+        "x": 208,
+        "y": 70,
+      },
+      "score": 3,
+      "track": {
+        "x": 253,
+        "y1": 104.2,
+        "y2": 194.2,
+      },
+    },
+  ],
+  "title": "My working day",
+  "titlePos": {
+    "x": 149,
+    "y": 17,
+  },
+}
+`;

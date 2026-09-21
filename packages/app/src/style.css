@@ -95,6 +95,10 @@ body { margin: 0; font-family: sans-serif; }
 .property-window textarea { width: 100%; margin-top: 2px; font: inherit; resize: vertical; }
 .property-window .danger { margin-top: 12px; color: #b00; }
 .hint { color: #888; font-size: 12px; }
+/* a toolbar button that stays pressed while its mode is on */
+.toolbar button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+.toolbar-field { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.property-window .row-buttons { display: flex; gap: 6px; margin-top: 10px; }
 
 .review-app {
   display: flex;
