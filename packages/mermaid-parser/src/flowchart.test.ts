@@ -492,3 +492,53 @@ describe("every normalized edge survives the round trip", () => {
     expect(result.ir.edges[0], edgeToken(edge)).toEqual(edge);
   });
 });
+
+describe("ids saved under the old keyword-prefixed scheme", () => {
+  const old = `flowchart TB
+  subgraph subgraph-a6bde494["Group 1"]
+    node-1b2c3d4e["Inside"]
+  end
+  subgraph subgraph-ffffffff["Group 2"]
+  end
+  node-e455cb6b --> subgraph-a6bde494
+  subgraph-a6bde494 --> subgraph-ffffffff
+`;
+
+  it("renames them and takes every reference along", () => {
+    const result = parseFlowchart(old);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.subgraphs.map((s) => s.id)).toEqual(["grp_a6bde494", "grp_ffffffff"]);
+    expect(result.ir.subgraphs.map((s) => s.label)).toEqual(["Group 1", "Group 2"]);
+    expect(result.ir.nodes.find((n) => n.id === "node-1b2c3d4e")?.parent).toBe("grp_a6bde494");
+    expect(result.ir.edges.map((e) => [e.from, e.to])).toEqual([
+      ["node-e455cb6b", "grp_a6bde494"],
+      ["grp_a6bde494", "grp_ffffffff"],
+    ]);
+  });
+
+  it("says so once per renamed id, at its first line", () => {
+    const result = parseFlowchart(old);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings).toEqual([
+      { line: 2, message: "`subgraph-a6bde494` starts with a mermaid keyword, so it was renamed to `grp_a6bde494`" },
+      { line: 5, message: "`subgraph-ffffffff` starts with a mermaid keyword, so it was renamed to `grp_ffffffff`" },
+    ]);
+  });
+
+  it("round trips once repaired", () => {
+    const first = parseFlowchart(old);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const again = parseFlowchart(flowchartToMermaid(first.ir));
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    // codegen writes top-level nodes before the blocks, so the declaration
+    // ORDER of this hand-written file does not survive — the ids do
+    expect(sortById(again.ir.nodes)).toEqual(sortById(first.ir.nodes));
+    expect(sortById(again.ir.subgraphs)).toEqual(sortById(first.ir.subgraphs));
+    // nothing left to repair the second time around
+    expect(again.warnings).toEqual([]);
+  });
+});

@@ -8,7 +8,7 @@ import type {
   StateTransition,
   TransitionId,
 } from "@gmermaid/ir";
-import { dropList, prepareLines, unescapeLabel, type ParseError, type ParseResult, type ParseWarning } from "./common";
+import { dropList, importedIds, prepareLines, unescapeLabel, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // stateDiagram-v2 subset: simple states, `state "desc" as id`, `id : desc`,
 // [*] start/end (scoped per composite block AND per `--` region), composite
@@ -21,6 +21,11 @@ import { dropList, prepareLines, unescapeLabel, type ParseError, type ParseResul
 
 const DROPPED = dropList({ extra: ["hide", "title"] });
 
+// Words mermaid's state grammar claims before it reads an id, verified
+// against mermaid.js itself. A hand-typed id from this list is rejected
+// rather than rewritten — the id is the user's, and it is theirs to fix.
+export const STATE_RESERVED_IDS: readonly string[] = ["class", "classDef", "click", "note", "style"];
+
 // letters incl. non-ASCII, digits, `_`, `.` — no `-` (mermaid's state grammar
 // rejects it, and it would be ambiguous with `-->`). Mirrors ir's STATE_NAME_RE.
 const ID = "[\\p{L}_][\\p{L}\\p{N}_.]*";
@@ -30,6 +35,9 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
   const errors: ParseError[] = [];
   const warnings: ParseWarning[] = [];
   const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true, warnings });
+  // State ids are spelled verbatim in the text, so every id that comes in
+  // from it passes the import gate.
+  const ids = importedIds(STATE_RESERVED_IDS);
 
   const states = new Map<string, StateNode>();
   const order: string[] = [];
@@ -51,18 +59,20 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     return { ...(parent !== undefined ? { parent } : {}), ...(region > 0 ? { region } : {}) };
   };
 
-  const declare = (id: string, label?: string, role: StateRole = "normal"): void => {
+  const declare = (raw: string, lineNo: number, label?: string, role: StateRole = "normal"): string => {
+    const id = ids.take(raw, lineNo);
     const existing = states.get(id);
     if (!existing) {
       order.push(id);
       states.set(id, { id: id as StateId, label: label ?? id, role, ...membership() });
-      return;
+      return id;
     }
     // a later explicit label or role decl refines the state in place;
     // membership stays where the state was FIRST mentioned
     if (label !== undefined || role !== "normal") {
       states.set(id, { ...existing, label: label ?? existing.label, ...(role !== "normal" ? { role } : {}) });
     }
+    return id;
   };
 
   // [*] is start on the left of an arrow, end on the right; one shared
@@ -118,8 +128,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     if (trans) {
       const resolve = (token: string, role: "start" | "end"): StateId => {
         if (token === "[*]") return pseudo(role);
-        declare(token);
-        return token as StateId;
+        return declare(token, lineNo) as StateId;
       };
       const from = resolve(trans[1]!, "start");
       const to = resolve(trans[2]!, "end");
@@ -137,7 +146,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
     const note = line.match(new RegExp(`^[Nn]ote\\s+(left of|right of)\\s+(${ID})\\s*(?::\\s*(.*))?$`, "u"));
     if (note) {
       const position = note[1] === "left of" ? "leftOf" : "rightOf";
-      declare(note[2]!);
+      const target = declare(note[2]!, lineNo);
       let text: string;
       if (note[3] !== undefined) {
         text = unescapeLabel(note[3].trim());
@@ -161,52 +170,55 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
         text = unescapeLabel(body.join("\n"));
       }
       noteSeq += 1;
-      notes.push({ id: `note-${noteSeq}` as NoteId, target: note[2] as StateId, position, text });
+      notes.push({ id: `note-${noteSeq}` as NoteId, target: target as StateId, position, text });
       continue;
     }
 
     // state id <<choice|fork|join>>
     const special = line.match(new RegExp(`^state\\s+(${ID})\\s+<<(choice|fork|join)>>$`, "u"));
     if (special) {
-      declare(special[1]!, undefined, special[2] as StateRole);
+      declare(special[1]!, lineNo, undefined, special[2] as StateRole);
       continue;
     }
 
     // state "description" as id [{]
     const aliased = line.match(new RegExp(`^state\\s+"([^"]*)"\\s+as\\s+(${ID})\\s*(\\{)?$`, "u"));
     if (aliased) {
-      declare(aliased[2]!, unescapeLabel(aliased[1]!));
-      if (aliased[3] !== undefined) stack.push({ id: aliased[2] as StateId, openedAt: lineNo, region: 0 });
+      const id = declare(aliased[2]!, lineNo, unescapeLabel(aliased[1]!));
+      if (aliased[3] !== undefined) stack.push({ id: id as StateId, openedAt: lineNo, region: 0 });
       continue;
     }
 
     // state id [{]
     const decl = line.match(new RegExp(`^state\\s+(${ID})\\s*(\\{)?$`, "u"));
     if (decl) {
-      declare(decl[1]!);
-      if (decl[2] !== undefined) stack.push({ id: decl[1] as StateId, openedAt: lineNo, region: 0 });
+      const id = declare(decl[1]!, lineNo);
+      if (decl[2] !== undefined) stack.push({ id: id as StateId, openedAt: lineNo, region: 0 });
       continue;
     }
 
     // id : description
     const desc = line.match(new RegExp(`^(${ID})\\s*:\\s*(.+)$`, "u"));
     if (desc) {
-      declare(desc[1]!, unescapeLabel(desc[2]!.trim()));
+      declare(desc[1]!, lineNo, unescapeLabel(desc[2]!.trim()));
       continue;
     }
 
     // bare id
     if (ID_RE.test(line)) {
-      declare(line);
+      declare(line, lineNo);
       continue;
     }
 
     errors.push({ line: lineNo, message: `cannot parse: ${line}` });
   }
 
+  errors.push(...ids.errors());
   if (!headerSeen) errors.push({ line: 1, message: "empty diagram: missing header" });
   for (const open of stack) errors.push({ line: open.openedAt, message: `unclosed state block: ${open.id}` });
   if (errors.length > 0) return { ok: false, errors };
+  warnings.push(...ids.warnings());
+  warnings.sort((a, b) => a.line - b.line);
 
   return {
     ok: true,

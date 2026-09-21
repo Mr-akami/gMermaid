@@ -72,12 +72,13 @@ test("the property window toggles a message's activation and a participant type"
 test("the property window puts a lifeline into a new box and wraps a message in a rect", async ({ page }) => {
   const editor = await openEditor(page, "Sequence");
   await setCode(editor, `sequenceDiagram\n  participant a\n  participant b\n  a->>b: call\n`);
-  await expect(editor.locator("svg [data-element-id^='box-']")).toHaveCount(0);
+  await expect(editor.locator("svg [data-element-id^='box-'], svg [data-element-id^='pbx_']")).toHaveCount(0);
 
   await head(element(editor, "b")).click();
   await editor.getByLabel("Box", { exact: true }).selectOption("new");
   await expectCode(editor).toMatch(/box Group\n\s+participant b\n\s+end/);
-  await expect(editor.locator("svg [data-element-id^='box-']")).toHaveCount(1);
+  // a box born in the GUI carries the generated `pbx_` prefix
+  await expect(editor.locator("svg [data-element-id^='box-'], svg [data-element-id^='pbx_']")).toHaveCount(1);
 
   // a is put into the same box, which keeps both members contiguous
   await head(element(editor, "a")).click();

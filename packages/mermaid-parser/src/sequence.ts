@@ -23,7 +23,7 @@ import type {
   SequenceIR,
 } from "@gmermaid/ir";
 import { isColorToken, PARTICIPANT_KINDS } from "@gmermaid/ir";
-import { dropList, droppedWarning, prepareLines, unescapeLabel, type ParseError, type ParseResult, type ParseWarning } from "./common";
+import { dropList, droppedWarning, importedIds, prepareLines, unescapeLabel, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // Dialect the IR cannot hold is DISCARDED by design, same as `%%` comments:
 // frontmatter, `%%{init}%%` directives, `title`, `accTitle` / `accDescr`,
@@ -35,6 +35,31 @@ import { dropList, droppedWarning, prepareLines, unescapeLabel, type ParseError,
 // `autonumber` comes back numbered. Both report a warning.
 
 const DROPPED = dropList({ extra: ["title", "link", "links", "properties"] });
+
+// Words mermaid's sequence grammar claims before it reads a participant id,
+// verified against mermaid.js itself. A hand-typed id from this list is
+// rejected rather than rewritten — the id is the user's, and it is theirs to
+// fix.
+export const SEQUENCE_RESERVED_IDS: readonly string[] = [
+  "activate",
+  "actor",
+  "alt",
+  "autonumber",
+  "box",
+  "break",
+  "create",
+  "critical",
+  "deactivate",
+  "destroy",
+  "end",
+  "link",
+  "loop",
+  "note",
+  "opt",
+  "par",
+  "participant",
+  "rect",
+];
 
 // mermaid actor ids may hold any letter/digit (incl. non-ASCII), `_`, `-`, `.`
 const ID = "[\\p{L}\\p{N}_.-]+";
@@ -95,6 +120,9 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
   const warnings: ParseWarning[] = [];
   const lines = prepareLines(code, { drop: DROPPED, warnings });
 
+  // Lifeline ids are spelled verbatim in the text, so every id that comes in
+  // from it passes the import gate.
+  const ids = importedIds(SEQUENCE_RESERVED_IDS);
   const lifelines: Lifeline[] = [];
   const seen = new Set<string>();
   let msgSeq = 0;
@@ -108,7 +136,8 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
   const boxes: Box[] = [];
   let openBox: { id: BoxId; name: string; color?: string; lifelines: LifelineId[] } | undefined;
 
-  const declareLifeline = (id: string, name?: string, kind: ParticipantKind = "participant", explicit = false): void => {
+  const declareLifeline = (raw: string, lineNo: number, name?: string, kind: ParticipantKind = "participant", explicit = false): string => {
+    const id = ids.take(raw, lineNo);
     if (!seen.has(id)) {
       seen.add(id);
       lifelines.push({ id: id as LifelineId, name: name ?? id, kind });
@@ -118,6 +147,7 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
       if (i >= 0) lifelines[i] = { id: id as LifelineId, name: name ?? id, kind };
     }
     if (openBox && !openBox.lifelines.includes(id as LifelineId)) openBox.lifelines.push(id as LifelineId);
+    return id;
   };
 
   // Stack of open fragments; events append to the current branch.
@@ -183,37 +213,37 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
     const part = line.match(new RegExp(`^(participant|actor)\\s+${DECL_TAIL}$`, "u"));
     if (part) {
       const kind = participantKindOf(part[3]) ?? (part[1] === "actor" ? "actor" : "participant");
-      declareLifeline(part[2]!, part[4] !== undefined ? unescapeLabel(part[4].trim()) : undefined, kind, true);
+      declareLifeline(part[2]!, lineNo, part[4] !== undefined ? unescapeLabel(part[4].trim()) : undefined, kind, true);
       continue;
     }
 
     const created = line.match(new RegExp(`^create\\s+(?:(participant|actor)\\s+)?${DECL_TAIL}$`, "u"));
     if (created) {
       const kind = participantKindOf(created[3]) ?? (created[1] === "actor" ? "actor" : "participant");
-      declareLifeline(created[2]!, created[4] !== undefined ? unescapeLabel(created[4].trim()) : undefined, kind, true);
+      const id = declareLifeline(created[2]!, lineNo, created[4] !== undefined ? unescapeLabel(created[4].trim()) : undefined, kind, true);
       lifeSeq += 1;
-      const ev: Lifecycle = { kind: "create", id: `lifecycle-${lifeSeq}` as LifecycleId, lifeline: created[2]! as LifelineId };
+      const ev: Lifecycle = { kind: "create", id: `lifecycle-${lifeSeq}` as LifecycleId, lifeline: id as LifelineId };
       currentEvents().push(ev);
       continue;
     }
 
     const destroyed = line.match(new RegExp(`^destroy\\s+(${ID})$`, "u"));
     if (destroyed) {
-      declareLifeline(destroyed[1]!);
+      const id = declareLifeline(destroyed[1]!, lineNo);
       lifeSeq += 1;
-      const ev: Lifecycle = { kind: "destroy", id: `lifecycle-${lifeSeq}` as LifecycleId, lifeline: destroyed[1]! as LifelineId };
+      const ev: Lifecycle = { kind: "destroy", id: `lifecycle-${lifeSeq}` as LifecycleId, lifeline: id as LifelineId };
       currentEvents().push(ev);
       continue;
     }
 
     const act = line.match(new RegExp(`^(activate|deactivate)\\s+(${ID})$`, "u"));
     if (act) {
-      declareLifeline(act[2]!);
+      const id = declareLifeline(act[2]!, lineNo);
       actSeq += 1;
       const ev: Activation = {
         kind: "activation",
         id: `activation-${actSeq}` as ActivationId,
-        lifeline: act[2]! as LifelineId,
+        lifeline: id as LifelineId,
         on: act[1] === "activate",
       };
       currentEvents().push(ev);
@@ -223,14 +253,13 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
     const note = line.match(new RegExp(`^[Nn]ote\\s+(left of|right of|over)\\s+(${ID}(?:\\s*,\\s*${ID})?)\\s*:\\s*(.*)$`, "u"));
     if (note) {
       const position = note[1] === "left of" ? "leftOf" : note[1] === "right of" ? "rightOf" : "over";
-      const ids = note[2]!.split(",").map((s) => s.trim());
-      for (const id of ids) declareLifeline(id);
+      const targets = note[2]!.split(",").map((s) => s.trim()).map((raw) => declareLifeline(raw, lineNo));
       noteSeq += 1;
       const ev: Note = {
         kind: "note",
         id: `note-${noteSeq}` as NoteId,
         position,
-        lifelines: ids as unknown as readonly LifelineId[],
+        lifelines: targets as unknown as readonly LifelineId[],
         text: unescapeLabel(note[3]!.trim()),
       };
       currentEvents().push(ev);
@@ -325,14 +354,14 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
         errors.push({ line: lineNo, message: "cannot parse message endpoints" });
         continue;
       }
-      declareLifeline(from);
-      declareLifeline(to);
+      const fromId = declareLifeline(from, lineNo);
+      const toId = declareLifeline(to, lineNo);
       msgSeq += 1;
       const message: Message = {
         kind: "message",
         id: `message-${msgSeq}` as MessageId,
-        from: from as LifelineId,
-        to: to as LifelineId,
+        from: fromId as LifelineId,
+        to: toId as LifelineId,
         label,
         arrow: arrowHit.a.arrow,
         ...(activate !== undefined ? { activate } : {}),
@@ -344,12 +373,15 @@ export function parseSequence(code: string): ParseResult<SequenceIR> {
     errors.push({ line: lineNo, message: `cannot parse: ${line}` });
   }
 
+  errors.push(...ids.errors());
   if (!headerSeen) errors.push({ line: 1, message: "empty diagram: missing header" });
   for (const open of stack) {
     errors.push({ line: open.openedAt, message: `unclosed \`${open.kind}\` fragment` });
   }
   if (openBox) errors.push({ line: lines[lines.length - 1]?.line ?? 1, message: "unclosed `box`" });
   if (errors.length > 0) return { ok: false, errors };
+  warnings.push(...ids.warnings());
+  warnings.sort((a, b) => a.line - b.line);
 
   return {
     ok: true,

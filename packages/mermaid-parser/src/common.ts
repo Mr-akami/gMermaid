@@ -1,3 +1,5 @@
+import { repairedId } from "@gmermaid/ir";
+
 export interface ParseError {
   readonly line: number; // 1-based
   readonly message: string;
@@ -19,6 +21,46 @@ export type ParseResult<T> =
 /** The one wording for "we read this and dropped it". */
 export function droppedWarning(keyword: string, line: number): ParseWarning {
   return { line, message: `\`${keyword}\` is not represented in the editor and will be lost on save` };
+}
+
+/**
+ * The gate every id that comes in FROM THE TEXT passes through, for the kinds
+ * whose ids mermaid spells verbatim (flowchart, state, sequence). It answers
+ * the two ways an id can be unreadable to mermaid:
+ *
+ * - ours: an id minted before `ID_PREFIX` existed spells a keyword
+ *   (`subgraph-a6bde494`), and is silently renamed — repairing the file on
+ *   the next save. The rename is pure, so every reference to an old id lands
+ *   on the same new one; only the FIRST sighting is reported, since an id is
+ *   normally mentioned many times.
+ * - the user's: a hand-typed id that IS a keyword (`end`, `note`) is
+ *   rejected, not rewritten — what the user typed is theirs, and the code
+ *   pane shows the reason. `reserved` holds the words mermaid's own parser
+ *   refuses in an id position for that diagram kind.
+ */
+export function importedIds(reserved: readonly string[]) {
+  const keywords = new Set(reserved);
+  const renamed = new Map<string, { readonly to: string; readonly line: number }>();
+  const rejected = new Map<string, number>();
+  return {
+    /** The id to store for `raw` (unchanged unless `raw` is an old one). */
+    take(raw: string, line: number): string {
+      if (keywords.has(raw) && !rejected.has(raw)) rejected.set(raw, line);
+      const to = repairedId(raw);
+      if (to === undefined) return raw;
+      if (!renamed.has(raw)) renamed.set(raw, { to, line });
+      return to;
+    },
+    errors(): ParseError[] {
+      return [...rejected].map(([id, line]) => ({ line, message: `\`${id}\` is a mermaid keyword, so it cannot be an id` }));
+    },
+    warnings(): ParseWarning[] {
+      return [...renamed].map(([from, { to, line }]) => ({
+        line,
+        message: `\`${from}\` starts with a mermaid keyword, so it was renamed to \`${to}\``,
+      }));
+    },
+  };
 }
 
 /** Inverse of codegen's escapeLabel. Order mirrors codegen (entities last). */
