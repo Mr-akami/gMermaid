@@ -75,7 +75,7 @@ export function createGMermaidServer(): GMermaidServer {
     {
       title: "Review Mermaid diagram",
       description:
-        "Open a visual Mermaid editor so the user can inspect and correct a flowchart, sequence diagram, class diagram, or state diagram. Use the confirmed result as authoritative.",
+        `Open a visual Mermaid editor so the user can inspect and correct a diagram. Supported kinds: ${DIAGRAM_KINDS.join(", ")}. Use the confirmed result as authoritative.`,
       inputSchema: {
         mermaid: z.string().min(1).max(256 * 1024),
         title: z.string().max(120).optional(),

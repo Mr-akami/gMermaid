@@ -10,10 +10,13 @@ import type {
   FlowchartEdge,
   FlowchartIR,
   FragmentId,
+  GanttIR,
   JourneyIR,
   LifecycleId,
   LifelineId,
   MessageId,
+  MindmapIR,
+  MindmapNodeId,
   NamespaceId,
   NodeId,
   NoteId,
@@ -31,7 +34,9 @@ import { FLOWCHART_SHAPES } from "@gmermaid/ir";
 import mermaid from "mermaid";
 import { flowchartToMermaid } from "./flowchart";
 import { classToMermaid } from "./classdiagram";
+import { ganttToMermaid } from "./gantt";
 import { journeyToMermaid } from "./journey";
+import { mindmapToMermaid } from "./mindmap";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
@@ -59,6 +64,7 @@ const G = (s: string) => s as import("@gmermaid/ir").SubgraphId;
 const TS = (s: string) => s as SectionId;
 const TP = (s: string) => s as import("@gmermaid/ir").PeriodId;
 const TE = (s: string) => s as import("@gmermaid/ir").EventId;
+const MM = (s: string) => s as MindmapNodeId;
 
 describe("mermaid.js accepts generated flowcharts", () => {
   const base: FlowchartIR = {
@@ -521,6 +527,56 @@ describe("mermaid.js accepts generated requirement diagrams", () => {
   });
 });
 
+describe("mermaid.js accepts generated gantt charts", () => {
+  it("parses every diagram setting, tag, id and start/end form", async () => {
+    const ir: GanttIR = {
+      kind: "gantt",
+      title: "Adding GANTT diagram functionality to mermaid",
+      dateFormat: "YYYY-MM-DD",
+      axisFormat: "%d/%m",
+      tickInterval: "1week",
+      excludes: ["weekends", "2014-01-10"],
+      weekend: "friday",
+      todayMarker: "stroke-width:5px,stroke:#0f0,opacity:0.5",
+      inclusiveEndDates: true,
+      sections: [
+        {
+          id: "s1" as SectionId,
+          name: "A section",
+          tasks: [
+            { id: "t1" as TaskId, name: "Completed task", taskId: "des1", tags: ["done"], start: { kind: "date", value: "2014-01-06" }, end: { kind: "date", value: "2014-01-08" } },
+            { id: "t2" as TaskId, name: "Active task", taskId: "des2", tags: ["active"], start: { kind: "date", value: "2014-01-09" }, end: { kind: "duration", value: "3d" } },
+            { id: "t3" as TaskId, name: "Critical path", tags: ["crit", "done"], start: { kind: "after", ids: ["des1", "des2"] }, end: { kind: "duration", value: "2d" } },
+            { id: "t4" as TaskId, name: "Add to mermaid", tags: [], start: { kind: "prev" }, end: { kind: "until", ids: ["isadded"] } },
+            { id: "t5" as TaskId, name: "Functionality added", taskId: "isadded", tags: ["milestone"], start: { kind: "date", value: "2014-01-25" }, end: { kind: "duration", value: "0d" } },
+            { id: "t6" as TaskId, name: "Deadline", taskId: "v1", tags: ["vert"], start: { kind: "date", value: "2014-01-28" }, end: { kind: "duration", value: "0d" } },
+          ],
+        },
+      ],
+    };
+    await expectMermaidAccepts(ganttToMermaid(ir));
+  });
+
+  it("parses a bare chart, a nameless leading section and `todayMarker off`", async () => {
+    await expectMermaidAccepts(ganttToMermaid({ kind: "gantt", sections: [] }));
+    const ir: GanttIR = {
+      kind: "gantt",
+      todayMarker: "off",
+      sections: [
+        {
+          id: "s0" as SectionId,
+          name: "",
+          tasks: [
+            { id: "t1" as TaskId, name: "apple", taskId: "a", tags: [], start: { kind: "date", value: "2017-07-20" }, end: { kind: "duration", value: "1w" } },
+            { id: "t2" as TaskId, name: "kiwi", taskId: "d", tags: [], start: { kind: "date", value: "2017-07-20" }, end: { kind: "until", ids: ["a"] } },
+          ],
+        },
+      ],
+    };
+    await expectMermaidAccepts(ganttToMermaid(ir));
+  });
+});
+
 describe("mermaid.js accepts generated timelines", () => {
   it("parses a title, sections, multi-event periods and a period without events", async () => {
     const ir: TimelineIR = {
@@ -554,6 +610,34 @@ describe("mermaid.js accepts generated timelines", () => {
   it("parses a bare timeline and a title-only timeline", async () => {
     await expectMermaidAccepts(timelineToMermaid({ kind: "timeline", sections: [] }));
     await expectMermaidAccepts(timelineToMermaid({ kind: "timeline", title: "Just a title", sections: [] }));
+  });
+});
+
+describe("mermaid.js accepts generated mindmaps", () => {
+  it("parses every shape, icons, classes and awkward label characters", async () => {
+    const ir: MindmapIR = {
+      kind: "mindmap",
+      nodes: [
+        { id: MM("root"), label: "mindmap", shape: "circle" },
+        { id: MM("sq"), label: "f(x) [y] {z}", shape: "square", parent: MM("root"), icon: "fa fa-book" },
+        { id: MM("ro"), label: 'say "hi" & <b>#1</b>', shape: "rounded", parent: MM("sq") },
+        { id: MM("ci"), label: "multi\nline", shape: "circle", parent: MM("root") },
+        { id: MM("ba"), label: "bang", shape: "bang", parent: MM("ci") },
+        { id: MM("cl"), label: "cloud", shape: "cloud", parent: MM("root"), classes: ["urgent", "large"] },
+        { id: MM("hx"), label: "hexagon", shape: "hexagon", parent: MM("cl") },
+        // the default shape is bare text, where mermaid's lexer stops at any
+        // bracket: those have to travel as numeric entities
+        { id: MM("df"), label: "plain (paren) [text]", shape: "default", parent: MM("root") },
+        { id: MM("uni"), label: "日本語", shape: "default", parent: MM("df") },
+      ],
+    };
+    await expectMermaidAccepts(mindmapToMermaid(ir));
+  });
+
+  it("parses a root-only mindmap", async () => {
+    await expectMermaidAccepts(
+      mindmapToMermaid({ kind: "mindmap", nodes: [{ id: MM("only"), label: "only idea", shape: "default" }] }),
+    );
   });
 });
 

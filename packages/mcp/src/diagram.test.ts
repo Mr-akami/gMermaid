@@ -9,6 +9,7 @@ describe("validateDiagram", () => {
     ["state", "stateDiagram-v2\n  A --> B"],
     ["requirement", "requirementDiagram\n  requirement a {\n  }"],
     ["timeline", "timeline\n  2002 : LinkedIn"],
+    ["gantt", "gantt\n  section S\n  A task :a1, 2014-01-01, 30d"],
   ] as const)("accepts a supported %s", (kind, code) => {
     expect(validateDiagram(code)).toEqual({ ok: true, kind });
   });

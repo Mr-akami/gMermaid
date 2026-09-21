@@ -19,6 +19,10 @@ export * from "./requirement";
 export * from "./requirementActions";
 export * from "./usecase";
 export * from "./usecaseActions";
+export * from "./mindmap";
+export * from "./mindmapActions";
+export * from "./gantt";
+export * from "./ganttActions";
 
 import type { ClassIR } from "./classdiagram";
 import type { FlowchartIR } from "./flowchart";
@@ -29,4 +33,19 @@ import type { TimelineIR } from "./timeline";
 import type { JourneyIR } from "./journey";
 import type { UsecaseIR } from "./usecase";
 
-export type DiagramIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR | TimelineIR | UsecaseIR;
+import type { MindmapIR } from "./mindmap";
+
+import type { GanttIR } from "./gantt";
+
+export type DiagramIR =
+  | FlowchartIR
+  | SequenceIR
+  | ClassIR
+  | StateIR
+  | RequirementIR
+  | JourneyIR
+  | TimelineIR
+  | GanttIR
+  | MindmapIR
+  | UsecaseIR;
+

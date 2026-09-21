@@ -1,8 +1,31 @@
 # gMermaid
 
-A GUI editor for Mermaid flowcharts, sequence diagrams, class diagrams, and
-state diagrams. The same distribution also runs a local MCP server, so an LLM
-can hand a diagram to a human for review and read back the confirmed source.
+A GUI editor for Mermaid diagrams. The same distribution also runs a local MCP
+server, so an LLM can hand a diagram to a human for review and read back the
+confirmed source.
+
+## Diagrams
+
+Every kind below is a full vertical slice: the Mermaid text parses into the
+intermediate model, the canvas and the text stay in sync, a property window
+edits the selected element, and the generated text is checked against
+mermaid.js itself in the test suite.
+
+| Diagram | Header | Notable support |
+| --- | --- | --- |
+| Flowchart | `flowchart` / `graph` | 37 node shapes incl. `@{ shape: … }`, line style and both arrow heads, edge length, subgraphs with direction |
+| Sequence | `sequenceDiagram` | activations, `box`, `rect`, `create`/`destroy`, 8 participant types, autonumber, notes |
+| Class | `classDiagram` | reversed, two-way and lollipop relations, generics, `*`/`$` classifiers, annotations, notes, namespaces |
+| State | `stateDiagram-v2` | composites, concurrency regions, choice/fork/join, self-transitions, block notes |
+| Requirement | `requirementDiagram` | 6 requirement types, elements, 7 relation types, risk and verify method |
+| User journey | `journey` | sections, tasks, scores, actors |
+| Timeline | `timeline` | sections, periods, multiple events per period |
+| Gantt | `gantt` | date formats, durations, `after`/`until` dependencies, milestones, excludes |
+| Mindmap | `mindmap` | indentation hierarchy, 7 node shapes, icons, drag to re-parent |
+
+Styling and interaction syntax (`classDef`, `style`, `:::`, `click`, `%%`
+comments) is accepted on import and dropped: it carries no meaning in the
+editor, so it does not survive a round trip.
 
 Everything ships as one npm package: [`@mr-akami/gmermaid`](https://www.npmjs.com/package/@mr-akami/gmermaid).
 
@@ -37,7 +60,7 @@ For clients configured with JSON, use:
 }
 ```
 
-The LLM calls `review_mermaid` with Mermaid source. MCP Apps-capable clients show the editor inline; other local clients open it in the default browser. After the user selects **LLMへ返す**, the LLM receives the canonical source through `get_mermaid_review`.
+The LLM calls `review_mermaid` with Mermaid source for any diagram kind above. MCP Apps-capable clients show the editor inline; other local clients open it in the default browser. After the user selects **LLMへ返す**, the LLM receives the canonical source through `get_mermaid_review`.
 
 ChatGPT web does not read local MCP configuration; use ChatGPT desktop or another local MCP client for the `npx` distribution.
 

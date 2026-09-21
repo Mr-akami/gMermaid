@@ -29,6 +29,7 @@ export type ActorId = Id<"actor">;
 export type UseCaseId = Id<"usecase">;
 export type BoundaryId = Id<"boundary">;
 export type UsecaseRelationId = Id<"usecaseRelation">;
+export type MindmapNodeId = Id<"mindmapNode">;
 
 export type AnyId =
   | NodeId
@@ -56,7 +57,8 @@ export type AnyId =
   | ActorId
   | UseCaseId
   | BoundaryId
-  | UsecaseRelationId;
+  | UsecaseRelationId
+  | MindmapNodeId;
 
 /**
  * Collision-proof id generation. Parser-imported diagrams carry their own
