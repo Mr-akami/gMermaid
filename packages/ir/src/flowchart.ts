@@ -124,8 +124,8 @@ export interface FlowchartSubgraph {
   readonly id: SubgraphId;
   readonly label: string;
   readonly parent?: SubgraphId;
-  /** `direction X` inside the block. Preserved for the mermaid text; the
-   * built-in layout engine cannot honor per-cluster direction and ignores it. */
+  /** `direction X` inside the block. The layout honors it: a subgraph gets a
+   * dagre graph of its own, so its rankdir is its own too. */
   readonly direction?: FlowchartDirection;
 }
 

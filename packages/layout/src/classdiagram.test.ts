@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClassIR, ClassId, NamespaceId, NoteId, RelationId } from "@gmermaid/ir";
 import { fixedWidthMeasurer } from "./measurer";
-import { layoutClassDiagram } from "./classdiagram";
+import { layoutClassDiagram, NAMESPACE_TITLE_BAND } from "./classdiagram";
 
 const ir: ClassIR = {
   kind: "class",
@@ -133,5 +133,69 @@ describe("layoutClassDiagram", () => {
     };
     const result = layoutClassDiagram(rich, fixedWidthMeasurer());
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+});
+
+const cls = (name: string, namespace?: NamespaceId) => ({
+  id: name as ClassId,
+  name,
+  stereotypes: [],
+  attributes: [],
+  methods: [],
+  ...(namespace !== undefined ? { namespace } : {}),
+});
+
+const pair = (namespace?: NamespaceId): ClassIR => ({
+  kind: "class",
+  direction: "TB",
+  classes: [cls("Alpha", namespace), cls("Beta", namespace)],
+  relations: [
+    { id: "r1" as RelationId, from: "Alpha" as ClassId, to: "Beta" as ClassId, line: "solid", headFrom: "none", headTo: "arrow" },
+  ],
+  namespaces: namespace !== undefined ? [{ id: namespace, name: "ns" }] : [],
+  notes: [],
+});
+
+/** Distance dagre left between the two related classes. */
+const classGap = (source: ClassIR): number => {
+  const l = layoutClassDiagram(source, fixedWidthMeasurer());
+  const box = (id: string) => l.classes.find((c) => c.id === id)!.rect;
+  return box("Beta").y - (box("Alpha").y + box("Alpha").h);
+};
+
+describe("a namespace frame costs nothing outside itself", () => {
+  it("keeps the rank gap the same inside a frame as outside one", () => {
+    // a dagre cluster adds border ranks: the same two classes used to sit 3x
+    // further apart once a namespace was drawn around them
+    expect(classGap(pair("ns" as NamespaceId))).toBeCloseTo(classGap(pair()), 6);
+  });
+
+  it("insets the members inside the frame, title band clear", () => {
+    const l = layoutClassDiagram(pair("ns" as NamespaceId), fixedWidthMeasurer());
+    const frame = l.namespaces[0]!.rect;
+    for (const c of l.classes) {
+      expect(c.rect.x).toBeGreaterThan(frame.x);
+      expect(c.rect.x + c.rect.w).toBeLessThanOrEqual(frame.x + frame.w);
+      expect(c.rect.y).toBeGreaterThanOrEqual(frame.y + NAMESPACE_TITLE_BAND);
+      expect(c.rect.y + c.rect.h).toBeLessThanOrEqual(frame.y + frame.h);
+    }
+    expect(JSON.parse(JSON.stringify(l))).toEqual(l);
+  });
+
+  it("carries a note's link across the frame to the class it names", () => {
+    const withNote: ClassIR = {
+      ...pair("ns" as NamespaceId),
+      notes: [{ id: "note-1" as NoteId, text: "a note", target: "Alpha" as ClassId }],
+    };
+    const l = layoutClassDiagram(withNote, fixedWidthMeasurer());
+    const target = l.classes.find((c) => c.id === "Alpha")!.rect;
+    const link = l.notes[0]!.link!;
+    const tip = link.at(-1)!;
+    const onBorder =
+      Math.abs(tip.x - target.x) < 0.01 ||
+      Math.abs(tip.x - (target.x + target.w)) < 0.01 ||
+      Math.abs(tip.y - target.y) < 0.01 ||
+      Math.abs(tip.y - (target.y + target.h)) < 0.01;
+    expect(onBorder).toBe(true);
   });
 });

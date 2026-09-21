@@ -13,7 +13,8 @@ import type {
   UsecaseRelationId,
 } from "@gmermaid/ir";
 import { collisionIndex } from "./collision";
-import { placeSelfLoopLabel } from "./compound";
+import { bboxOf, borderCrossing, placeSelfLoopLabel } from "./compound";
+import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
 
@@ -100,70 +101,261 @@ export interface UsecaseLayout {
 /** What is drawn for an element: its label, or its identifier when bare. */
 const textOf = (x: { name: string; label?: string }): string => x.label ?? x.name;
 
-export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayout {
-  const g = new dagre.graphlib.Graph({ multigraph: true, compound: true });
-  g.setGraph({ rankdir: ir.direction ?? "TB", nodesep: 45, ranksep: 55 });
-  g.setDefaultEdgeLabel(() => ({}));
+/** include / extend name themselves on the line, as mermaid draws them. */
+const drawnLabel = (r: { kind?: "include" | "extend"; label?: string }): string | undefined =>
+  r.kind !== undefined ? `«${r.kind}»` : r.label;
 
+/** A routed relation in the coordinates of the container that produced it. */
+interface Route {
+  readonly points: Point[];
+  readonly labelPos: Point;
+}
+
+/**
+ * The stretch of a relation inside the boundary it crosses. dagre only sees
+ * one container at a time, so a relation reaching into a frame is handed to
+ * that frame's own graph too, attached to a near-zero PROXY standing in for
+ * whatever is outside — otherwise the line would cut straight through the
+ * elements between the border and its endpoint.
+ */
+interface Leg {
+  readonly id: UsecaseRelationId;
+  readonly end: "from" | "to";
+  readonly target: string;
+}
+
+/** The proxy that stands in for the far side of a crossing edge. Not zero:
+ * dagre refuses to intersect a rectangle with no area. */
+const PROXY_SIZE = { width: 1, height: 1 } as const;
+
+const proxyId = (id: UsecaseRelationId, end: "from" | "to"): string => `\u0000${id}|${end}`;
+
+export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayout {
   const memberCount = new Map<BoundaryId, number>();
   for (const a of ir.actors) if (a.boundary !== undefined) memberCount.set(a.boundary, (memberCount.get(a.boundary) ?? 0) + 1);
   for (const u of ir.usecases) if (u.boundary !== undefined) memberCount.set(u.boundary, (memberCount.get(u.boundary) ?? 0) + 1);
   const emptyFrames = new Set(ir.boundaries.filter((b) => (memberCount.get(b.id) ?? 0) === 0).map((b) => b.id));
 
+  const size = new Map<string, { width: number; height: number }>();
   for (const a of ir.actors) {
-    const label = textOf(a);
-    const labelSize = measure.measure(label, LABEL_FONT);
+    const labelSize = measure.measure(textOf(a), LABEL_FONT);
     const stereoW = a.stereotype !== undefined ? measure.measure(`«${a.stereotype}»`, SMALL_FONT).w : 0;
-    g.setNode(a.id, {
+    size.set(a.id, {
       width: Math.max(GLYPH_W, labelSize.w, stereoW) + 8,
       height: GLYPH_H + LABEL_GAP + labelSize.h + (a.stereotype !== undefined ? STEREOTYPE_H : 0),
     });
   }
 
   for (const u of ir.usecases) {
-    const label = textOf(u);
-    const labelSize = measure.measure(label, LABEL_FONT);
+    const labelSize = measure.measure(textOf(u), LABEL_FONT);
     const stereoW = u.stereotype !== undefined ? measure.measure(`«${u.stereotype}»`, SMALL_FONT).w : 0;
     const padX = u.shape === "ellipse" ? ELLIPSE_PAD_X : RECT_PAD_X;
     const padY = u.shape === "ellipse" ? ELLIPSE_PAD_Y : RECT_PAD_Y;
-    g.setNode(u.id, {
+    size.set(u.id, {
       width: Math.max(MIN_USECASE_W, Math.max(labelSize.w, stereoW) + padX * 2),
       height: Math.max(MIN_USECASE_H, labelSize.h + padY * 2 + (u.stereotype !== undefined ? STEREOTYPE_H : 0)),
     });
   }
 
-  for (const b of ir.boundaries) {
-    g.setNode(b.id, emptyFrames.has(b.id) ? { width: EMPTY_FRAME.w, height: EMPTY_FRAME.h } : {});
-  }
-  for (const a of ir.actors) if (a.boundary !== undefined && !emptyFrames.has(a.boundary)) g.setParent(a.id, a.boundary);
-  for (const u of ir.usecases) if (u.boundary !== undefined && !emptyFrames.has(u.boundary)) g.setParent(u.id, u.boundary);
+  const boundaryOf = new Map<string, BoundaryId | undefined>([
+    ...ir.actors.map((a): [string, BoundaryId | undefined] => [a.id, a.boundary]),
+    ...ir.usecases.map((u): [string, BoundaryId | undefined] => [u.id, u.boundary]),
+  ]);
+  const membersOf = (b: BoundaryId | undefined): string[] =>
+    [...size.keys()].filter((id) => boundaryOf.get(id) === b);
 
   for (const r of ir.relations) {
-    if (!g.hasNode(r.from) || !g.hasNode(r.to)) {
-      throw new Error(`layoutUsecase: relation ${r.id} references a missing node`);
+    for (const end of [r.from, r.to] as const) {
+      if (!size.has(end)) throw new Error(`layoutUsecase: relation ${r.id} references a missing node`);
     }
-    // dagre cannot route self-edges — they are synthesized after layout as a
-    // rectangular detour off the node's right side (cf. the class layout)
-    if (r.from !== r.to) g.setEdge(r.from, r.to, {}, r.id);
   }
 
-  dagre.layout(g);
+  // Which graph a relation is routed in: the boundary that holds both ends, or
+  // the diagram. One that crosses a frame is routed to the frame — a boundary
+  // is a plain node in the outer graph, never a dagre cluster, because dagre's
+  // compound layout adds border ranks that stretch every rank gap in the
+  // diagram (measured: 55px between two nodes became 165px with one frame).
+  interface Placed {
+    readonly id: UsecaseRelationId;
+    readonly from: string;
+    readonly to: string;
+    /** what is drawn on the line — dagre keeps a gap clear for it */
+    readonly label?: string;
+  }
+  const relationsIn = new Map<string, Placed[]>();
+  const legsIn = new Map<BoundaryId, Leg[]>();
+  const ROOT = "";
+  for (const r of ir.relations) {
+    // dagre cannot route self-edges — they are synthesized after layout as a
+    // rectangular detour off the node's right side (cf. the class layout)
+    if (r.from === r.to) continue;
+    const bf = boundaryOf.get(r.from);
+    const bt = boundaryOf.get(r.to);
+    const container = bf === bt ? bf : undefined;
+    const key = container ?? ROOT;
+    const lift = (id: string) => (container === undefined ? (boundaryOf.get(id) ?? id) : id);
+    const drawn = drawnLabel(r);
+    relationsIn.set(key, [
+      ...(relationsIn.get(key) ?? []),
+      { id: r.id, from: lift(r.from), to: lift(r.to), ...(drawn !== undefined ? { label: drawn } : {}) },
+    ]);
+    if (container !== undefined) continue;
+    for (const [end, node] of [
+      ["from", r.from],
+      ["to", r.to],
+    ] as const) {
+      const frame = boundaryOf.get(node);
+      if (frame === undefined) continue;
+      legsIn.set(frame, [...(legsIn.get(frame) ?? []), { id: r.id, end, target: node }]);
+    }
+  }
 
-  const rectOf = (id: string, frame: boolean): Rect => {
-    const pos = g.node(id);
-    // cluster rects come back tight around members — expand for border + title
-    const grow = frame ? FRAME_PAD : 0;
-    const growTop = frame ? FRAME_TITLE_H : 0;
+  interface SubLayout {
+    readonly w: number;
+    readonly h: number;
+    readonly rects: Map<string, Rect>;
+    readonly paths: Map<UsecaseRelationId, Route>;
+    /** by `${id}|${end}` — the piece of a crossing relation routed in here */
+    readonly legs: Map<string, Point[]>;
+  }
+
+  /** Everything directly inside `boundary` (undefined = the diagram) in a
+   * dagre graph of its own. A boundary enters the diagram's graph as a single
+   * node the size of its finished contents. */
+  const layoutContainer = (boundary: BoundaryId | undefined, frames: Map<BoundaryId, SubLayout>): SubLayout => {
+    const g = new dagre.graphlib.Graph({ multigraph: true });
+    g.setGraph({ rankdir: ir.direction ?? "TB", nodesep: 45, ranksep: 55 });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    const kids = membersOf(boundary);
+    for (const id of kids) g.setNode(id, size.get(id)!);
+    if (boundary === undefined) {
+      for (const b of ir.boundaries) {
+        const sub = frames.get(b.id);
+        g.setNode(b.id, sub ? { width: sub.w, height: sub.h } : { width: EMPTY_FRAME.w, height: EMPTY_FRAME.h });
+      }
+    }
+
+    const relations = relationsIn.get(boundary ?? ROOT) ?? [];
+    // telling dagre the label's measured size is what keeps a long label off
+    // the nodes its relation runs between (cf. the flowchart layout)
+    for (const r of relations) g.setEdge(r.from, r.to, edgeLabelSize(r.label, measure, SMALL_FONT), r.id);
+
+    // a relation crossing this frame is routed inside it too, from a proxy
+    // that stands for everything outside
+    const legs = boundary !== undefined ? (legsIn.get(boundary) ?? []) : [];
+    for (const leg of legs) {
+      const proxy = proxyId(leg.id, leg.end);
+      g.setNode(proxy, PROXY_SIZE);
+      if (leg.end === "to") g.setEdge(proxy, leg.target, {}, `${leg.id}|leg`);
+      else g.setEdge(leg.target, proxy, {}, `${leg.id}|leg`);
+    }
+
+    dagre.layout(g);
+
+    const proxies = new Set(legs.map((leg) => proxyId(leg.id, leg.end)));
+    const local = new Map<string, Rect>();
+    for (const id of g.nodes()) {
+      if (proxies.has(id)) continue;
+      const p = g.node(id);
+      local.set(id, { x: p.x - p.width / 2, y: p.y - p.height / 2, w: p.width, h: p.height });
+    }
+    const legRoutes = new Map<string, Point[]>();
+    for (const leg of legs) {
+      const proxy = proxyId(leg.id, leg.end);
+      const e = leg.end === "to" ? g.edge(proxy, leg.target, `${leg.id}|leg`) : g.edge(leg.target, proxy, `${leg.id}|leg`);
+      legRoutes.set(`${leg.id}|${leg.end}`, e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y })));
+    }
+    const routes = new Map<UsecaseRelationId, Route>();
+    for (const r of relations) {
+      const e = g.edge(r.from, r.to, r.id);
+      const points = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
+      // dagre places a sized label itself; without one, sit just above the line
+      const mid = points[Math.floor(points.length / 2)]!;
+      const labelPos = typeof e.x === "number" && typeof e.y === "number" ? { x: e.x, y: e.y } : { x: mid.x, y: mid.y - 6 };
+      routes.set(r.id, { points, labelPos });
+    }
+
+    // the frame wraps its members, with the title band left clear above them
+    const framed = boundary !== undefined;
+    const extent = [
+      ...local.values(),
+      ...[...routes.values()].flatMap((r) => [...r.points, r.labelPos]).map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })),
+      ...[...legRoutes.values()].flat().map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 })),
+    ];
+    const inner = bboxOf(extent);
+    const offX = framed ? FRAME_PAD - inner.x : 0;
+    const offY = framed ? FRAME_TITLE_H - inner.y : 0;
+    const graph = g.graph();
+    const rects = new Map<string, Rect>();
+    for (const [id, r] of local) rects.set(id, { ...r, x: r.x + offX, y: r.y + offY });
+    const paths = new Map<UsecaseRelationId, Route>();
+    for (const [id, r] of routes) {
+      paths.set(id, {
+        points: r.points.map((p) => ({ x: p.x + offX, y: p.y + offY })),
+        labelPos: { x: r.labelPos.x + offX, y: r.labelPos.y + offY },
+      });
+    }
+
+    const legPaths = new Map<string, Point[]>();
+    for (const [key, pts] of legRoutes) legPaths.set(key, pts.map((p) => ({ x: p.x + offX, y: p.y + offY })));
+
+    // dagre reports -Infinity for an empty graph — clamp to a sane empty canvas
     return {
-      x: pos.x - pos.width / 2 - grow,
-      y: pos.y - pos.height / 2 - growTop,
-      w: pos.width + grow * 2,
-      h: pos.height + growTop + grow,
+      w: framed ? inner.w + FRAME_PAD * 2 : Number.isFinite(graph.width) ? graph.width! : 200,
+      h: framed ? inner.h + FRAME_TITLE_H + FRAME_PAD : Number.isFinite(graph.height) ? graph.height! : 100,
+      rects,
+      paths,
+      legs: legPaths,
     };
   };
 
+  const frames = new Map<BoundaryId, SubLayout>();
+  for (const b of ir.boundaries) if (!emptyFrames.has(b.id)) frames.set(b.id, layoutContainer(b.id, frames));
+  const root = layoutContainer(undefined, frames);
+
+  const rectOf = (id: string): Rect => {
+    const own = root.rects.get(id);
+    if (own !== undefined) return own;
+    // a member: its coordinates are local to the frame it sits in
+    const frame = root.rects.get(boundaryOf.get(id)!)!;
+    const inside = frames.get(boundaryOf.get(id)!)!.rects.get(id)!;
+    return { ...inside, x: inside.x + frame.x, y: inside.y + frame.y };
+  };
+  /** The drawn polyline and where its label goes. The label stays where dagre
+   * kept a gap for it, never on the leg that dives into a frame. */
+  const pathOf = (id: UsecaseRelationId, from: string, to: string): Route => {
+    const own = root.paths.get(id);
+    if (own === undefined) {
+      const frame = root.rects.get(boundaryOf.get(from)!)!;
+      const inside = frames.get(boundaryOf.get(from)!)!.paths.get(id)!;
+      const shift = (p: Point) => ({ x: p.x + frame.x, y: p.y + frame.y });
+      return { points: inside.points.map(shift), labelPos: shift(inside.labelPos) };
+    }
+    // dagre stopped the line at the frame: stitch on the stretch the frame
+    // routed for it, entering at the border point that aims at it
+    let points = own.points;
+    const legOf = (end: "from" | "to", node: string): Point[] | undefined => {
+      const frame = boundaryOf.get(node);
+      if (frame === undefined) return undefined;
+      const box = root.rects.get(frame)!;
+      return frames.get(frame)!.legs.get(`${id}|${end}`)!.map((p) => ({ x: p.x + box.x, y: p.y + box.y }));
+    };
+    const into = legOf("to", to);
+    if (into !== undefined) {
+      const hit = borderCrossing(points.at(-2) ?? points.at(-1)!, into[0]!, rectOf(boundaryOf.get(to)!));
+      points = [...points.slice(0, -1), hit ?? points.at(-1)!, ...into];
+    }
+    const outOf = legOf("from", from);
+    if (outOf !== undefined) {
+      const hit = borderCrossing(points[1] ?? points[0]!, outOf.at(-1)!, rectOf(boundaryOf.get(from)!));
+      points = [...outOf, hit ?? points[0]!, ...points.slice(1)];
+    }
+    return { points, labelPos: own.labelPos };
+  };
+
   const actors: ActorGlyph[] = ir.actors.map((a) => {
-    const rect = rectOf(a.id, false);
+    const rect = rectOf(a.id);
     return {
       id: a.id,
       rect,
@@ -177,7 +369,7 @@ export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayo
 
   const usecases: UseCaseBox[] = ir.usecases.map((u) => ({
     id: u.id,
-    rect: rectOf(u.id, false),
+    rect: rectOf(u.id),
     label: textOf(u),
     shape: u.shape,
     business: u.business === true,
@@ -186,7 +378,7 @@ export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayo
 
   const boundaries: UsecaseBoundaryFrame[] = ir.boundaries.map((b) => ({
     id: b.id,
-    rect: rectOf(b.id, !emptyFrames.has(b.id)),
+    rect: rectOf(b.id),
     label: textOf(b),
     type: b.type,
   }));
@@ -253,10 +445,9 @@ export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayo
         selfMaxRight = Math.max(selfMaxRight, spot.right + 6);
       }
     } else {
-      const e = g.edge(r.from, r.to, r.id);
-      points = e.points.map((p: { x: number; y: number }) => ({ x: p.x, y: p.y }));
-      const mid = points[Math.floor(points.length / 2)]!;
-      labelPos = { x: mid.x, y: mid.y - 6 };
+      const route = pathOf(r.id, r.from, r.to);
+      points = route.points;
+      labelPos = route.labelPos;
     }
     // include / extend name themselves on the edge, as mermaid draws them
     const text = r.kind !== undefined ? `«${r.kind}»` : r.label;
@@ -271,14 +462,11 @@ export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayo
     };
   });
 
-  const graph = g.graph();
-  // dagre reports -Infinity for an empty graph — clamp to a sane empty canvas
-  let w = graph.width !== undefined && Number.isFinite(graph.width) ? graph.width : 200;
-  let h = graph.height !== undefined && Number.isFinite(graph.height) ? graph.height : 100;
-  w = Math.max(w, selfMaxRight);
-  for (const b of boundaries) {
-    w = Math.max(w, b.rect.x + b.rect.w);
-    h = Math.max(h, b.rect.y + b.rect.h);
+  let w = Math.max(root.w, selfMaxRight);
+  let h = root.h;
+  for (const rect of [...boundaries.map((b) => b.rect), ...actors.map((a) => a.rect), ...usecases.map((u) => u.rect)]) {
+    w = Math.max(w, rect.x + rect.w);
+    h = Math.max(h, rect.y + rect.h);
   }
   for (const n of notes) {
     w = Math.max(w, n.rect.x + n.rect.w);

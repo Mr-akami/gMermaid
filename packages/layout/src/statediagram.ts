@@ -3,7 +3,7 @@ import type { NoteId, StateDirection, StateIR, StateId, StateNode, StateRole, Tr
 import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
-import { placeSelfLoopLabel, selfLoopPoints, SELF_LOOP_REACH } from "./compound";
+import { bboxOf, placeSelfLoopLabel, selfLoopPoints, SELF_LOOP_REACH } from "./compound";
 import { collisionIndex } from "./collision";
 
 const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
@@ -112,17 +112,6 @@ interface SubLayout {
   readonly regions: StateRegionBand[];
   readonly separators: RegionSeparator[];
 }
-
-const bboxOf = (rects: readonly Rect[]): Rect => {
-  const x = Math.min(...rects.map((r) => r.x));
-  const y = Math.min(...rects.map((r) => r.y));
-  return {
-    x,
-    y,
-    w: Math.max(...rects.map((r) => r.x + r.w)) - x,
-    h: Math.max(...rects.map((r) => r.y + r.h)) - y,
-  };
-};
 
 export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLayout {
   const byId = new Map<StateId, StateNode>(ir.states.map((s) => [s.id, s]));
