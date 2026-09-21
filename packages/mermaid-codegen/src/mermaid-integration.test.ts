@@ -7,6 +7,7 @@ import type {
   ClassIR,
   ClassId,
   EdgeId,
+  FlowchartEdge,
   FlowchartIR,
   FragmentId,
   JourneyIR,
@@ -25,6 +26,7 @@ import type {
   TimelineIR,
   TransitionId,
 } from "@gmermaid/ir";
+import { FLOWCHART_SHAPES } from "@gmermaid/ir";
 import mermaid from "mermaid";
 import { flowchartToMermaid } from "./flowchart";
 import { classToMermaid } from "./classdiagram";
@@ -67,10 +69,10 @@ describe("mermaid.js accepts generated flowcharts", () => {
       { id: N("c"), label: "multi\nline", shape: "stadium" },
     ],
     edges: [
-      { id: "e1" as EdgeId, from: N("a"), to: N("b"), arrow: "arrow", label: "plain" },
+      { id: "e1" as EdgeId, from: N("a"), to: N("b"), line: "solid", headStart: "none", headEnd: "arrow", label: "plain" },
       // the |"…"| form must survive labels containing the delimiter itself
-      { id: "e2" as EdgeId, from: N("b"), to: N("c"), arrow: "dotted", label: "a|b | c" },
-      { id: "e3" as EdgeId, from: N("c"), to: N("a"), arrow: "thick", label: 'quote " and #' },
+      { id: "e2" as EdgeId, from: N("b"), to: N("c"), line: "dotted", headStart: "none", headEnd: "arrow", label: "a|b | c" },
+      { id: "e3" as EdgeId, from: N("c"), to: N("a"), line: "thick", headStart: "none", headEnd: "arrow", label: 'quote " and #' },
     ],
   };
 
@@ -96,8 +98,8 @@ describe("mermaid.js accepts generated flowcharts", () => {
       direction: "TB",
       nodes: shapes.map((shape, i) => ({ id: N(`n${i}`), label: `shape ${shape}`, shape })),
       edges: [
-        { id: "e1" as EdgeId, from: N("n0"), to: N("n1"), arrow: "invisible" },
-        { id: "e2" as EdgeId, from: N("n1"), to: N("n2"), arrow: "open", label: "still visible" },
+        { id: "e1" as EdgeId, from: N("n0"), to: N("n1"), line: "invisible", headStart: "none", headEnd: "none" },
+        { id: "e2" as EdgeId, from: N("n1"), to: N("n2"), line: "solid", headStart: "none", headEnd: "none", label: "still visible" },
       ],
     };
     await expectMermaidAccepts(flowchartToMermaid(ir));
@@ -113,8 +115,8 @@ describe("mermaid.js accepts generated flowcharts", () => {
         { id: N("c"), label: "C", shape: "rect" },
       ],
       edges: [
-        { id: "e1" as EdgeId, from: N("c"), to: G("s1"), arrow: "arrow", label: "into the group" },
-        { id: "e2" as EdgeId, from: N("a"), to: N("b"), arrow: "dotted" },
+        { id: "e1" as EdgeId, from: N("c"), to: G("s1"), line: "solid", headStart: "none", headEnd: "arrow", label: "into the group" },
+        { id: "e2" as EdgeId, from: N("a"), to: N("b"), line: "dotted", headStart: "none", headEnd: "arrow" },
       ],
       subgraphs: [
         { id: G("s1"), label: "Group \"one\"", direction: "LR" },
@@ -129,7 +131,60 @@ describe("mermaid.js accepts generated flowcharts", () => {
     const ir: FlowchartIR = {
       ...base,
       nodes: base.nodes.slice(0, 2),
-      edges: [{ id: "e2" as EdgeId, from: N("a"), to: N("b"), arrow: "arrow", label: "min|max" }],
+      edges: [{ id: "e2" as EdgeId, from: N("a"), to: N("b"), line: "solid", headStart: "none", headEnd: "arrow", label: "min|max" }],
+    };
+    await expectMermaidAccepts(flowchartToMermaid(ir));
+  });
+
+  it("parses every `@{ shape: … }` name we emit", async () => {
+    // one diagram per shape: a bad name must point at the shape that broke
+    for (const info of FLOWCHART_SHAPES) {
+      const ir: FlowchartIR = {
+        kind: "flowchart",
+        subgraphs: [],
+        direction: "TB",
+        nodes: [
+          { id: N("a"), label: `shape ${info.shape}`, shape: info.shape },
+          { id: N("b"), label: "other", shape: "rect" },
+        ],
+        edges: [{ id: "e1" as EdgeId, from: N("a"), to: N("b"), line: "solid", headStart: "none", headEnd: "arrow" }],
+      };
+      await expectMermaidAccepts(flowchartToMermaid(ir));
+    }
+  });
+
+  it("parses every line style × head pair and the extra-length links", async () => {
+    const lines = ["solid", "dotted", "thick", "invisible"] as const;
+    const heads = ["none", "arrow", "circle", "cross"] as const;
+    const edges: FlowchartEdge[] = [];
+    let i = 0;
+    for (const line of lines) {
+      for (const headEnd of heads) {
+        for (const headStart of heads) {
+          for (const length of [1, 2, 3]) {
+            i += 1;
+            edges.push({
+              id: `e${i}` as EdgeId,
+              from: N("a"),
+              to: N("b"),
+              line,
+              headStart,
+              headEnd,
+              ...(length > 1 ? { length } : {}),
+            });
+          }
+        }
+      }
+    }
+    const ir: FlowchartIR = {
+      kind: "flowchart",
+      subgraphs: [],
+      direction: "TB",
+      nodes: [
+        { id: N("a"), label: "A", shape: "rect" },
+        { id: N("b"), label: "B", shape: "rect" },
+      ],
+      edges,
     };
     await expectMermaidAccepts(flowchartToMermaid(ir));
   });
@@ -511,7 +566,7 @@ describe("mermaid.js accepts generated diagrams with non-ASCII / dotted ids", ()
         { id: N("日本"), label: "日本語", shape: "rect" },
         { id: N("svc.api"), label: "api", shape: "rounded", parent: G("領域") },
       ],
-      edges: [{ id: "e1" as EdgeId, from: N("日本"), to: N("svc.api"), arrow: "arrow", label: "呼ぶ" }],
+      edges: [{ id: "e1" as EdgeId, from: N("日本"), to: N("svc.api"), line: "solid", headStart: "none", headEnd: "arrow", label: "呼ぶ" }],
       subgraphs: [{ id: G("領域"), label: "領域" }],
     };
     await expectMermaidAccepts(flowchartToMermaid(ir));

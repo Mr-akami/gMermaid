@@ -1,10 +1,25 @@
-import type {
-  FlowchartArrowType,
-  FlowchartEdge,
-  FlowchartNode,
-  FlowchartNodeShape,
-  FlowchartSubgraph,
+import {
+  FLOWCHART_SHAPES,
+  type FlowchartDirection,
+  type FlowchartEdge,
+  type FlowchartEdgeHead,
+  type FlowchartLineStyle,
+  type FlowchartNode,
+  type FlowchartNodeShape,
+  type FlowchartShapeInfo,
+  type FlowchartSubgraph,
 } from "@gmermaid/ir";
+
+const SHAPE_GROUPS: readonly [FlowchartShapeInfo["group"], FlowchartShapeInfo[]][] = (
+  ["Basic", "Process", "Data", "Flow", "Misc"] as const
+).map((g) => [g, FLOWCHART_SHAPES.filter((s) => s.group === g)]);
+
+const HEADS: readonly [FlowchartEdgeHead, string][] = [
+  ["none", "None"],
+  ["arrow", "Arrow"],
+  ["circle", "Circle"],
+  ["cross", "Cross"],
+];
 
 // Callbacks carry user intent only (ADR 0001) — the property window never
 // sees the IR or the dispatcher, just the resolved element it edits.
@@ -15,8 +30,11 @@ export interface PropertyWindowProps {
   readonly onChangeNodeLabel: (label: string) => void;
   readonly onChangeNodeShape: (shape: FlowchartNodeShape) => void;
   readonly onChangeEdgeLabel: (label: string) => void;
-  readonly onChangeEdgeArrow: (arrow: FlowchartArrowType) => void;
+  readonly onChangeEdgeLine: (line: FlowchartLineStyle) => void;
+  readonly onChangeEdgeHead: (which: "headStart" | "headEnd", head: FlowchartEdgeHead) => void;
+  readonly onChangeEdgeLength: (length: number) => void;
   readonly onChangeSubgraphLabel: (label: string) => void;
+  readonly onChangeSubgraphDirection: (direction: FlowchartDirection | null) => void;
   readonly onDelete: () => void;
   readonly onEditStart: () => void;
   readonly onEditEnd: () => void;
@@ -27,7 +45,7 @@ function isNode(el: PropertyWindowProps["element"]): el is FlowchartNode {
 }
 
 function isSubgraph(el: PropertyWindowProps["element"]): el is FlowchartSubgraph {
-  return !("shape" in el) && !("arrow" in el);
+  return !("shape" in el) && !("line" in el);
 }
 
 export function PropertyWindow(props: PropertyWindowProps) {
@@ -45,6 +63,22 @@ export function PropertyWindow(props: PropertyWindowProps) {
             onBlur={onEditEnd}
             onChange={(e) => props.onChangeSubgraphLabel(e.target.value)}
           />
+        </label>
+        <label>
+          Direction
+          <select
+            aria-label="Subgraph direction"
+            value={element.direction ?? ""}
+            onChange={(e) =>
+              props.onChangeSubgraphDirection(e.target.value === "" ? null : (e.target.value as FlowchartDirection))
+            }
+          >
+            <option value="">(inherit)</option>
+            <option value="TB">Top→Bottom</option>
+            <option value="LR">Left→Right</option>
+            <option value="BT">Bottom→Top</option>
+            <option value="RL">Right→Left</option>
+          </select>
         </label>
         <button className="danger" onClick={onDelete}>
           Dissolve subgraph
@@ -74,20 +108,15 @@ export function PropertyWindow(props: PropertyWindowProps) {
               value={element.shape}
               onChange={(e) => props.onChangeNodeShape(e.target.value as FlowchartNodeShape)}
             >
-              <option value="rect">Rectangle</option>
-              <option value="rounded">Rounded</option>
-              <option value="stadium">Stadium</option>
-              <option value="diamond">Diamond</option>
-              <option value="circle">Circle</option>
-              <option value="doubleCircle">Double circle</option>
-              <option value="subroutine">Subroutine</option>
-              <option value="cylinder">Cylinder</option>
-              <option value="hexagon">Hexagon</option>
-              <option value="asymmetric">Asymmetric</option>
-              <option value="parallelogram">Parallelogram</option>
-              <option value="parallelogramAlt">Parallelogram (alt)</option>
-              <option value="trapezoid">Trapezoid</option>
-              <option value="trapezoidAlt">Trapezoid (alt)</option>
+              {SHAPE_GROUPS.map(([group, shapes]) => (
+                <optgroup key={group} label={group}>
+                  {shapes.map((s) => (
+                    <option key={s.shape} value={s.shape}>
+                      {s.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
           </label>
         </>
@@ -104,18 +133,60 @@ export function PropertyWindow(props: PropertyWindowProps) {
             />
           </label>
           <label>
-            Arrow
+            Line
             <select
-              value={element.arrow}
-              onChange={(e) => props.onChangeEdgeArrow(e.target.value as FlowchartArrowType)}
+              aria-label="Edge line"
+              value={element.line}
+              onChange={(e) => props.onChangeEdgeLine(e.target.value as FlowchartLineStyle)}
             >
-              <option value="arrow">Arrow</option>
-              <option value="open">Open (no head)</option>
+              <option value="solid">Solid</option>
               <option value="dotted">Dotted</option>
               <option value="thick">Thick</option>
               <option value="invisible">Invisible (layout only)</option>
             </select>
           </label>
+          <label>
+            Start head
+            <select
+              aria-label="Edge start head"
+              value={element.headStart}
+              onChange={(e) => props.onChangeEdgeHead("headStart", e.target.value as FlowchartEdgeHead)}
+            >
+              {HEADS.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            End head
+            <select
+              aria-label="Edge end head"
+              value={element.headEnd}
+              onChange={(e) => props.onChangeEdgeHead("headEnd", e.target.value as FlowchartEdgeHead)}
+            >
+              {HEADS.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Length
+            <input
+              aria-label="Edge length"
+              type="number"
+              min={1}
+              max={9}
+              value={element.length ?? 1}
+              onChange={(e) => props.onChangeEdgeLength(Number(e.target.value))}
+            />
+          </label>
+          {element.headStart !== "none" && element.headStart !== element.headEnd && (
+            <div className="hint">mermaid は両端が同じ形のときだけ始点マーカーを出力します</div>
+          )}
         </>
       )}
       <button className="danger" onClick={onDelete}>

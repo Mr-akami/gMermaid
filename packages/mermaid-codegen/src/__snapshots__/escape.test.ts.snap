@@ -10,6 +10,6 @@ exports[`label escaping > emits all shapes and arrows 1`] = `
   node-0 --> node-1
   node-1 --- node-2
   node-2 -.-> node-3
-  node-3 ==> node-4
+  node-3 ==o node-4
 "
 `;
