@@ -46,7 +46,9 @@ test("adding a task through the GUI writes it back into the code", async ({ page
   // it landed in the section it was added to, after that section's own tasks
   const code = await codeText(editor);
   expect(code.indexOf("Write the docs")).toBeGreaterThan(code.indexOf("another task"));
-  await expect(editor.locator('svg [data-element-id^="task-"] rect')).toHaveCount(5);
+  // the imported tasks keep their `task-N` import ids; the added one carries
+  // the generated `tsk_` prefix
+  await expect(editor.locator('svg [data-element-id^="task-"] rect, svg [data-element-id^="tsk_"] rect')).toHaveCount(5);
 });
 
 test("the property window edits start and end, and the toolbar edits the axis", async ({ page }) => {
