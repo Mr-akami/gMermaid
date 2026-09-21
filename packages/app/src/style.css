@@ -73,6 +73,17 @@ body { margin: 0; font-family: sans-serif; }
   font-family: monospace;
   padding: 6px 10px;
 }
+/* dropped statements: informational, never blocking — calmer than an error */
+.code-warnings {
+  max-height: 120px;
+  overflow: auto;
+  border-top: 1px solid #e6d6a8;
+  background: #fffdf3;
+  color: #7d6608;
+  font-size: 12px;
+  font-family: monospace;
+  padding: 6px 10px;
+}
 .canvas-error {
   padding: 16px;
   color: #9f3a38;

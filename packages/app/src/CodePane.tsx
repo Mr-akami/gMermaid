@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror, { ExternalChange } from "@uiw/react-codemirror";
 import type { ViewUpdate } from "@codemirror/view";
-import type { ParseError, ParseResult } from "@gmermaid/mermaid-parser";
+import type { ParseError, ParseResult, ParseWarning } from "@gmermaid/mermaid-parser";
 
 export interface CodePaneProps<T> {
   /** Canonical code generated from the IR. */
@@ -15,6 +15,9 @@ export interface CodePaneProps<T> {
   readonly initialDraft?: string | undefined;
   /** Reports whether the visible draft can be represented by the canonical IR. */
   readonly onValidityChange?: ((valid: boolean) => void) | undefined;
+  /** What the LAST load (file, Files panel, autosave) threw away. Shown until
+   * the user starts editing, at which point their own draft speaks instead. */
+  readonly loadWarnings?: readonly ParseWarning[] | undefined;
 }
 
 // While focused the pane always shows its own draft (never reformatted
@@ -36,6 +39,7 @@ export function CodePane<T>({
   onEditEnd,
   initialDraft,
   onValidityChange,
+  loadWarnings,
 }: CodePaneProps<T>) {
   const [draft, setDraft] = useState<Draft | null>(() =>
     initialDraft !== undefined ? { text: initialDraft, base: code } : null,
@@ -46,6 +50,10 @@ export function CodePane<T>({
     const r = parse(initialDraft);
     return r.ok ? [] : r.errors;
   });
+  // Dropped statements (styling, accessibility …) are informational: they
+  // never block a commit and never make the draft invalid — but the user has
+  // to be told, or the save silently eats them.
+  const [warnings, setWarnings] = useState<readonly ParseWarning[]>([]);
   const active = draft !== null && (focused || draft.base === code) ? draft : null;
   // The focused-draft display bypasses the base check (no reformatting under
   // the cursor), so an IR change that arrives WITHOUT stealing focus (e.g. a
@@ -55,6 +63,11 @@ export function CodePane<T>({
   const staleWhileFocused = focused && draft !== null && draft.base !== code;
 
   const valid = errors.length === 0 && !staleWhileFocused;
+  // What the last successful parse dropped. It outlives the draft on
+  // purpose: by the time the pane snaps back to canonical code the styling is
+  // ALREADY gone from it, which is exactly when the user needs to be told.
+  // Starting a new draft (onFocus) clears it.
+  const shownWarnings = warnings.length > 0 ? warnings : draft === null ? (loadWarnings ?? []) : [];
   const validityRef = useRef(onValidityChange);
   validityRef.current = onValidityChange;
   useEffect(() => validityRef.current?.(valid), [valid]);
@@ -75,6 +88,7 @@ export function CodePane<T>({
     const result = latest.current.parse(value);
     if (result.ok) {
       setErrors([]);
+      setWarnings(result.warnings);
       latest.current.onCommit(result.ir);
     } else {
       setErrors(result.errors);
@@ -84,6 +98,7 @@ export function CodePane<T>({
   function discardDraft() {
     setDraft(null);
     setErrors([]);
+    setWarnings([]);
   }
 
   function overwriteWithDraft() {
@@ -92,6 +107,7 @@ export function CodePane<T>({
     const result = parse(draft.text);
     if (result.ok) {
       setErrors([]);
+      setWarnings(result.warnings);
       onCommit(result.ir);
     } else {
       setErrors(result.errors);
@@ -117,6 +133,7 @@ export function CodePane<T>({
           onEditStart();
           if (draft === null || draft.base !== code) {
             setErrors([]); // a rebuilt draft starts from valid canonical code
+            setWarnings([]);
             setDraft({ text: code, base: code });
           }
         }}
@@ -133,6 +150,15 @@ export function CodePane<T>({
           {errors.map((e, i) => (
             <div key={i}>
               line {e.line}: {e.message}
+            </div>
+          ))}
+        </div>
+      )}
+      {shownWarnings.length > 0 && (
+        <div className="code-warnings">
+          {shownWarnings.map((w, i) => (
+            <div key={i}>
+              line {w.line}: {w.message}
             </div>
           ))}
         </div>

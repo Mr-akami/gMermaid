@@ -138,7 +138,23 @@ timeline
   });
 
   it("accepts an empty timeline and an empty section", () => {
-    expect(parseTimeline("timeline\n")).toEqual({ ok: true, ir: { kind: "timeline", sections: [] } });
+    expect(parseTimeline("timeline\n")).toEqual({ ok: true, warnings: [], ir: { kind: "timeline", sections: [] } });
     expect(shape("timeline\n  section Later\n")).toEqual([["Later", []]]);
+  });
+
+  it("drops a styling statement instead of reading it as a period", () => {
+    // it used to become a period `classDef y fill` with an event `#f00`:
+    // a bogus node on the canvas, and the user's text rewritten on save
+    const result = parseTimeline("timeline\n  2002 : x\nclassDef y fill:#f00\n");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(shape("timeline\n  2002 : x\nclassDef y fill:#f00\n")).toEqual([["", [["2002", ["x"]]]]]);
+    expect(result.warnings).toEqual([
+      { line: 3, message: "`classDef` is not represented in the editor and will be lost on save" },
+    ]);
+  });
+
+  it("keeps a period whose label merely starts with a dropped keyword", () => {
+    expect(shape("timeline\n  style : guide\n")).toEqual([["", [["style", ["guide"]]]]]);
   });
 });

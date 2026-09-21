@@ -16,14 +16,14 @@ import {
   type UsecaseRelation,
   type UsecaseRelationId,
 } from "@gmermaid/ir";
-import { prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult } from "./common";
+import { dropList, droppedWarning, prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // Dialect the IR cannot hold is DISCARDED by design, the same as `%%`
-// comments: frontmatter and `%%{init}%%`, `classDef` / `class` / `style` and
-// `:::class` suffixes, `accTitle` / `accDescr`, explicit edge ids, edge
+// comments: frontmatter and `%%{init}%%`, the shared styling statements and
+// `:::class` suffixes, explicit edge ids, edge
 // `animation` / `animate` metadata, extra-dash edge length, actor `icon`
 // metadata, and `json` tables (whose whole block is skipped).
-const DROPPED = ["classDef", "class", "style", "cssClass", "click", "accTitle", "accDescr", "linkStyle"];
+const DROPPED = dropList();
 
 const N = "[A-Za-z0-9_]+";
 /** mermaid's rule for a quoted declaration's identifier. */
@@ -84,7 +84,8 @@ const readLabel = (raw: string): string => unescapeLabel(unquote(raw.trim()));
 
 export function parseUsecase(code: string): ParseResult<UsecaseIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true, warnings });
 
   const nodes = new Map<string, NodeRec>();
   const order: string[] = [];
@@ -129,6 +130,7 @@ export function parseUsecase(code: string): ParseResult<UsecaseIR> {
 
     if (/^json\s/.test(line)) {
       jsonDepth = (line.match(/\{/g)?.length ?? 0) - (line.match(/\}/g)?.length ?? 0);
+      warnings.push(droppedWarning("json", lineNo));
       continue;
     }
 
@@ -325,6 +327,7 @@ export function parseUsecase(code: string): ParseResult<UsecaseIR> {
 
   return {
     ok: true,
+    warnings,
     ir: {
       kind: "usecase",
       ...(direction !== undefined ? { direction } : {}),

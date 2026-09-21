@@ -25,7 +25,9 @@ mermaid.js itself in the test suite.
 
 Styling and interaction syntax (`classDef`, `style`, `:::`, `click`, `%%`
 comments) is accepted on import and dropped: it carries no meaning in the
-editor, so it does not survive a round trip.
+editor, so it does not survive a round trip. Every kind drops the same set,
+and each dropped statement is listed under the code pane so nothing goes
+missing quietly.
 
 Everything ships as one npm package: [`@mr-akami/gmermaid`](https://www.npmjs.com/package/@mr-akami/gmermaid).
 

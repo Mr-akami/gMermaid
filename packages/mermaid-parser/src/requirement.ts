@@ -14,11 +14,11 @@ import {
   type RequirementRelationType,
   type RequirementType,
 } from "@gmermaid/ir";
-import { prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult } from "./common";
+import { dropList, prepareLines, unescapeLabel, unquote, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
-// Styling has no IR here, so `style` / `classDef` / `class` statements and
-// `:::class` suffixes are dropped on import (lossy by design, like `%%`).
-const DROPPED = ["style", "classDef", "class", "accTitle", "accDescr"];
+// Styling has no IR here, so the shared styling statements and `:::class`
+// suffixes are dropped on import (lossy by design, like `%%`, but reported).
+const DROPPED = dropList();
 
 // mermaid's name rule: bare `[A-Za-z0-9_.]+`, or anything in double quotes
 // (spaces, keywords, `-`). Unicode only works quoted.
@@ -37,7 +37,8 @@ const readValue = (raw: string): string => unescapeLabel(unquote(raw));
 
 export function parseRequirementDiagram(code: string): ParseResult<RequirementIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true, warnings });
 
   const requirements: Requirement[] = [];
   const elements: ReqElement[] = [];
@@ -156,6 +157,7 @@ export function parseRequirementDiagram(code: string): ParseResult<RequirementIR
 
   return {
     ok: true,
+    warnings,
     ir: {
       kind: "requirement",
       ...(direction !== undefined ? { direction } : {}),

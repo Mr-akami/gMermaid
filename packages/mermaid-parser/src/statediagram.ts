@@ -8,18 +8,18 @@ import type {
   StateTransition,
   TransitionId,
 } from "@gmermaid/ir";
-import { prepareLines, unescapeLabel, type ParseError, type ParseResult } from "./common";
+import { dropList, prepareLines, unescapeLabel, type ParseError, type ParseResult, type ParseWarning } from "./common";
 
 // stateDiagram-v2 subset: simple states, `state "desc" as id`, `id : desc`,
 // [*] start/end (scoped per composite block AND per `--` region), composite
 // `state X { … }` with concurrency regions and a per-block `direction`,
 // <<choice>>/<<fork>>/<<join>>, self-transitions, and notes (inline or block
 // form). Dialect the IR cannot hold is DISCARDED by design, same as `%%`
-// comments: frontmatter, `%%{init}%%` directives, `style` / `classDef` /
-// `class` statements, `hide empty description`, `accTitle` / `accDescr`,
-// trailing `;`, and `:::className` suffixes on state ids.
+// comments: frontmatter, `%%{init}%%` directives, the shared styling
+// statements plus `hide empty description` and `title`, trailing `;`, and
+// `:::className` suffixes on state ids.
 
-const DROPPED = ["style", "classDef", "class", "hide", "accTitle", "accDescr"];
+const DROPPED = dropList({ extra: ["hide", "title"] });
 
 // letters incl. non-ASCII, digits, `_`, `.` — no `-` (mermaid's state grammar
 // rejects it, and it would be ambiguous with `-->`). Mirrors ir's STATE_NAME_RE.
@@ -28,7 +28,8 @@ const ID_RE = new RegExp(`^${ID}$`, "u");
 
 export function parseStateDiagram(code: string): ParseResult<StateIR> {
   const errors: ParseError[] = [];
-  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true });
+  const warnings: ParseWarning[] = [];
+  const lines = prepareLines(code, { drop: DROPPED, stripClassSuffix: true, warnings });
 
   const states = new Map<string, StateNode>();
   const order: string[] = [];
@@ -209,6 +210,7 @@ export function parseStateDiagram(code: string): ParseResult<StateIR> {
 
   return {
     ok: true,
+    warnings,
     ir: {
       kind: "state",
       ...(direction !== undefined ? { direction } : {}),
