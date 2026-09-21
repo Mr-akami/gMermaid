@@ -9,6 +9,7 @@ import {
   stateRegionCount,
   type StateIR,
   type StateId,
+  type StateNode,
 } from "@gmermaid/ir";
 import { layoutStateDiagram } from "@gmermaid/layout";
 import { stateToMermaid } from "@gmermaid/mermaid-codegen";
@@ -113,29 +114,73 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
     setView({});
   }
 
-  function addState() {
+  /** Where a new element belongs: the container the selection sits in, so
+   * building inside a composite does not throw the new state to the top
+   * level. A composite selected directly means "inside it"; anything else
+   * means "beside it". */
+  function isComposite(id: string | undefined): boolean {
+    return id !== undefined && ir.states.some((s) => s.parent === id);
+  }
+
+  function containerFor(inside: boolean): { parent?: StateId; region: number } {
+    const sel = ir.states.find((s) => s.id === view.selectedId);
+    if (!sel) return { region: 0 };
+    if (inside) return { parent: sel.id, region: 0 };
+    return { ...(sel.parent !== undefined ? { parent: sel.parent } : {}), region: sel.region ?? 0 };
+  }
+
+  function place(role: StateNode["role"], label: string, inside: boolean) {
     const id = newStateId();
+    const { parent, region } = containerFor(inside);
+    h.dispatch({
+      type: "addState",
+      state: { id, label, role, ...(parent !== undefined ? { parent } : {}), ...(region !== 0 ? { region } : {}) },
+    });
+    setView({ selectedId: id });
+  }
+
+  function nextStateLabel(): string {
     let n = 1;
     while (ir.states.some((s) => s.label === `NewState${n}`)) n += 1;
-    h.dispatch({ type: "addState", state: { id, label: `NewState${n}`, role: "normal" } });
-    setView({ selectedId: id });
+    return `NewState${n}`;
+  }
+
+  /** A composite adopts what you add while it is selected, the way a
+   * selected subgraph does in the flowchart editor. */
+  function addState() {
+    setRejectHint(undefined);
+    place("normal", nextStateLabel(), isComposite(view.selectedId));
+  }
+
+  /** Nest a state inside the selected one — the only way to turn a plain
+   * state into a composite, since a composite IS a state with children. */
+  function addChildState() {
+    if (childRejection !== undefined) {
+      setRejectHint(childRejection);
+      return;
+    }
+    setRejectHint(undefined);
+    place("normal", nextStateLabel(), true);
   }
 
   function addPseudo(role: "start" | "end") {
-    const existing = ir.states.find((s) => s.role === role);
-    if (existing) {
-      setView({ selectedId: existing.id });
+    const reason = pseudoRejection(role);
+    if (reason !== undefined) {
+      setRejectHint(reason);
+      const { parent, region } = containerFor(isComposite(view.selectedId));
+      const existing = ir.states.find(
+        (s) => s.role === role && s.parent === parent && (s.region ?? 0) === region,
+      );
+      if (existing) setView({ selectedId: existing.id });
       return;
     }
-    const id = newStateId();
-    h.dispatch({ type: "addState", state: { id, label: "", role } });
-    setView({ selectedId: id });
+    setRejectHint(undefined);
+    place(role, "", isComposite(view.selectedId));
   }
 
   function addSpecial(role: "choice" | "fork" | "join") {
-    const id = newStateId();
-    h.dispatch({ type: "addState", state: { id, label: "", role } });
-    setView({ selectedId: id });
+    setRejectHint(undefined);
+    place(role, "", isComposite(view.selectedId));
   }
 
   function addNote() {
@@ -147,6 +192,21 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   const selectedState = ir.states.find((s) => s.id === view.selectedId);
   const noteRejection = selectedState ? stateNoteRejection(selectedState) : undefined;
+  // a composite is a state with children, so only a normal state can take one
+  const childRejection =
+    selectedState === undefined
+      ? "select the state that should contain it"
+      : selectedState.role !== "normal"
+        ? "only a normal state can contain states"
+        : undefined;
+  /** `[*]` is scoped per container region, so the button is only blocked
+   * when THIS region already has one — not when the diagram does. */
+  function pseudoRejection(role: "start" | "end"): string | undefined {
+    const { parent, region } = containerFor(isComposite(view.selectedId));
+    return ir.states.some((s) => s.role === role && s.parent === parent && (s.region ?? 0) === region)
+      ? `this ${parent === undefined ? "diagram" : "region"} already has a ${role} [*]`
+      : undefined;
+  }
   const selectedTransition = ir.transitions.find((t) => t.id === view.selectedId);
   const selectedNote = ir.notes.find((n) => n.id === view.selectedId);
   const selection: StateSelection | undefined = selectedState
@@ -268,8 +328,15 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         {mode === "standalone" && <button onClick={openFile}>Open…</button>}
         {mode === "standalone" && <button onClick={() => saveMmd(code, "state.mmd")}>Save…</button>}
         <button onClick={addState}>+ State</button>
-        <button onClick={() => addPseudo("start")}>+ Start [*]</button>
-        <button onClick={() => addPseudo("end")}>+ End [*]</button>
+        <button disabled={childRejection !== undefined} title={childRejection} onClick={addChildState}>
+          + Child state
+        </button>
+        <button title={pseudoRejection("start")} onClick={() => addPseudo("start")}>
+          + Start [*]
+        </button>
+        <button title={pseudoRejection("end")} onClick={() => addPseudo("end")}>
+          + End [*]
+        </button>
         <button onClick={() => addSpecial("choice")}>+ Choice</button>
         <button onClick={() => addSpecial("fork")}>+ Fork</button>
         <button onClick={() => addSpecial("join")}>+ Join</button>

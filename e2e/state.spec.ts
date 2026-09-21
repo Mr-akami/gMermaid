@@ -125,3 +125,37 @@ test("move mode drags a state into a composite frame", async ({ page }) => {
   // Outside now lives inside the composite block
   await expectCode(editor).toMatch(/state Moving \{[\s\S]*state Outside[\s\S]*\}/);
 });
+
+// A composite IS a state with children, so the GUI needs a way to put the
+// first child in; and `[*]` is scoped per container, so each composite may
+// have its own pair.
+test("a plain state becomes a composite, and each container takes its own [*]", async ({ page }) => {
+  const editor = await openEditor(page, "State");
+  await setCode(editor, "stateDiagram-v2\n  [*] --> A\n  A --> B\n");
+  await expectCode(editor).toContain("A --> B");
+
+  await element(editor, "A").click();
+  await editor.getByRole("button", { name: "+ Child state" }).click();
+  await expectCode(editor).toMatch(/state A \{[\s\S]*NewState1/);
+
+  // the child is selected, so its container takes the new markers
+  const before = await editor.locator("svg [data-element-id]").count();
+  await editor.getByRole("button", { name: "+ Start [*]" }).click();
+  await editor.getByRole("button", { name: "+ End [*]" }).click();
+  await expect(editor.locator("svg [data-element-id]")).toHaveCount(before + 2);
+
+  // the top level already had a start, so asking again there is refused
+  await element(editor, "B").click();
+  await expect(editor.getByRole("button", { name: "+ Start [*]" })).toHaveAttribute(
+    "title",
+    /already has a start/,
+  );
+});
+
+test("+ Child state is refused for a pseudo-state", async ({ page }) => {
+  const editor = await openEditor(page, "State");
+  await setCode(editor, "stateDiagram-v2\n  [*] --> A\n");
+  await expectCode(editor).toContain("--> A");
+  await element(editor, "state_start").click();
+  await expect(editor.getByRole("button", { name: "+ Child state" })).toBeDisabled();
+});
