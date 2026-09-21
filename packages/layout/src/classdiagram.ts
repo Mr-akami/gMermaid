@@ -26,7 +26,9 @@ const MIN_W = 110;
 const NOTE_PAD = 8;
 // visual breathing room around a namespace frame; the extra top holds the title
 const NS_PAD = 10;
-const NS_TITLE_H = 24;
+/** Height of a namespace's title band. */
+export const NAMESPACE_TITLE_BAND = 24;
+const NS_TITLE_H = NAMESPACE_TITLE_BAND + NS_PAD;
 // self-relation detour geometry (right side of the node)
 const SELF_REL_W = 30;
 const SELF_REL_H = 26;

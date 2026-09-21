@@ -9,3 +9,4 @@ export * from "./RequirementView";
 export * from "./UsecaseView";
 export * from "./MindmapView";
 export * from "./GanttView";
+export * from "./edgePath";
