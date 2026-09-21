@@ -1,6 +1,7 @@
 import type { EdgeId, NodeId, SubgraphId } from "./ids";
 import type {
   FlowchartDirection,
+  FlowchartEdge,
   FlowchartEdgeHead,
   FlowchartEndpoint,
   FlowchartIR,
@@ -39,6 +40,34 @@ export type FlowchartAction =
   // dissolve: members are promoted to the removed subgraph's parent
   | { type: "removeSubgraph"; id: SubgraphId };
 
+/**
+ * Force an edge into a shape mermaid can actually spell.
+ *
+ * Mermaid has a link token for a SYMMETRIC head pair only (`<-->`, `o--o`,
+ * `x--x`) and none at all for the ends of an invisible link (`~~~`), so any
+ * other combination would be emitted as a lie and read back as something
+ * else. Keeping the invariant here — not in codegen — is what makes the
+ * canvas and the saved text agree: the IR can no longer hold the states.
+ *
+ * `edited` names the end the user just changed; that end wins and pulls the
+ * other one, so a select in the property window always does what it says.
+ * Without the hint (parser output, programmatic edits) the END head wins:
+ * it is the one mermaid always draws. A one-way arrow (`headStart: "none"`)
+ * is spellable as is and is never touched.
+ */
+export function normalizeFlowchartEdge(edge: FlowchartEdge, edited?: "headStart" | "headEnd"): FlowchartEdge {
+  let { headStart, headEnd } = edge;
+  if (edge.line === "invisible") {
+    headStart = "none";
+    headEnd = "none";
+  } else if (headStart !== "none" && headStart !== headEnd) {
+    if (edited === "headStart") headEnd = headStart;
+    else headStart = headEnd;
+  }
+  if (headStart === edge.headStart && headEnd === edge.headEnd) return edge;
+  return { ...edge, headStart, headEnd };
+}
+
 export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): FlowchartIR {
   switch (action.type) {
     case "addNode": {
@@ -75,20 +104,15 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
         ir.nodes.some((n) => (n.id as string) === (id as string)) ||
         ir.subgraphs.some((s) => (s.id as string) === (id as string));
       if (!known(action.from) || !known(action.to)) return ir;
-      return {
-        ...ir,
-        edges: [
-          ...ir.edges,
-          {
-            id: action.id,
-            from: action.from,
-            to: action.to,
-            line: action.line ?? "solid",
-            headStart: "none",
-            headEnd: action.headEnd ?? "arrow",
-          },
-        ],
-      };
+      const edge = normalizeFlowchartEdge({
+        id: action.id,
+        from: action.from,
+        to: action.to,
+        line: action.line ?? "solid",
+        headStart: "none",
+        headEnd: action.headEnd ?? "arrow",
+      });
+      return { ...ir, edges: [...ir.edges, edge] };
     }
     case "removeEdge": {
       if (!ir.edges.some((e) => e.id === action.id)) return ir;
@@ -104,13 +128,22 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
       const headEnd = action.headEnd ?? edge.headEnd;
       const rawLen = action.length ?? edge.length ?? 1;
       const length = Number.isInteger(rawLen) && rawLen > 1 ? rawLen : undefined;
-      if (label === edge.label && line === edge.line && headStart === edge.headStart && headEnd === edge.headEnd && length === edge.length) return ir;
-      return {
-        ...ir,
-        edges: ir.edges.map((e) =>
-          e.id === action.id ? omitUndefined({ id: e.id, from: e.from, to: e.to, line, headStart, headEnd, label, length }) : e,
-        ),
-      };
+      // the head the action names is the one the user just moved, so it wins
+      // when the pair has to be coerced; naming both falls back to the end
+      const edited = action.headStart !== undefined && action.headEnd === undefined ? "headStart" : "headEnd";
+      const next = normalizeFlowchartEdge(
+        omitUndefined({ id: edge.id, from: edge.from, to: edge.to, line, headStart, headEnd, label, length }),
+        edited,
+      );
+      if (
+        next.label === edge.label &&
+        next.line === edge.line &&
+        next.headStart === edge.headStart &&
+        next.headEnd === edge.headEnd &&
+        next.length === edge.length
+      )
+        return ir;
+      return { ...ir, edges: ir.edges.map((e) => (e.id === action.id ? next : e)) };
     }
     case "setDirection":
       return ir.direction === action.direction ? ir : { ...ir, direction: action.direction };

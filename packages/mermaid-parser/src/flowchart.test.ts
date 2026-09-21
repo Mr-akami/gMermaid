@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FLOWCHART_SHAPES, type EdgeId, type FlowchartIR, type NodeId } from "@gmermaid/ir";
-import { flowchartToMermaid } from "@gmermaid/mermaid-codegen";
+import { FLOWCHART_SHAPES, normalizeFlowchartEdge, type EdgeId, type FlowchartIR, type NodeId } from "@gmermaid/ir";
+import { edgeToken, flowchartToMermaid } from "@gmermaid/mermaid-codegen";
 import { parseFlowchart } from "./flowchart";
 
 const sortById = <T extends { id: string }>(xs: readonly T[]) => [...xs].toSorted((a, b) => a.id.localeCompare(b.id));
@@ -442,5 +442,49 @@ describe("parseFlowchart id-less subgraphs", () => {
     expect(back.ok).toBe(true);
     if (!back.ok) return;
     expect(back.ir.subgraphs).toEqual(result.ir.subgraphs);
+  });
+});
+
+// The sweep that found the gap, kept as a guard: the IR's edge model and
+// mermaid's link tokens must have exactly the same reach. Every NORMALIZED
+// edge has to survive emit → parse; anything else would let the canvas and
+// the saved text disagree.
+describe("every normalized edge survives the round trip", () => {
+  const lines = ["solid", "dotted", "thick", "invisible"] as const;
+  const heads = ["none", "arrow", "circle", "cross"] as const;
+  const cases = lines.flatMap((line) =>
+    heads.flatMap((headStart) =>
+      heads.flatMap((headEnd) =>
+        [1, 2, 3].map((length) => ({
+          edge: normalizeFlowchartEdge({
+            id: "edge-1" as EdgeId,
+            from: "a" as NodeId,
+            to: "b" as NodeId,
+            line,
+            headStart,
+            headEnd,
+            ...(length > 1 ? { length } : {}),
+          }),
+          name: `${line}/${headStart}/${headEnd}/${length}`,
+        })),
+      ),
+    ),
+  );
+
+  it.each(cases)("$name", ({ edge }) => {
+    const ir: FlowchartIR = {
+      kind: "flowchart",
+      direction: "TB",
+      nodes: [
+        { id: "a" as NodeId, label: "a", shape: "rect" },
+        { id: "b" as NodeId, label: "b", shape: "rect" },
+      ],
+      edges: [edge],
+      subgraphs: [],
+    };
+    const result = parseFlowchart(flowchartToMermaid(ir));
+    expect(result.ok, `${edgeToken(edge)}: ${JSON.stringify(result)}`).toBe(true);
+    if (!result.ok) return;
+    expect(result.ir.edges[0], edgeToken(edge)).toEqual(edge);
   });
 });
