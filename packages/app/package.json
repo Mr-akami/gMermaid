@@ -22,6 +22,7 @@
     "@gmermaid/mermaid-parser": "workspace:*",
     "@gmermaid/renderer": "workspace:*",
     "@uiw/react-codemirror": "^4.25.11",
+    "mermaid": "^12.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -29,6 +30,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "jsdom": "^30.0.1",
     "vite": "^6.0.0"
   }
 }

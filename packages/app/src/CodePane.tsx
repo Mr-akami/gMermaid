@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror, { ExternalChange } from "@uiw/react-codemirror";
 import type { ViewUpdate } from "@codemirror/view";
 import type { ParseError, ParseResult, ParseWarning } from "@gmermaid/mermaid-parser";
+import { useMermaidVerdict } from "./mermaidValidator";
 
 export interface CodePaneProps<T> {
   /** Canonical code generated from the IR. */
@@ -62,7 +63,17 @@ export function CodePane<T>({
   // choose instead of losing either side.
   const staleWhileFocused = focused && draft !== null && draft.base !== code;
 
-  const valid = errors.length === 0 && !staleWhileFocused;
+  // CONTEXT.md's Validation rule: the real mermaid parser judges the text, not
+  // just our own. Judging what the pane SHOWS covers both directions with one
+  // mechanism — a hand-typed diagram we accept but mermaid does not, and code
+  // our codegen produced that mermaid cannot read.
+  const shownCode = active?.text ?? code;
+  const mermaidVerdict = useMermaidVerdict(shownCode);
+
+  // "pending"/"unavailable" deliberately count as valid: validation is async
+  // and may never answer (offline chunk), and a permanently disabled review
+  // button would be worse than a late error.
+  const valid = errors.length === 0 && !staleWhileFocused && mermaidVerdict.status !== "rejected";
   // What the last successful parse dropped. It outlives the draft on
   // purpose: by the time the pane snaps back to canonical code the styling is
   // ALREADY gone from it, which is exactly when the user needs to be told.
@@ -152,6 +163,11 @@ export function CodePane<T>({
               line {e.line}: {e.message}
             </div>
           ))}
+        </div>
+      )}
+      {mermaidVerdict.status === "rejected" && (
+        <div className="code-mermaid-error">
+          <strong>Mermaid.js が解釈できません:</strong> {mermaidVerdict.message}
         </div>
       )}
       {shownWarnings.length > 0 && (
