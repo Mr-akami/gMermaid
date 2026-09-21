@@ -646,6 +646,14 @@ describe("mermaid.js accepts generated mindmaps", () => {
 
 // The parsers accept non-ASCII letters and `.` in ids (mermaid does too);
 // codegen emits ids verbatim, so the widened charset must survive a real parse.
+describe("mermaid.js accepts escaped percent pairs", () => {
+  it("sequence, state and class labels carrying `%%`", async () => {
+    await expectMermaidAccepts("sequenceDiagram\n  A->>B: 50#37;#37; off\n");
+    await expectMermaidAccepts("stateDiagram-v2\n  A --> B : 50#37;#37; off\n");
+    await expectMermaidAccepts("classDiagram\n  class A\n  class B\n  A --> B : 50#37;#37; off\n");
+  });
+});
+
 describe("mermaid.js accepts generated diagrams with non-ASCII / dotted ids", () => {
   it("flowchart", async () => {
     const ir: FlowchartIR = {

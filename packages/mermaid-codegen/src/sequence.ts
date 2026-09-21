@@ -20,7 +20,10 @@ function escapeText(text: string): string {
     .replaceAll("#", "#35;")
     .replaceAll("<", "#lt;")
     .replaceAll(">", "#gt;")
-    .replaceAll(/\r?\n/g, "<br/>");
+    .replaceAll(/\r?\n/g, "<br/>")
+    // `%%` opens a comment for our line preprocessor (mermaid keeps it here,
+    // but the text would not survive our own import), so it travels escaped.
+    .replaceAll("%%", "#37;#37;");
 }
 
 /** Text form of a branch header: loop bounds are stored structurally and
