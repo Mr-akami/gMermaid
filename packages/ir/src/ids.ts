@@ -17,6 +17,8 @@ export type TransitionId = Id<"transition">;
 export type SubgraphId = Id<"subgraph">;
 export type SectionId = Id<"section">;
 export type TaskId = Id<"task">;
+export type RequirementId = Id<"requirement">;
+export type ElementId = Id<"element">;
 
 export type AnyId =
   | NodeId
@@ -32,7 +34,9 @@ export type AnyId =
   | TransitionId
   | SubgraphId
   | SectionId
-  | TaskId;
+  | TaskId
+  | RequirementId
+  | ElementId;
 
 /**
  * Collision-proof id generation. Parser-imported diagrams carry their own

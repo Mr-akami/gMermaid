@@ -4,3 +4,4 @@ export * from "./ClassView";
 export * from "./StateView";
 export * from "./JourneyView";
 export * from "./usePointerGestures";
+export * from "./RequirementView";

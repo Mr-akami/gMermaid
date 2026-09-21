@@ -13,11 +13,14 @@ export * from "./statediagram";
 export * from "./stateActions";
 export * from "./journey";
 export * from "./journeyActions";
+export * from "./requirement";
+export * from "./requirementActions";
 
 import type { ClassIR } from "./classdiagram";
 import type { FlowchartIR } from "./flowchart";
+import type { RequirementIR } from "./requirement";
 import type { SequenceIR } from "./sequence";
 import type { StateIR } from "./statediagram";
 import type { JourneyIR } from "./journey";
 
-export type DiagramIR = FlowchartIR | SequenceIR | ClassIR | StateIR | JourneyIR;
+export type DiagramIR = FlowchartIR | SequenceIR | ClassIR | StateIR | RequirementIR | JourneyIR;
