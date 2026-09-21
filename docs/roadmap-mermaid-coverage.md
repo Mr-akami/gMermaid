@@ -19,7 +19,7 @@ auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
   lines dropped, `accTitle`/`accDescr` skipped, unicode / dotted ids.
 
 ## Phase 2 — core four, feature depth (parallel, one PR per kind)
-### Flowchart
+### Flowchart (done)
 - Edge model: line style (solid/dotted/thick/invisible) × head at each end
   (none/arrow/circle/cross) → `<-->`, `--o`, `x--x`, `-.-`, `===`.
 - Edge length (`--->` = dagre minlen).
@@ -28,6 +28,10 @@ auto, styling/interaction syntax (`style`, `classDef`, `click`, `%%`) is
   sl-rect, lin-cyl, f-circ …).
 - Id-less `subgraph Title`, subgraph `direction` editor.
 - Guard `A--txt-->B` mis-parse.
+- Mermaid can only express a SYMMETRIC head pair (`<-->`, `o--o`, `x--x`);
+  a start head that differs from the end head is dropped on emit, as
+  mermaid's own `destructLink` calls that combination invalid.
+- Per-subgraph `direction` round-trips but layout still has one rankdir.
 ### Sequence
 - Activation (`+`/`-` suffix and `activate`/`deactivate`), `box`, `rect`,
   `create`/`destroy`, participant types `@{ type: … }`, multi-line notes
