@@ -38,10 +38,11 @@ shared by every kind (`STYLING_STATEMENTS`) and every drop is reported as a
 - Mermaid can only express a SYMMETRIC head pair (`<-->`, `o--o`, `x--x`);
   a start head that differs from the end head is dropped on emit, as
   mermaid's own `destructLink` calls that combination invalid.
-- Per-subgraph `direction` round-trips but layout still has one rankdir.
-  Nested subgraphs also inflate dagre's rank separation (each cluster adds
-  border ranks); the state layout dodges this by laying each composite out
-  on its own, and flowcharts could follow.
+- Each subgraph is laid out in a dagre graph of its own and placed in its
+  parent as a single node, so a subgraph honors its own `direction` and the
+  rank separation no longer grows with nesting depth (an edge inside three
+  frames: 350px → 50px). An edge naming a subgraph ends on its frame; one
+  naming a node inside carries on to that node.
 ### Sequence (done)
 - Activation (`+`/`-` suffix and `activate`/`deactivate`), `box`, `rect`,
   `create`/`destroy`, participant types `@{ type: … }`, multi-line notes
@@ -59,6 +60,9 @@ shared by every kind (`STYLING_STATEMENTS`) and every drop is reported as a
   expressible in mermaid text, so the GUI splits an existing member into a
   new region instead.
 ### Class (done)
+- A namespace is laid out in a graph of its own and enters the diagram as one
+  node, so a frame no longer triples the rank gap around it (60px → 180px
+  before). Namespaces cannot nest in mermaid, so there is one level only.
 - Reversed / two-way relation tokens, `direction TD`, `classDiagram-v2`,
   `class X["label"]` + relaxed names, `*`/`$` classifiers, type-first
   attributes, inline `<<annotation>>`, generic class names, notes,
@@ -89,6 +93,9 @@ window, registry entry, mermaid.js integration test, e2e spec.
   `kind`; the reducer normalizes it to what mermaid can actually spell (one
   marker per relation, generalization only in the `--|>` direction,
   include/extend dashed, unlabelled and markerless).
+- A systemBoundary is laid out in a graph of its own and enters the diagram
+  as one node, so a frame no longer triples the rank gap around it (55px →
+  165px before). Relation labels are sized for dagre, as elsewhere.
 - Left out (tolerated on import, dropped): `json` tables (the whole block is
   skipped), icon actors, explicit edge ids and their `animation` / `animate`
   metadata, extra-dash edge length, `classDef` / `class` / `style` / `:::`.
@@ -117,9 +124,10 @@ window, registry entry, mermaid.js integration test, e2e spec.
 - Styling and interaction syntax (`classDef`, `style`, `:::`, `click`,
   `linkStyle`, `%%` comments) stays tolerated-and-dropped: it has no
   meaning in a structural editor, so it cannot survive a round trip.
-- Per-subgraph layout direction in flowcharts: dagre has one rankdir per
-  graph and flowchart subgraphs are still one compound graph. The text
-  round-trips. (State composites do honor it — each is laid out separately.)
+- Nothing here about container layout any more: flowchart subgraphs, state
+  composites, class namespaces and usecase system boundaries are each laid
+  out in a graph of their own, so none of them is a dagre cluster and none
+  pays the border-rank tax.
 - Diagram kinds mermaid supports that gMermaid does not draw yet: ER, pie,
   quadrant, git graph, block, C4, sankey, xychart, radar, packet, kanban,
   architecture and treemap. Each would be another vertical slice; the
