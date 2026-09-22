@@ -3,8 +3,8 @@ import type { NoteId, StateDirection, StateIR, StateId, StateNode, StateRole, Tr
 import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
-import { bboxOf, placeSelfLoopLabel, selfLoopPoints, SELF_LOOP_REACH } from "./compound";
-import { collisionIndex } from "./collision";
+import { bboxOf, placeNote, placeSelfLoopLabel, selfLoopPoints } from "./compound";
+import { collisionIndex, labelAnchor, labelRect, pathHitsRect } from "./collision";
 
 const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
 const NOTE_STYLE = { fontSize: 12, fontFamily: "sans-serif" } as const;
@@ -111,6 +111,70 @@ interface SubLayout {
   readonly paths: Map<TransitionId, RoutedEdge>;
   readonly regions: StateRegionBand[];
   readonly separators: RegionSeparator[];
+}
+
+/** Sideways steps a nested connector may try before giving up on a clear lane. */
+const LANE_STEP = 16;
+const LANE_TRIES = 10;
+/** Keep a lane off the frame's own border, so the line does not run along it. */
+const LANE_INSET = 6;
+
+/**
+ * The connector for a transition between a composite and a state inside it.
+ *
+ * There is no container where those two are siblings, so dagre never routes
+ * this edge and the layout draws it by hand. It used to be a straight drop
+ * down the inner box's centre line from the frame's outer border — which runs
+ * through everything stacked above that box, and, on the way in, straight
+ * across the frame's own title. That is the arrow drawn over a state's label.
+ *
+ * Two changes fix it. The line leaves (or reaches) the frame at the INNER edge
+ * of the title band, which is a border the frame already draws, so the title
+ * is never on the route. And the lane is chosen rather than assumed: the
+ * inner box's centre first, then stepping sideways, and the first lane that
+ * clears every obstacle wins. A lane that misses the inner box elbows into its
+ * side instead of its top. If nothing is clear the centre lane is kept — a
+ * connector has to exist, and the old behaviour is the better fallback.
+ */
+function nestedConnector(frame: Rect, inner: Rect, outward: boolean, obstacles: readonly Rect[]): Point[] {
+  const frameY = outward ? frame.y + COMPOSITE_TITLE_BAND : frame.y + frame.h;
+  const innerY = outward ? inner.y : inner.y + inner.h;
+  const innerMidY = inner.y + inner.h / 2;
+  const centre = inner.x + inner.w / 2;
+  const minX = frame.x + LANE_INSET;
+  const maxX = frame.x + frame.w - LANE_INSET;
+  // anything but the two boxes this connector joins
+  const blocks = obstacles.filter((r) => r !== inner && r !== frame);
+  const clear = (pts: readonly Point[]): boolean => !blocks.some((r) => pathHitsRect(pts, r));
+
+  const straight = [
+    { x: centre, y: frameY },
+    { x: centre, y: innerY },
+  ];
+  // the frame's two gutters come last: they always exist, and a frame whose
+  // members fill it end to end has no lane anywhere else
+  const lanes: number[][] = [[centre]];
+  for (let k = 1; k <= LANE_TRIES; k++) lanes.push([centre + k * LANE_STEP, centre - k * LANE_STEP]);
+  lanes.push([minX, maxX]);
+  for (const ring of lanes) {
+    for (const lane of ring) {
+      if (lane < minX || lane > maxX) continue;
+      const onBox = lane > inner.x && lane < inner.x + inner.w;
+      const side = lane <= inner.x ? inner.x : inner.x + inner.w;
+      const pts = onBox
+        ? [
+            { x: lane, y: frameY },
+            { x: lane, y: innerY },
+          ]
+        : [
+            { x: lane, y: frameY },
+            { x: lane, y: innerMidY },
+            { x: side, y: innerMidY },
+          ];
+      if (clear(pts)) return outward ? pts : pts.toReversed();
+    }
+  }
+  return outward ? straight : straight.toReversed();
 }
 
 export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLayout {
@@ -390,7 +454,53 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
     depth: depth(s),
   }));
 
-  // notes sit beside their target, outside the dagre graph
+  const leafRects = states.filter((s) => !s.composite).map((s) => s.rect);
+  /** A composite's title band — the strip its label is drawn in. The rest of
+   * a frame's interior is fair game (a note on an inner state belongs inside
+   * the frame), but nothing may land on the title. */
+  const titleBands: Rect[] = states
+    .filter((s) => s.composite)
+    .map((s) => ({ x: s.rect.x, y: s.rect.y, w: s.rect.w, h: COMPOSITE_TITLE_BAND }));
+
+  // Everything drawn so far, boxes and routes alike: dagre kept its own edge
+  // labels clear, but every box placed from here on — a note, a self-loop
+  // label — has to keep clear of the routes too, or it lands on an arrow.
+  const taken = collisionIndex([...leafRects, ...titleBands]);
+  for (const t of ir.transitions) {
+    const routed = root.paths.get(t.id);
+    if (routed === undefined) continue;
+    taken.addPath(routed.points);
+    if (t.label !== undefined && routed.labelPos !== undefined) {
+      taken.add(labelRect(routed.labelPos, measure.measure(t.label, LABEL_STYLE)));
+    }
+  }
+
+  // Hand-drawn geometry dagre never saw, routed before the notes so a note
+  // cannot land on it. Self-loop LABELS still wait until the notes are down —
+  // a label has more freedom to move than a note does.
+  const selfCount = new Map<StateId, number>();
+  const handDrawn = new Map<TransitionId, Point[]>();
+  for (const t of ir.transitions) {
+    if (t.from === t.to) {
+      const k = selfCount.get(t.from) ?? 0;
+      selfCount.set(t.from, k + 1);
+      handDrawn.set(t.id, selfLoopPoints(rectOf.get(t.from)!, k));
+    } else if (nested.has(t.id)) {
+      // `outward` = the frame is the FROM end; inward, the frame is the TO end
+      const outward = nested.get(t.id)!;
+      const from = rectOf.get(t.from)!;
+      const to = rectOf.get(t.to)!;
+      handDrawn.set(
+        t.id,
+        nestedConnector(outward ? from : to, outward ? to : from, outward, [...leafRects, ...titleBands]),
+      );
+    }
+  }
+  for (const points of handDrawn.values()) taken.addPath(points);
+
+  // Notes sit beside their target, outside the dagre graph — but only if
+  // "beside" is free; `placeNote` wanders when it is not (see its comment for
+  // how far, and why that is the right trade).
   const notes: StateNoteBox[] = [];
   for (const n of ir.notes) {
     const target = rectOf.get(n.target);
@@ -402,36 +512,19 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
     const w = Math.max(...measured.map((m) => m.w)) + NOTE_PAD * 2;
     const lineH = measured[0]!.h;
     const h = Math.max(26, lineH * textLines.length + NOTE_PAD * 2);
-    const y = target.y + target.h / 2 - h / 2;
-    const x = n.position === "rightOf" ? target.x + target.w + NOTE_GAP : target.x - NOTE_GAP - w;
-    const anchorX = n.position === "rightOf" ? target.x + target.w : target.x;
-    notes.push({
-      id: n.id,
-      rect: { x, y, w, h },
-      text: n.text,
-      anchor: {
-        x1: n.position === "rightOf" ? x : x + w,
-        y1: y + h / 2,
-        x2: anchorX,
-        y2: target.y + target.h / 2,
-      },
-    });
+    const spot = placeNote(taken, target, { w, h }, n.position === "rightOf" ? "right" : "left", NOTE_GAP);
+    notes.push({ id: n.id, rect: spot.rect, text: n.text, anchor: spot.anchor });
   }
 
-  // stacked self-transitions on one state fan outward by index
-  const selfCount = new Map<StateId, number>();
   let selfMaxRight = 0;
-  // dagre reserved room for the labels on the edges it routed; a self-loop is
-  // drawn afterwards, next to whatever already sits on that side of the box.
-  const taken = collisionIndex([...states.filter((s) => !s.composite).map((s) => s.rect), ...notes.map((n) => n.rect)]);
-
   const transitions: TransitionPath[] = ir.transitions.map((t) => {
+    // self-loops and nested connectors were routed above; everything else is
+    // the route dagre laid down
+    const hand = handDrawn.get(t.id);
     if (t.from === t.to) {
+      const points = hand!;
       const rect = rectOf.get(t.from)!;
-      const k = selfCount.get(t.from) ?? 0;
-      selfCount.set(t.from, k + 1);
-      const points = selfLoopPoints(rect, k);
-      const reach = rect.x + rect.w + SELF_LOOP_REACH(k);
+      const reach = points[1]!.x;
       const cy = points[1]!.y + (points[2]!.y - points[1]!.y) / 2;
       if (t.label === undefined) {
         selfMaxRight = Math.max(selfMaxRight, reach);
@@ -441,23 +534,24 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
       selfMaxRight = Math.max(selfMaxRight, spot.right + 6);
       return { id: t.id, points, label: t.label, labelPos: spot.labelPos };
     }
-    // a composite reaching into itself has no container where the two ends are
-    // siblings: drop a straight connector down the inner box's centre line
-    if (nested.has(t.id)) {
-      const from = rectOf.get(t.from)!;
-      const to = rectOf.get(t.to)!;
-      const outward = nested.get(t.id)!;
-      const x = outward ? to.x + to.w / 2 : from.x + from.w / 2;
-      const points = outward
-        ? [
-            { x, y: from.y },
-            { x, y: to.y },
-          ]
-        : [
-            { x, y: from.y + from.h },
-            { x, y: to.y + to.h },
-          ];
-      return { id: t.id, points, ...(t.label !== undefined ? { label: t.label, labelPos: { x: x + 6, y: (points[0]!.y + points[1]!.y) / 2 } } : {}) };
+    if (hand !== undefined) {
+      const points = hand;
+      // nested connector: its label hangs off the lane it ended up running in,
+      // on whichever side of the lane is free — the run goes past the frame's
+      // other members, so the obvious spot is often one of them
+      if (t.label === undefined) return { id: t.id, points };
+      const lane = points[0]!;
+      const last = points.at(-1)!;
+      const m = measure.measure(t.label, NOTE_STYLE);
+      const midY = (lane.y + last.y) / 2;
+      const candidates: Rect[] = [];
+      for (const step of [0, -1, 1, -2, 2]) {
+        const y = midY + step * (m.h + 6);
+        for (const cx of [lane.x + 6 + m.w / 2, lane.x - 6 - m.w / 2]) {
+          candidates.push(labelRect({ x: cx, y }, m));
+        }
+      }
+      return { id: t.id, points, label: t.label, labelPos: labelAnchor(taken.place(candidates).rect) };
     }
     const routed = root.paths.get(t.id)!;
     return {

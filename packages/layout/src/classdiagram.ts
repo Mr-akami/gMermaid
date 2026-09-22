@@ -11,8 +11,8 @@ import {
   type RelationLine,
   type RelationId,
 } from "@gmermaid/ir";
-import { collisionIndex } from "./collision";
-import { bboxOf, borderCrossing, placeSelfLoopLabel } from "./compound";
+import { collisionIndex, pathHitsRect } from "./collision";
+import { bboxOf, borderCrossing, placeNote, placeSelfLoopLabel } from "./compound";
 import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
@@ -363,19 +363,48 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
 
   const namespaces: NamespaceFrame[] = usedNamespaces.map((ns) => ({ id: ns.id, name: ns.name, rect: rectOf(ns.id) }));
 
-  const notes: ClassNoteBox[] = ir.notes.map((n) => {
-    const rect = rectOf(n.id);
-    const link = n.target !== undefined && rendered.has(n.target) ? pathOf(n.id, n.id, n.target).points : undefined;
-    return { id: n.id, rect, text: n.text, ...(link !== undefined ? { link } : {}) };
+  const boxByClass = new Map<ClassId, Rect>(classes.map((c) => [c.id, c.rect]));
+
+  // Dagre placed the notes as ordinary nodes, so a note never overlaps a box.
+  // It routed the relations afterwards, though, through whatever gap was left
+  // — and a route can run straight across a note. Only those get moved: a note
+  // dagre put somewhere good stays exactly where it is, routed link and all.
+  const routes = new Map<string, readonly Point[]>();
+  for (const r of ir.relations) if (r.from !== r.to) routes.set(r.id, pathOf(r.id, r.from, r.to).points);
+  const onARoute = (rect: Rect): boolean => [...routes.values()].some((p) => pathHitsRect(p, rect));
+
+  const dagrePlaced = ir.notes.map((n) => ({ note: n, rect: rectOf(n.id), stuck: onARoute(rectOf(n.id)) }));
+  const taken = collisionIndex([
+    ...classes.map((c) => c.rect),
+    // a note never sits inside a namespace frame
+    ...namespaces.map((ns) => ns.rect),
+    ...dagrePlaced.filter((p) => !p.stuck).map((p) => p.rect),
+  ]);
+  for (const p of routes.values()) taken.addPath(p);
+
+  const notes: ClassNoteBox[] = dagrePlaced.map(({ note: n, rect, stuck }) => {
+    const target = n.target !== undefined && rendered.has(n.target) ? boxByClass.get(n.target) : undefined;
+    if (!stuck || target === undefined) {
+      // a free note has nothing to point at, so moving it says nothing: leave it
+      if (stuck) taken.add(rect);
+      const link = target !== undefined ? pathOf(n.id, n.id, n.target!).points : undefined;
+      return { id: n.id, rect, text: n.text, ...(link !== undefined ? { link } : {}) };
+    }
+    const spot = placeNote(taken, target, { w: rect.w, h: rect.h }, "right");
+    return {
+      id: n.id,
+      rect: spot.rect,
+      text: n.text,
+      link: [
+        { x: spot.anchor.x1, y: spot.anchor.y1 },
+        { x: spot.anchor.x2, y: spot.anchor.y2 },
+      ],
+    };
   });
 
-  const boxByClass = new Map<ClassId, Rect>(classes.map((c) => [c.id, c.rect]));
   // stacked self-relations on one node fan outward by index
   const selfCount = new Map<ClassId, number>();
   let selfMaxRight = 0;
-  // dagre reserved room for the labels on the edges it routed; a self-relation
-  // is drawn afterwards, so its label has to find its own gap.
-  const taken = collisionIndex([...classes.map((c) => c.rect), ...notes.map((n) => n.rect)]);
 
   const relations: RelationPath[] = ir.relations.map((r) => {
     let points: Point[];
@@ -403,7 +432,7 @@ export function layoutClassDiagram(ir: ClassIR, measure: TextMeasurer): ClassLay
       }
     } else {
       const route = pathOf(r.id, r.from, r.to);
-      points = route.points;
+      points = [...route.points];
       // the label belongs in the gap dagre kept for it, never on the leg that
       // dives into a frame
       const mid = route.routed[Math.floor(route.routed.length / 2)]!;

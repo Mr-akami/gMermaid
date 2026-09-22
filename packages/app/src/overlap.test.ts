@@ -24,6 +24,7 @@ import {
   layoutStateDiagram,
   layoutTimeline,
   layoutUsecase,
+  segmentHitsRect,
   type Point,
   type Rect,
 } from "@gmermaid/layout";
@@ -461,5 +462,362 @@ note for Checkout "validates the cart"
 `;
     const l = layoutMindmap(parsed(parseMindmap(src), "mindmap"), measure);
     expect(collisions(l.nodes.map((n) => ({ ...n.rect, what: `node ${n.label}` })))).toEqual([]);
+  });
+});
+
+// Two boxes overlapping is only half the story. A polyline drawn across a
+// node, a note or a label hides just as much text, and no pair of rectangles
+// is involved — so nothing above catches it. These measure the other half:
+// notes against everything else drawn, and every routed path (edge, self-loop
+// detour, note leader) against every box it has no business touching.
+
+/** The ink the renderer actually lays down for a polyline: `edgePath` feeds
+ * the points through a uniform cubic B-spline, which rounds the corners and
+ * so leaves the control polygon. Flatten the same curve, or the measurement
+ * checks a line the reader never sees. */
+function curve(points: readonly Point[], steps = 16): Point[] {
+  const p: Point[] = [];
+  for (const q of points) {
+    const last = p[p.length - 1];
+    if (last && Math.abs(last.x - q.x) < 0.01 && Math.abs(last.y - q.y) < 0.01) continue;
+    p.push(q);
+  }
+  if (p.length < 3) return p;
+  const out: Point[] = [p[0]!];
+  const cubic = (a: Point, b: Point, c: Point, d: Point) => {
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const u = 1 - t;
+      out.push({
+        x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
+        y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y,
+      });
+    }
+  };
+  out.push({ x: (5 * p[0]!.x + p[1]!.x) / 6, y: (5 * p[0]!.y + p[1]!.y) / 6 });
+  for (let i = 1; i < p.length - 1; i++) {
+    const a = p[i - 1]!;
+    const b = p[i]!;
+    const c = p[i + 1]!;
+    cubic(
+      out[out.length - 1]!,
+      { x: (2 * a.x + b.x) / 3, y: (2 * a.y + b.y) / 3 },
+      { x: (a.x + 2 * b.x) / 3, y: (a.y + 2 * b.y) / 3 },
+      { x: (a.x + 4 * b.x + c.x) / 6, y: (a.y + 4 * b.y + c.y) / 6 },
+    );
+  }
+  const last = p[p.length - 1]!;
+  const prev = p[p.length - 2]!;
+  cubic(
+    out[out.length - 1]!,
+    { x: (2 * prev.x + last.x) / 3, y: (2 * prev.y + last.y) / 3 },
+    { x: (prev.x + 2 * last.x) / 3, y: (prev.y + 2 * last.y) / 3 },
+    last,
+  );
+  return out;
+}
+
+interface Route {
+  readonly points: readonly Point[];
+  readonly what: string;
+  /** Boxes this path is allowed to touch: the two it connects, its own label.
+   * An edge has to reach its endpoints, and a label rides on its own line. */
+  readonly ok: readonly string[];
+}
+
+/** A line ending exactly on a border is how an edge attaches to its node, so
+ * the boxes are shrunk by a hair before asking: only ink that goes INTO a box
+ * counts, never ink that stops at it. */
+const GRAZE = 1.5;
+
+/** Every path that runs through a box it should be keeping off, named. */
+function crossings(routes: readonly Route[], boxes: readonly Box[]): string[] {
+  const hits: string[] = [];
+  for (const route of routes) {
+    for (const box of boxes) {
+      if (route.ok.includes(box.what)) continue;
+      const r = { x: box.x + GRAZE, y: box.y + GRAZE, w: box.w - GRAZE * 2, h: box.h - GRAZE * 2 };
+      if (r.w <= 0 || r.h <= 0) continue;
+      const pts = route.points;
+      for (let i = 1; i < pts.length; i++) {
+        if (segmentHitsRect(pts[i - 1]!, pts[i]!, r)) {
+          hits.push(`${route.what} ⨯ ${box.what}`);
+          break;
+        }
+      }
+    }
+  }
+  return hits;
+}
+
+/** How a state box is named in every measurement below. */
+const named = (id: string): string => `state ${id}`;
+
+/** A note's dashed leader, as a two-point path. */
+const leaderRoute = (
+  a: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number },
+  what: string,
+  ok: readonly string[],
+): Route => ({
+  points: [
+    { x: a.x1, y: a.y1 },
+    { x: a.x2, y: a.y2 },
+  ],
+  what,
+  ok,
+});
+
+describe("notes and routed paths keep off everything else drawn", () => {
+  // the diagram the bug was reported on: a fan wide enough that the spot
+  // beside each note's target is already taken, by a box or by a route
+  const crowdedState = `stateDiagram-v2
+  direction LR
+  [*] --> A
+  A --> B
+  A --> C
+  A --> D
+  B --> E
+  C --> E
+  D --> E
+  note right of A : a note that is fairly wide
+  note right of B : second note here
+  note left of C : third note
+`;
+
+  it("state: notes in a crowded fan", () => {
+    const ir = parsed(parseStateDiagram(crowdedState), "state");
+    const l = layoutStateDiagram(ir, measure);
+    const boxes: Box[] = [
+      ...l.states.filter((s) => !s.composite).map((s) => ({ ...s.rect, what: named(s.id) })),
+      ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+      ...l.transitions.flatMap((t) =>
+        t.label !== undefined && t.labelPos !== undefined ? [lbl(t.label, t.labelPos, `trans "${t.label}"`, 14)] : [],
+      ),
+    ];
+    expect(collisions(boxes)).toEqual([]);
+
+    const ends = new Map(ir.transitions.map((t) => [t.id, [named(t.from), named(t.to)] as const]));
+    expect(
+      crossings(
+        [
+          ...l.transitions.map((t) => ({
+            points: curve(t.points),
+            what: `edge ${t.id}`,
+            ok: [...(ends.get(t.id) ?? []), `trans "${t.label}"`],
+          })),
+          ...l.notes.map((n) => leaderRoute(n.anchor, `leader "${n.text}"`, [`note "${n.text}"`])),
+        ],
+        boxes,
+      ),
+    ).toEqual([]);
+  });
+
+  it("state: a transition between a composite and a state inside it", () => {
+    // no container holds both ends, so this connector is drawn by hand — it
+    // used to drop straight down the inner box's centre line, across the
+    // frame's own title on the way
+    const src = `stateDiagram-v2
+  [*] --> Composite
+  state Composite {
+    [*] --> Inner
+    Inner --> Second : inner move
+  }
+  Composite --> Inner : reach right back inside
+  Second --> Composite : and back out again
+  note right of Inner : a note on the inner state
+`;
+    const ir = parsed(parseStateDiagram(src), "state");
+    const l = layoutStateDiagram(ir, measure);
+    const boxes: Box[] = [
+      ...l.states.filter((s) => !s.composite).map((s) => ({ ...s.rect, what: named(s.id) })),
+      ...l.states
+        .filter((s) => s.composite)
+        .map((s) => frameTitle(s.label, s.rect, `composite title ${s.label}`, 14)),
+      ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+      ...l.transitions.flatMap((t) =>
+        t.label !== undefined && t.labelPos !== undefined ? [lbl(t.label, t.labelPos, `trans "${t.label}"`, 14)] : [],
+      ),
+    ];
+    expect(collisions(boxes)).toEqual([]);
+
+    const ends = new Map(ir.transitions.map((t) => [t.id, [named(t.from), named(t.to)] as const]));
+    expect(
+      crossings(
+        [
+          ...l.transitions.map((t) => ({
+            points: curve(t.points),
+            what: `edge ${t.id}`,
+            ok: [...(ends.get(t.id) ?? []), `trans "${t.label}"`],
+          })),
+          ...l.notes.map((n) => leaderRoute(n.anchor, `leader "${n.text}"`, [`note "${n.text}"`])),
+        ],
+        boxes,
+      ),
+    ).toEqual([]);
+  });
+
+  it("class: a note dagre placed under a relation it later routed", () => {
+    const src = `classDiagram
+  direction LR
+  class Alpha
+  class Beta
+  class Gamma
+  class Delta
+  Alpha --> Beta
+  Alpha --> Gamma
+  Alpha --> Delta
+  Beta --> Delta
+  Gamma --> Delta
+  note for Alpha "a note that is fairly wide here"
+  note for Beta "second note here"
+  note for Gamma "third note"
+`;
+    const ir = parsed(parseClassDiagram(src), "class");
+    const l = layoutClassDiagram(ir, measure);
+    const nameOf = new Map(l.classes.map((c) => [c.id, `class ${c.name}`]));
+    const boxes: Box[] = [
+      ...l.classes.map((c) => ({ ...c.rect, what: `class ${c.name}` })),
+      ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+      ...l.namespaces.map((n) => frameTitle(n.name, n.rect, `namespace title ${n.name}`, 14)),
+    ];
+    expect(collisions(boxes)).toEqual([]);
+
+    const ends = new Map(ir.relations.map((r) => [r.id, [nameOf.get(r.from)!, nameOf.get(r.to)!] as const]));
+    expect(
+      crossings(
+        [
+          ...l.relations.map((r) => ({ points: curve(r.points), what: `rel ${r.id}`, ok: [...(ends.get(r.id) ?? [])] })),
+          ...l.notes.flatMap((n) =>
+            n.link === undefined ? [] : [{ points: n.link, what: `link "${n.text}"`, ok: [`note "${n.text}"`] }],
+          ),
+        ],
+        boxes,
+      ),
+    ).toEqual([]);
+  });
+
+  it("usecase: notes beside a chain that already fills the space", () => {
+    const src = `usecase-beta
+direction LR
+actor Customer("Customer")
+actor Admin("Administrator")
+systemBoundary "Order system"
+  Checkout("Place an order")
+  Track("Track the order")
+  Refund("Refund an order")
+end
+Customer -- "initiates" --> Checkout
+Customer -- "follows up on" --> Track
+Customer -- "asks about" --> Refund
+Admin -- "handles the case" --> Refund
+Checkout -- "retries itself" --> Checkout
+note for Checkout "validates the cart carefully"
+note for Track "sends notifications"
+note for Refund "third note"
+`;
+    const ir = parsed(parseUsecase(src), "usecase");
+    const l = layoutUsecase(ir, measure);
+    const nameOf = new Map<string, string>([
+      ...l.actors.map((a): [string, string] => [a.id, `actor ${a.label}`]),
+      ...l.usecases.map((u): [string, string] => [u.id, `usecase ${u.label}`]),
+    ]);
+    const boxes: Box[] = [
+      ...l.actors.map((a) => ({ ...a.rect, what: `actor ${a.label}` })),
+      ...l.usecases.map((u) => ({ ...u.rect, what: `usecase ${u.label}` })),
+      ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+      ...l.boundaries.map((b) => frameTitle(b.label, b.rect, `boundary title ${b.label}`, 13)),
+    ];
+    expect(collisions(boxes)).toEqual([]);
+
+    const ends = new Map(ir.relations.map((r) => [r.id, [nameOf.get(r.from)!, nameOf.get(r.to)!] as const]));
+    expect(
+      crossings(
+        [
+          ...l.edges.map((e) => ({ points: curve(e.points), what: `edge ${e.id}`, ok: [...(ends.get(e.id) ?? [])] })),
+          ...l.notes.map((n) => leaderRoute(n.anchor, `leader "${n.text}"`, [`note "${n.text}"`])),
+        ],
+        boxes,
+      ),
+    ).toEqual([]);
+  });
+
+  it("requirement: relation paths against the boxes they run between", () => {
+    const src = `requirementDiagram
+  requirement first_req {
+    id: 1
+    text: the first requirement
+    risk: high
+    verifymethod: test
+  }
+  requirement second_req {
+    id: 2
+    text: the second requirement
+    risk: low
+    verifymethod: analysis
+  }
+  requirement third_req {
+    id: 3
+    text: the third requirement
+    risk: medium
+    verifymethod: inspection
+  }
+  element some_element {
+    type: simulation
+  }
+  first_req - satisfies -> second_req
+  first_req - traces -> third_req
+  second_req - derives -> some_element
+  third_req - derives -> some_element
+  first_req - refines -> some_element
+`;
+    const ir = parsed(parseRequirementDiagram(src), "requirement");
+    const l = layoutRequirementDiagram(ir, measure);
+    const boxes: Box[] = l.boxes.map((b) => ({ ...b.rect, what: `box ${b.name}` }));
+    const nameOf = new Map(l.boxes.map((b) => [b.id, `box ${b.name}`]));
+    const ends = new Map(ir.relations.map((r) => [r.id, [nameOf.get(r.from)!, nameOf.get(r.to)!] as const]));
+    expect(
+      crossings(
+        l.edges.map((e) => ({ points: curve(e.points), what: `edge ${e.id}`, ok: [...(ends.get(e.id) ?? [])] })),
+        boxes,
+      ),
+    ).toEqual([]);
+  });
+
+  it("sequence: notes against heads, bars, tabs and the message lines", () => {
+    const src = `sequenceDiagram
+  participant A as Alice
+  participant B as Bob
+  participant C as Carol
+  A->>B: a reasonably long message
+  Note right of A: a note beside Alice
+  Note left of B: a note left of Bob
+  activate B
+  B->>C: forward it onwards
+  Note over B,C: a spanning note here
+  Note over C: note on Carol
+  deactivate B
+  C->>A: reply back the long way
+`;
+    const l = layoutSequence(parsed(parseSequence(src), "sequence"), measure);
+    const boxes: Box[] = [
+      ...l.lifelines.map((x) => ({ ...x.headRect, what: `head ${x.name}` })),
+      ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
+      ...l.fragments.map((f) => ({ ...f.labelTab, what: `tab ${f.fragmentKind}` })),
+    ];
+    expect(collisions(boxes)).toEqual([]);
+    // a message is a straight run between two spines; nothing drawn may sit on it
+    expect(
+      crossings(
+        l.messages.map((m) => ({
+          points: [
+            { x: m.fromX, y: m.y },
+            { x: m.toX, y: m.y },
+          ],
+          what: `msg "${m.label}"`,
+          ok: [],
+        })),
+        boxes,
+      ),
+    ).toEqual([]);
   });
 });
