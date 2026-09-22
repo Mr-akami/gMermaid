@@ -26,8 +26,9 @@ export function bboxOf(rects: readonly Rect[]): Rect {
   };
 }
 
-/** How far right the `index`-th stacked loop on one box reaches. */
-export function SELF_LOOP_REACH(index: number): number {
+/** How far right the `index`-th stacked loop on one box reaches. Callers
+ * that need it after the fact read it off the points instead. */
+function SELF_LOOP_REACH(index: number): number {
   return SELF_LOOP_W + index * SELF_LOOP_STEP;
 }
 
@@ -105,4 +106,143 @@ function segmentRectIntersection(a: Point, b: Point, r: Rect): Point | null {
  */
 export function borderCrossing(outside: Point, inside: Point, rect: Rect): Point | null {
   return segmentRectIntersection(outside, inside, rect);
+}
+
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+/** Default gap between a note and whatever it sits beside. */
+const NOTE_GAP = 14;
+/** How many steps outward the search may take before giving up. */
+const NOTE_RINGS = 3;
+/** How far along a side a note may slide, in gaps. */
+const NOTE_SLIDES = 6;
+
+/** Where a note ended up, and the leader line that says what it annotates. */
+export interface NotePlacement {
+  readonly rect: Rect;
+  readonly anchor: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number };
+  /** False when nothing was clear and the natural spot was kept anyway. */
+  readonly free: boolean;
+}
+
+export type NoteSide = "right" | "left" | "below" | "above";
+
+/** Clip the ray from `from` towards `to` at `rect`'s border, so a leader line
+ * starts on the note's edge and stops on the target's edge. */
+function clipToBorder(from: Point, to: Point, rect: Rect): Point {
+  return borderCrossing(to, from, rect) ?? from;
+}
+
+/**
+ * Where a note box goes, given everything already drawn.
+ *
+ * Legibility comes first. A note that sits exactly where `note right of X`
+ * says, but covers the state next door, hides more than a note a step away
+ * with a leader line pointing back at its target — so the search is allowed to
+ * wander. The IR still says `rightOf`; only the drawing moves, and a round
+ * trip through the codegen emits the same text it read.
+ *
+ * The candidate arc is ordered by how much work it costs the reader, not by
+ * pixels:
+ *
+ *   1. the side the text asked for — centred first, then sliding along that
+ *      side in one-gap steps, nearest offset first, so the note slots into a
+ *      gap between neighbours rather than leaping past them;
+ *   2. the opposite side, the same way — still beside the target;
+ *   3. below, then above: further for the eye to travel than "beside", which
+ *      is the shape a reader expects a note to have;
+ *   4. the same four sides one, two, three steps further out, a step being the
+ *      note's own extent plus the gap;
+ *   5. the four diagonals last — a corner reads as "near", but not "beside".
+ *
+ * Nothing past ring 3 is offered. Beyond that the note is too far from its
+ * target to be worth the canvas, and keeping the natural spot — overlap and
+ * all — is the better of two bad outcomes, because the reader can at least
+ * tell what it belongs to. Candidates in negative space are skipped outright:
+ * the diagram's origin is (0,0) and the view does not scroll to meet a note
+ * placed off the top-left.
+ *
+ * Two tiers, in this order:
+ *
+ *   - the first candidate whose box is clear of every box AND every routed
+ *     edge, and whose LEADER reaches the target crossing nothing;
+ *   - failing that, the first whose box alone is clear. A thin dashed leader
+ *     passing behind a box costs a reader far less than an opaque note laid
+ *     over one, so a blocked leader is a preference, not a veto.
+ */
+export function placeNote(
+  taken: CollisionIndex,
+  target: Rect,
+  size: { readonly w: number; readonly h: number },
+  prefer: NoteSide,
+  gap: number = NOTE_GAP,
+): NotePlacement {
+  const { w, h } = size;
+  const midX = target.x + target.w / 2 - w / 2;
+  const midY = target.y + target.h / 2 - h / 2;
+
+  /** `ring` steps out from the target on `side`, `slide` gaps along it. */
+  const at = (side: NoteSide, ring: number, slide: number): Rect => {
+    const outX = gap + ring * (w + gap);
+    const outY = gap + ring * (h + gap);
+    switch (side) {
+      case "right":
+        return { x: target.x + target.w + outX, y: midY + slide * gap, w, h };
+      case "left":
+        return { x: target.x - outX - w, y: midY + slide * gap, w, h };
+      case "below":
+        return { x: midX + slide * gap, y: target.y + target.h + outY, w, h };
+      case "above":
+        return { x: midX + slide * gap, y: target.y - outY - h, w, h };
+    }
+  };
+
+  const opposite: Record<NoteSide, NoteSide> = { right: "left", left: "right", below: "above", above: "below" };
+  const across: readonly NoteSide[] = prefer === "right" || prefer === "left" ? ["below", "above"] : ["right", "left"];
+  const sides: readonly NoteSide[] = [prefer, opposite[prefer], ...across];
+  // nearest offset first: 0, -1, +1, -2, +2, …
+  const slides = [0, ...Array.from({ length: NOTE_SLIDES }, (_, i) => [-(i + 1), i + 1]).flat()];
+
+  const candidates: Rect[] = [];
+  for (let ring = 0; ring <= NOTE_RINGS; ring++) {
+    for (const side of sides) for (const slide of slides) candidates.push(at(side, ring, slide));
+  }
+  for (let ring = 0; ring < NOTE_RINGS; ring++) {
+    const dx = gap + ring * (w + gap);
+    const dy = gap + ring * (h + gap);
+    candidates.push(
+      { x: target.x + target.w + dx, y: target.y + target.h + dy, w, h },
+      { x: target.x - dx - w, y: target.y + target.h + dy, w, h },
+      { x: target.x + target.w + dx, y: target.y - dy - h, w, h },
+      { x: target.x - dx - w, y: target.y - dy - h, w, h },
+    );
+  }
+  const onCanvas = candidates.filter((r) => r.x >= 0 && r.y >= 0);
+  // the natural spot is the fallback, so it has to survive even off-canvas
+  const arc = onCanvas.length > 0 ? onCanvas : [candidates[0]!];
+
+  const leader = (rect: Rect) => {
+    const nc = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+    const tc = { x: target.x + target.w / 2, y: target.y + target.h / 2 };
+    return { start: clipToBorder(nc, tc, rect), end: clipToBorder(tc, nc, target) };
+  };
+  /** The leader stops ON the note and the target, so pull both ends a hair
+   * inward before asking whether it crosses anything — otherwise the two
+   * boxes it connects count as obstacles. */
+  const leaderClear = (rect: Rect): boolean => {
+    const { start, end } = leader(rect);
+    const len = Math.hypot(end.x - start.x, end.y - start.y);
+    if (len < 1) return false; // a leader too short to see is not a leader
+    const ux = ((end.x - start.x) / len) * 0.5;
+    const uy = ((end.y - start.y) / len) * 0.5;
+    return !taken.crosses({ x: start.x + ux, y: start.y + uy }, { x: end.x - ux, y: end.y - uy });
+  };
+
+  const best = arc.find((r) => !taken.hits(r) && leaderClear(r));
+  const spot = taken.place(best !== undefined ? [best, ...arc] : arc);
+  const { start, end } = leader(spot.rect);
+  return { rect: spot.rect, anchor: { x1: start.x, y1: start.y, x2: end.x, y2: end.y }, free: spot.free };
 }

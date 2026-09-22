@@ -13,7 +13,7 @@ import type {
   UsecaseRelationId,
 } from "@gmermaid/ir";
 import { collisionIndex } from "./collision";
-import { bboxOf, borderCrossing, placeSelfLoopLabel } from "./compound";
+import { bboxOf, borderCrossing, placeNote, placeSelfLoopLabel } from "./compound";
 import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
@@ -387,53 +387,67 @@ export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayo
     ...actors.map((a): [string, Rect] => [a.id, a.rect]),
     ...usecases.map((u): [string, Rect] => [u.id, u.rect]),
   ]);
-  // notes sit beside their target, outside the dagre graph (cf. state notes)
-  const noteCount = new Map<UsecaseNodeId, number>();
+  // Everything already drawn — boxes, the title band of every boundary frame,
+  // and the routes dagre laid down. A note placed from here on has to keep
+  // clear of the arrows too, not just the boxes.
+  const taken = collisionIndex([
+    ...actors.map((a) => a.rect),
+    ...usecases.map((u) => u.rect),
+    ...boundaries.map((b) => ({ x: b.rect.x, y: b.rect.y, w: b.rect.w, h: FRAME_TITLE_H })),
+  ]);
+
+  const routed = new Map<UsecaseRelationId, { points: Point[]; labelPos: Point }>();
+  for (const r of ir.relations) {
+    if (r.from === r.to) continue;
+    const route = pathOf(r.id, r.from, r.to);
+    routed.set(r.id, route);
+    taken.addPath(route.points);
+  }
+
+  // self-edge detours are fixed geometry; only their labels have to negotiate,
+  // so the detours go in before the notes and the labels after
+  const selfCount = new Map<UsecaseNodeId, number>();
+  const selfPoints = new Map<UsecaseRelationId, Point[]>();
+  for (const r of ir.relations) {
+    if (r.from !== r.to) continue;
+    const rect = rectById.get(r.from)!;
+    const k = selfCount.get(r.from) ?? 0;
+    selfCount.set(r.from, k + 1);
+    const right = rect.x + rect.w;
+    const reach = right + SELF_W + k * SELF_STEP;
+    const cy = rect.y + Math.min(rect.h / 2, SELF_H * (k + 1.5));
+    const points = [
+      { x: right, y: cy - SELF_H / 2 },
+      { x: reach, y: cy - SELF_H / 2 },
+      { x: reach, y: cy + SELF_H / 2 },
+      { x: right, y: cy + SELF_H / 2 },
+    ];
+    selfPoints.set(r.id, points);
+    taken.addPath(points);
+  }
+
+  // notes sit beside their target, outside the dagre graph (cf. state notes):
+  // the asked-for side when it is free, a nearby free one when it is not
   const notes: UsecaseNoteBox[] = [];
   for (const n of ir.notes) {
     const target = rectById.get(n.target);
     if (target === undefined) continue;
-    const k = noteCount.get(n.target) ?? 0;
-    noteCount.set(n.target, k + 1);
     const m = measure.measure(n.text, SMALL_FONT);
     const w = m.w + NOTE_PAD * 2;
     const h = Math.max(26, m.h + NOTE_PAD * 2);
-    const x = target.x + target.w + NOTE_GAP;
-    const y = target.y + target.h / 2 - h / 2 + k * (h + 8);
-    notes.push({
-      id: n.id,
-      rect: { x, y, w, h },
-      text: n.text,
-      anchor: { x1: x, y1: y + h / 2, x2: target.x + target.w, y2: target.y + target.h / 2 },
-    });
+    const spot = placeNote(taken, target, { w, h }, "right", NOTE_GAP);
+    notes.push({ id: n.id, rect: spot.rect, text: n.text, anchor: spot.anchor });
   }
 
-  const selfCount = new Map<UsecaseNodeId, number>();
   let selfMaxRight = 0;
-  // dagre reserved room for the labels on the edges it routed; a self-edge is
-  // drawn afterwards, and its right side is where the notes live too.
-  const taken = collisionIndex([
-    ...actors.map((a) => a.rect),
-    ...usecases.map((u) => u.rect),
-    ...notes.map((n) => n.rect),
-  ]);
-
   const edges: UsecaseEdgePath[] = ir.relations.map((r) => {
     let points: Point[];
     let labelPos: Point;
     if (r.from === r.to) {
       const rect = rectById.get(r.from)!;
-      const k = selfCount.get(r.from) ?? 0;
-      selfCount.set(r.from, k + 1);
-      const right = rect.x + rect.w;
-      const reach = right + SELF_W + k * SELF_STEP;
-      const cy = rect.y + Math.min(rect.h / 2, SELF_H * (k + 1.5));
-      points = [
-        { x: right, y: cy - SELF_H / 2 },
-        { x: reach, y: cy - SELF_H / 2 },
-        { x: reach, y: cy + SELF_H / 2 },
-        { x: right, y: cy + SELF_H / 2 },
-      ];
+      points = selfPoints.get(r.id)!;
+      const reach = points[1]!.x;
+      const cy = points[1]!.y + SELF_H / 2;
       // include/extend rename the edge, so measure what is actually drawn
       const drawn = r.kind !== undefined ? `«${r.kind}»` : r.label;
       if (drawn === undefined) {
@@ -445,7 +459,7 @@ export function layoutUsecase(ir: UsecaseIR, measure: TextMeasurer): UsecaseLayo
         selfMaxRight = Math.max(selfMaxRight, spot.right + 6);
       }
     } else {
-      const route = pathOf(r.id, r.from, r.to);
+      const route = routed.get(r.id)!;
       points = route.points;
       labelPos = route.labelPos;
     }
