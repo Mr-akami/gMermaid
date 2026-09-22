@@ -1,4 +1,19 @@
 import type { StateDirection, StateNode, StateNote, StateNotePosition, StateTransition } from "@gmermaid/ir";
+import { ConnectorEnds, distinctNames, type ConnectorEndpointOption } from "./ConnectorEnds";
+
+/** What the canvas calls a state. `[*]` has no name in the text at all and a
+ * `<<choice>>`/`<<fork>>`/`<<join>>` shows none, so those are named by role;
+ * distinctNames then pins down which one when a diagram holds several. */
+function stateEndName(s: StateNode): string {
+  if (s.role === "start" || s.role === "end") return `[*] ${s.role}`;
+  if (s.role !== "normal") return `<<${s.role}>>`;
+  return s.label;
+}
+
+/** Every state is a legal transition end — including a composite and a `[*]`. */
+function transitionEndpoints(states: readonly StateNode[]): ConnectorEndpointOption[] {
+  return distinctNames(states.map((s) => ({ id: s.id as string, name: stateEndName(s) })));
+}
 
 export type StateSelection =
   | {
@@ -16,6 +31,14 @@ export type StateSelection =
 
 export interface StatePropertyWindowProps {
   readonly selection: StateSelection;
+  /** Candidates for a transition's two ends: every state in the diagram. */
+  readonly states: readonly StateNode[];
+  /** Re-point ONE end; the refusal is the editor's to show, the same way
+   * every other rejection there is. */
+  readonly onRetargetTransition: (end: "from" | "to", id: string) => void;
+  readonly onSwapTransitionEnds: () => void;
+  /** Select an end on the canvas, so a dense diagram can be walked from here. */
+  readonly onSelectElement: (id: string) => void;
   readonly onChangeStateLabel: (label: string) => void;
   /** `parentRegions` = a fresh region at the end. */
   readonly onChangeStateRegion: (region: number) => void;
@@ -88,6 +111,17 @@ export function StatePropertyWindow(props: StatePropertyWindowProps) {
       ) : selection.kind === "transition" ? (
         <>
           <h3>Transition</h3>
+          {/* the two states it joins — the one thing that tells two
+              transitions between the same pair apart */}
+          <ConnectorEnds
+            from={selection.transition.from as string}
+            to={selection.transition.to as string}
+            options={transitionEndpoints(props.states)}
+            onChangeFrom={(id) => props.onRetargetTransition("from", id)}
+            onChangeTo={(id) => props.onRetargetTransition("to", id)}
+            onSwap={props.onSwapTransitionEnds}
+            onSelectEndpoint={props.onSelectElement}
+          />
           <label>
             Label
             <input

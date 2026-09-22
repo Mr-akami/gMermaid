@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { codeText, element, openEditor, setCode } from "./helpers";
+import { clickPathMiddle, codeText, element, expectCode, openEditor, setCode } from "./helpers";
 
 // The docs' "Larger Example" (mermaid.js.org/syntax/requirementDiagram.html):
 // 6 requirements + 3 elements + 8 relations, including the mirrored `<-` form.
@@ -149,4 +149,41 @@ test("dragging between two nodes creates a relation the property window can rety
   expect(await codeText(editor)).toContain("- satisfies -> ");
   await props.getByLabel("Type").selectOption("derives");
   expect(await codeText(editor)).toContain("- derives -> ");
+});
+
+// A relation whose only other property is its type is indistinguishable from
+// its neighbours until the property window names the two nodes it joins —
+// which may be a requirement OR an element, out of one mermaid name space.
+test("a relation names its ends and is re-pointed across requirements and elements", async ({ page }) => {
+  const editor = await openEditor(page, "Requirement");
+  await setCode(
+    editor,
+    `requirementDiagram
+requirement first {
+id: 1
+}
+requirement second {
+id: 2
+}
+element probe {
+type: simulation
+}
+first - satisfies -> probe
+`,
+  );
+  await expectCode(editor).toContain("first - satisfies -> probe");
+
+  await clickPathMiddle(page, editor, "relation-1");
+  const props = editor.locator(".property-window");
+  await expect(props.getByRole("heading", { name: "Relation" })).toBeVisible();
+  await expect(props.getByLabel("From", { exact: true })).toHaveValue("first");
+  await expect(props.getByLabel("To", { exact: true })).toHaveValue("probe");
+
+  // the type rides along instead of being redrawn
+  await props.getByLabel("To", { exact: true }).selectOption({ label: "second" });
+  await expectCode(editor).toContain("first - satisfies -> second");
+  await expectCode(editor).not.toContain("first - satisfies -> probe");
+
+  await props.getByRole("button", { name: "⇄ Swap ends" }).click();
+  await expectCode(editor).toContain("second - satisfies -> first");
 });

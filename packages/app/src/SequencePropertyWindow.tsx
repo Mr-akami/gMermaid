@@ -13,6 +13,12 @@ import type {
   ParticipantKind,
 } from "@gmermaid/ir";
 import { PARTICIPANT_KINDS } from "@gmermaid/ir";
+import { ConnectorEnds, distinctNames, type ConnectorEndpointOption } from "./ConnectorEnds";
+
+/** A message's two ends are lifelines, named as their heads are drawn. */
+function messageEndpoints(lifelines: readonly Lifeline[]): ConnectorEndpointOption[] {
+  return distinctNames(lifelines.map((l) => ({ id: l.id as string, name: l.name })));
+}
 
 /** What the Box select emits: an existing box, no box, or "make a new one". */
 export type BoxChoice = BoxId | null | "new";
@@ -41,6 +47,13 @@ export interface SequencePropertyWindowProps {
   readonly lifelineDestroyed: boolean;
   readonly onToggleCreated: (on: boolean) => void;
   readonly onToggleDestroyed: (on: boolean) => void;
+  /** Re-point ONE end of a message. The message keeps its place in the event
+   * order, so this moves the arrow without moving the message. The refusal is
+   * the editor's to show, the same way every other rejection there is. */
+  readonly onRetargetMessage: (end: "from" | "to", id: string) => void;
+  readonly onSwapMessageEnds: () => void;
+  /** Select a lifeline on the canvas, so a tall diagram can be walked from here. */
+  readonly onSelectElement: (id: string) => void;
   readonly onChangeMessageActivation: (activate: "start" | "end" | null) => void;
   readonly onChangeMessageLabel: (label: string) => void;
   readonly onChangeMessageArrow: (arrow: MessageArrowType) => void;
@@ -192,6 +205,19 @@ export function SequencePropertyWindow(props: SequencePropertyWindowProps) {
       {selection.kind === "message" && (
         <>
           <h3>Message</h3>
+          {/* The two lifelines it runs between. Changing one moves the arrow
+              where it already is: a message is positioned by the event order,
+              not by its ends, so it stays in the same fragment branch with the
+              same note anchored under it. */}
+          <ConnectorEnds
+            from={selection.message.from as string}
+            to={selection.message.to as string}
+            options={messageEndpoints(props.lifelines)}
+            onChangeFrom={(id) => props.onRetargetMessage("from", id)}
+            onChangeTo={(id) => props.onRetargetMessage("to", id)}
+            onSwap={props.onSwapMessageEnds}
+            onSelectEndpoint={props.onSelectElement}
+          />
           <label>
             Label
             <input

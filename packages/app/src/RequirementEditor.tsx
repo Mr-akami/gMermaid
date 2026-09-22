@@ -3,6 +3,7 @@ import {
   applyRequirementAction,
   emptyRequirementDiagram,
   newId,
+  requirementRelationRetargetRejection,
   REQ_NAME_RE,
   type ElementId,
   type ReqNodeId,
@@ -133,6 +134,16 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
     setView({ selectedId: id });
   }
 
+  /** Re-point one end of the selected relation. The reducer's rules are the
+   * drag-to-connect rules, so its refusal surfaces exactly where a refused
+   * drop does — in the toolbar hint, never as a silent no-op. */
+  function retargetRelation(ends: { from?: ReqNodeId; to?: ReqNodeId }) {
+    if (!selectedRelation) return;
+    const reason = requirementRelationRetargetRejection(ir, selectedRelation.id, ends);
+    setRejectHint(reason);
+    if (reason === undefined) h.dispatch({ type: "retargetRelation", id: selectedRelation.id, ...ends });
+  }
+
   function deleteSelected() {
     if (selectedRequirement) h.dispatch({ type: "removeNode", id: selectedRequirement.id });
     else if (selectedElement) h.dispatch({ type: "removeNode", id: selectedElement.id });
@@ -216,6 +227,16 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
         {selection && (
           <RequirementPropertyWindow
             selection={selection}
+            requirements={ir.requirements}
+            elements={ir.elements}
+            onRetargetRelation={(end, id) => retargetRelation({ [end]: id as ReqNodeId })}
+            onSwapRelationEnds={() =>
+              selectedRelation && retargetRelation({ from: selectedRelation.to, to: selectedRelation.from })
+            }
+            onSelectElement={(id) => {
+              setRejectHint(undefined);
+              setView({ selectedId: id });
+            }}
             onChangeName={(name) => {
               // a name mermaid cannot spell used to be dropped in silence
               const reason = REQ_NAME_RE.test(name) ? undefined : "a name must be a bare identifier";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EdgeId, NodeId, SubgraphId } from "./ids";
-import { applyFlowchartAction, normalizeFlowchartEdge } from "./flowchartActions";
+import { applyFlowchartAction, edgeRetargetRejection, normalizeFlowchartEdge } from "./flowchartActions";
 import type { FlowchartIR } from "./flowchart";
 
 const a = "node-a" as NodeId;
@@ -136,5 +136,50 @@ describe("applyFlowchartAction", () => {
     next = applyFlowchartAction(next, { type: "updateSubgraph", id: g, direction: null });
     expect(next.subgraphs[0]).toEqual({ id: g, label: "G" });
     expect(applyFlowchartAction(withSub, { type: "updateSubgraph", id: g, direction: null })).toBe(withSub);
+  });
+});
+
+// Re-pointing an edge used to mean deleting it and drawing a new one, which
+// threw away its label, line style, heads and length.
+describe("retargetEdge", () => {
+  const sg = "sub-g" as SubgraphId;
+  const rich: FlowchartIR = {
+    ...base,
+    subgraphs: [{ id: sg, label: "G" }],
+    edges: [{ id: e1, from: a, to: b, line: "dotted", headStart: "none", headEnd: "circle", label: "keep me", length: 3 }],
+  };
+
+  it("moves one end onto a subgraph and keeps every other property", () => {
+    const next = applyFlowchartAction(rich, { type: "retargetEdge", id: e1, to: sg });
+    expect(next.edges[0]).toEqual({
+      id: e1,
+      from: a,
+      to: sg,
+      line: "dotted",
+      headStart: "none",
+      headEnd: "circle",
+      label: "keep me",
+      length: 3,
+    });
+  });
+
+  it("swaps both ends in one action, reversing the arrow", () => {
+    const next = applyFlowchartAction(base, { type: "retargetEdge", id: e1, from: b, to: a });
+    expect(next.edges[0]).toMatchObject({ from: b, to: a, headStart: "none", headEnd: "arrow" });
+  });
+
+  it("refuses a self-loop, an unknown end, an unknown edge and a no-op — same reference", () => {
+    expect(applyFlowchartAction(base, { type: "retargetEdge", id: e1, to: a })).toBe(base);
+    expect(applyFlowchartAction(base, { type: "retargetEdge", id: e1, from: "node-ghost" as NodeId })).toBe(base);
+    expect(applyFlowchartAction(base, { type: "retargetEdge", id: "edge-ghost" as EdgeId, to: a })).toBe(base);
+    expect(applyFlowchartAction(base, { type: "retargetEdge", id: e1, from: a, to: b })).toBe(base);
+  });
+
+  it("names each refusal, and none for a legal move", () => {
+    expect(edgeRetargetRejection(base, e1, { to: a })).toBe("self-loop edges are not supported");
+    expect(edgeRetargetRejection(base, e1, { from: "node-ghost" as NodeId })).toBe("unknown source");
+    expect(edgeRetargetRejection(base, e1, { to: "node-ghost" as NodeId })).toBe("unknown target");
+    expect(edgeRetargetRejection(base, "edge-ghost" as EdgeId, { to: a })).toBe("unknown edge");
+    expect(edgeRetargetRejection(rich, e1, { from: b, to: sg })).toBeUndefined();
   });
 });

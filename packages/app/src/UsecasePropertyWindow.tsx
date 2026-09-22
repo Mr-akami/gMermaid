@@ -12,6 +12,20 @@ import {
   type UsecaseNote,
   type UsecaseRelation,
 } from "@gmermaid/ir";
+import { ConnectorEnds, distinctNames, type ConnectorEndpointOption } from "./ConnectorEnds";
+
+/** Only actors and use cases are relation ends: mermaid has no relation line
+ * that names a system boundary, so boundaries are left out of the picker
+ * (the reducer still refuses one by name, for the code-pane path). */
+function relationEndpoints(
+  actors: readonly UsecaseActor[],
+  usecases: readonly UseCase[],
+): ConnectorEndpointOption[] {
+  return distinctNames([
+    ...actors.map((a) => ({ id: a.id as string, name: a.label ?? a.name, group: "Actors" })),
+    ...usecases.map((u) => ({ id: u.id as string, name: u.label ?? u.name, group: "Use cases" })),
+  ]);
+}
 
 export type UsecaseSelection =
   | { kind: "actor"; actor: UsecaseActor }
@@ -35,6 +49,15 @@ const HEAD_LABEL: Record<UsecaseHead, string> = {
 export interface UsecasePropertyWindowProps {
   readonly selection: UsecaseSelection;
   readonly boundaries: readonly UsecaseBoundary[];
+  /** Candidates for a relation's two ends. */
+  readonly actors: readonly UsecaseActor[];
+  readonly usecases: readonly UseCase[];
+  /** Re-point ONE end; the refusal is the editor's to show, the same way
+   * every other rejection there is. */
+  readonly onRetargetRelation: (end: "from" | "to", id: string) => void;
+  readonly onSwapRelationEnds: () => void;
+  /** Select an end on the canvas, so a dense diagram can be walked from here. */
+  readonly onSelectElement: (id: string) => void;
   readonly onChangeName: (name: string) => void;
   readonly onChangeLabel: (label: string) => void;
   readonly onChangeVariant: (variant: ActorVariant) => void;
@@ -164,6 +187,17 @@ export function UsecasePropertyWindow(props: UsecasePropertyWindowProps) {
       {selection.kind === "relation" && (
         <>
           <h3>Relation</h3>
+          {/* the two nodes it joins — and, for a generalization, the pair the
+              reducer may mirror straight back (`--|>` has one direction) */}
+          <ConnectorEnds
+            from={selection.relation.from as string}
+            to={selection.relation.to as string}
+            options={relationEndpoints(props.actors, props.usecases)}
+            onChangeFrom={(id) => props.onRetargetRelation("from", id)}
+            onChangeTo={(id) => props.onRetargetRelation("to", id)}
+            onSwap={props.onSwapRelationEnds}
+            onSelectEndpoint={props.onSelectElement}
+          />
           <label>
             Relation kind
             <select

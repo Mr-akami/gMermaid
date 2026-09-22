@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { element, expectCode, openEditor, setCode } from "./helpers";
+import { clickPathMiddle, element, expectCode, openEditor, setCode } from "./helpers";
 
 // Concurrency regions, a per-block direction, a multi-line note and a
 // self-transition — the four things the docs show that the editor used to drop.
@@ -179,6 +179,42 @@ test("a self-transition label keeps clear of the note beside its state", async (
   const a = (await label.boundingBox())!;
   const b = (await note.boundingBox())!;
   expect(a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height).toBe(false);
+});
+
+// The user's original report: selecting a transition showed only its label,
+// so the two states it joins — the one thing that identifies it — were
+// invisible, and re-pointing it meant deleting it and drawing a new one.
+test("a transition names its ends, re-points one and reverses in one action", async ({ page }) => {
+  const editor = await openEditor(page, "State");
+  await setCode(
+    editor,
+    `stateDiagram-v2
+  [*] --> Idle
+  Idle --> Running : start
+  Idle --> Stopped : halt
+`,
+  );
+  await expectCode(editor).toContain("Idle --> Running : start");
+
+  await clickPathMiddle(page, editor, "transition-2");
+  await expect(editor.getByRole("heading", { name: "Transition" })).toBeVisible();
+  // exact: the jump button beside each select is labelled "Select From/To …"
+  await expect(editor.getByLabel("From", { exact: true })).toHaveValue("Idle");
+  await expect(editor.getByLabel("To", { exact: true })).toHaveValue("Running");
+
+  // re-pointing keeps the label, which redrawing the transition would lose
+  await editor.getByLabel("To", { exact: true }).selectOption({ label: "Stopped" });
+  await expectCode(editor).toContain("Idle --> Stopped : start");
+  await expectCode(editor).not.toContain("Idle --> Running : start");
+
+  await editor.getByRole("button", { name: "⇄ Swap ends" }).click();
+  await expectCode(editor).toContain("Stopped --> Idle : start");
+
+  // the button beside each end selects that state, so a dense diagram can be
+  // walked from the property window rather than hunted for on the canvas
+  await editor.getByRole("button", { name: "Select To on the canvas" }).click();
+  await expect(editor.getByRole("heading", { name: "State" })).toBeVisible();
+  await expect(editor.getByLabel("Label")).toHaveValue("Idle");
 });
 
 // Three composites inside each other: the frames used to be rebuilt from the
