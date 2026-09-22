@@ -17,8 +17,10 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { JourneyPropertyWindow, type JourneySelection } from "./JourneyPropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): JourneyIR {
@@ -152,14 +154,37 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
     else if (selectedSection) h.dispatch({ type: "moveSection", id: selectedSection.id as SectionId, delta });
   }
 
-  function deleteSelected() {
-    if (selectedTask) h.dispatch({ type: "removeTask", id: selectedTask.id });
-    else if (selectedSection) h.dispatch({ type: "removeSection", id: selectedSection.id });
+  function removeById(id: string, txn: string) {
+    if (ir.sections.some((s) => s.tasks.some((t) => t.id === id))) h.dispatch({ type: "removeTask", id: id as TaskId }, txn);
+    else if (ir.sections.some((s) => s.id === id)) h.dispatch({ type: "removeSection", id: id as SectionId }, txn);
+  }
+
+  /** A whole selection leaves as ONE undo step: the shared txn key coalesces
+   * the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    for (const id of ids) removeById(id, txn);
     setView({});
   }
 
   const shell = useEditorShell({
-    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
+    // "move" on a journey is the property window's own earlier/later
+    ...(selection !== undefined
+      ? {
+          moveItems: [
+            { label: "↑ 前へ移動", run: () => move(-1) },
+            { label: "↓ 後へ移動", run: () => move(1) },
+          ],
+        }
+      : {}),
     onEscape: () => {
       setRejectHint(undefined);
       setView({});
@@ -177,7 +202,7 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
         <button disabled={targetSection === undefined} onClick={addTask}>
           + Task
         </button>
-        <button disabled={selection === undefined} onClick={deleteSelected}>
+        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
           Delete
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>
@@ -189,6 +214,7 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         <label className="toolbar-field">
           Title
           <input
@@ -203,14 +229,19 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
         <ErrorBoundary>
           <JourneyView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
+            select={shell.gestures}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={(id) => setView({ selectedId: id })}
+            onElementClick={(id, additive) => {
+              if (shell.selection.click(id, additive)) return;
+              setView({ selectedId: id });
+            }}
             onBackgroundClick={() => setView({})}
           />
         </ErrorBoundary>
-        {selection && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selection && (
           <JourneyPropertyWindow
             selection={selection}
             rejectHint={rejectHint}
@@ -228,7 +259,7 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
               selectedSection && h.dispatch({ type: "updateSection", id: selectedSection.id, name }, `section:${selectedSection.id}:name`)
             }
             onMove={move}
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />

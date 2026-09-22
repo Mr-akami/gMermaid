@@ -19,8 +19,10 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { MindmapPropertyWindow } from "./MindmapPropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): MindmapIR {
@@ -146,9 +148,14 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
     setView({ selectedId: id });
   }
 
-  function deleteSelected() {
-    if (!selected) return;
-    h.dispatch({ type: "removeNode", id: selected.id });
+  /** A whole selection leaves as ONE undo step: the shared txn key coalesces
+   * the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    for (const id of ids) {
+      if (ir.nodes.some((n) => n.id === id)) h.dispatch({ type: "removeNode", id: id as MindmapNodeId }, txn);
+    }
     setRejectHint(undefined);
     setView({});
   }
@@ -172,7 +179,22 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
   }
 
   const shell = useEditorShell({
-    ...(selected !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
+    // "move" in a mindmap is sibling order, the property window's own ↑ ↓
+    ...(selected !== undefined
+      ? {
+          moveItems: [
+            { label: "↑ 上へ移動", run: () => h.dispatch({ type: "reorderNode", id: selected.id, delta: -1 }) },
+            { label: "↓ 下へ移動", run: () => h.dispatch({ type: "reorderNode", id: selected.id, delta: 1 }) },
+          ],
+        }
+      : {}),
     onEscape: () => {
       setRejectHint(undefined);
       setView({});
@@ -190,7 +212,7 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
         <button disabled={selected === undefined || selected.parent === undefined} onClick={addSibling}>
           + Sibling
         </button>
-        <button disabled={selected === undefined} onClick={deleteSelected}>
+        <button disabled={selected === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
           Delete subtree
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>
@@ -202,6 +224,7 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         <span className="hint">drag a node onto another to re-parent it</span>
         {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
@@ -209,10 +232,12 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
         <ErrorBoundary>
           <MindmapView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
+            select={shell.gestures}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={(id) => {
+            onElementClick={(id, additive) => {
+              if (shell.selection.click(id, additive)) return;
               setRejectHint(undefined);
               setView({ selectedId: id });
             }}
@@ -223,7 +248,8 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
             onGestureCancel={() => setConnectLine(undefined)}
           />
         </ErrorBoundary>
-        {selected && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selected && (
           <MindmapPropertyWindow
             node={selected}
             canMoveUp={siblingAt > 0}
@@ -236,7 +262,7 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
             onChangeShape={(shape) => h.dispatch({ type: "updateNode", id: selected.id, shape })}
             onChangeIcon={(icon) => h.dispatch({ type: "updateNode", id: selected.id, icon }, `mm:${selected.id}:icon`)}
             onMove={(delta) => h.dispatch({ type: "reorderNode", id: selected.id, delta })}
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />

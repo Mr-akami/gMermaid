@@ -1,8 +1,11 @@
 import type { GanttBar, GanttLayout, GanttSectionBand, GanttVert } from "@gmermaid/layout";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 export interface GanttViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface GanttViewProps {
@@ -11,8 +14,11 @@ export interface GanttViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
 }
 
 const PADDING = 20;
@@ -40,7 +46,9 @@ export function GanttView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
 }: GanttViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -48,6 +56,7 @@ export function GanttView({
     dragKinds: [],
     onElementClick,
     onBackgroundClick,
+    selection: select,
   });
 
   const chartRight = layout.chartX + layout.chartW;
@@ -61,6 +70,7 @@ export function GanttView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
@@ -81,7 +91,7 @@ export function GanttView({
         )}
 
         {layout.sections.map((s) => (
-          <SectionBandView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+          <SectionBandView key={s.id} s={s} selected={sel.has(s.id)} />
         ))}
 
         {/* axis: gridlines run down the rows, labels sit above the line */}
@@ -122,11 +132,11 @@ export function GanttView({
         />
 
         {layout.bars.map((b) => (
-          <BarView key={b.id} b={b} selected={viewState.selectedId === b.id} />
+          <BarView key={b.id} b={b} selected={sel.has(b.id)} />
         ))}
 
         {layout.verts.map((v) => (
-          <VertView key={v.id} v={v} top={layout.axisY} bottom={layout.rowsBottom} selected={viewState.selectedId === v.id} />
+          <VertView key={v.id} v={v} top={layout.axisY} bottom={layout.rowsBottom} selected={sel.has(v.id)} />
         ))}
 
         {layout.todayX !== undefined && (
@@ -142,6 +152,11 @@ export function GanttView({
           />
         )}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }

@@ -10,9 +10,11 @@ import {
   stateNoteRejection,
   stateRegionCount,
   transitionRetargetRejection,
+  type NoteId,
   type StateIR,
   type StateId,
   type StateNode,
+  type TransitionId,
 } from "@gmermaid/ir";
 import { layoutStateDiagram } from "@gmermaid/layout";
 import { stateToMermaid } from "@gmermaid/mermaid-codegen";
@@ -24,8 +26,10 @@ import { loadInitial, openMmd, readStoredCode, saveMmd, useAutosave, useLoadWarn
 import { CodeTabs } from "./CodeTabs";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { StatePropertyWindow, type StateSelection } from "./StatePropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): StateIR {
@@ -359,11 +363,18 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   /** One delete path for the toolbar button, the property window and the
    * Delete/Backspace key — they must agree on what "the selection" is. */
-  function deleteSelected() {
-    if (selectedState) h.dispatch({ type: "removeState", id: selectedState.id });
-    else if (selectedTransition) h.dispatch({ type: "removeTransition", id: selectedTransition.id });
-    else if (selectedNote) h.dispatch({ type: "removeStateNote", id: selectedNote.id });
-    else return;
+  function removeById(id: string, txn: string) {
+    if (ir.states.some((s) => s.id === id)) h.dispatch({ type: "removeState", id: id as StateId }, txn);
+    else if (ir.transitions.some((t) => t.id === id)) h.dispatch({ type: "removeTransition", id: id as TransitionId }, txn);
+    else if (ir.notes.some((n) => n.id === id)) h.dispatch({ type: "removeStateNote", id: id as NoteId }, txn);
+  }
+
+  /** A whole selection leaves as ONE undo step: the shared txn key coalesces
+   * the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    for (const id of ids) removeById(id, txn);
     setRejectHint(undefined);
     setView({ moveMode: view.moveMode === true });
   }
@@ -378,7 +389,25 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
   }
 
   const shell = useEditorShell({
-    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
+    // "move" in a state diagram already means re-parenting into a
+    // composite — the menu re-uses that mode rather than inventing one
+    ...(selectedState !== undefined && view.moveInto === undefined
+      ? {
+          moveItems: [
+            {
+              label: "移動…（入れ先の状態を選ぶ）",
+              run: () => setView({ selectedId: selectedState.id, moveInto: selectedState.id, moveMode: view.moveMode === true }),
+            },
+          ],
+        }
+      : {}),
     // Escape drops every pending mode, move mode included
     onEscape: () => {
       setRejectHint(undefined);
@@ -431,7 +460,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         >
           ⇱ Move mode
         </button>
-        <button disabled={selection === undefined} onClick={deleteSelected}>
+        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
           Delete
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
@@ -439,6 +468,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         <select
           value={ir.direction ?? "TB"}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<StateIR["direction"]> })}
@@ -459,10 +489,15 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         <ErrorBoundary>
           <StateView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
+            select={shell.gestures}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={handleElementClick}
+            onElementClick={(id, additive) => {
+              // an additive click is selection ONLY: it never fires the
+              // editor's own pending gesture (connect, …)
+              if (!shell.selection.click(id, additive)) handleElementClick(id);
+            }}
             onBackgroundClick={handleBackgroundClick}
             dragMode={view.moveMode === true ? "move" : "connect"}
             onConnectDrag={handleConnectDrag}
@@ -473,7 +508,8 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
             onGestureCancel={() => setConnectLine(undefined)}
           />
         </ErrorBoundary>
-        {selection && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selection && (
           <StatePropertyWindow
             selection={selection}
             states={ir.states}
@@ -502,7 +538,7 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
             onChangeNotePosition={(position) =>
               selectedNote && h.dispatch({ type: "updateStateNote", id: selectedNote.id, position })
             }
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />

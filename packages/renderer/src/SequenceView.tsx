@@ -1,12 +1,15 @@
 import type { SVGProps } from "react";
 import type { FragmentFrame, LifelineColumn, MessageRow, NoteBox, SequenceLayout } from "@gmermaid/layout";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 // Fragment frames draw UNDER the messages with a transparent fill; only
 // their border and label tab are clickable (pointer-events on the stroke),
 // so frames never steal clicks from the arrows they overlap (CONTEXT.md).
 export interface SequenceViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface SequenceViewProps {
@@ -15,8 +18,11 @@ export interface SequenceViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
   /** Live y (diagram space) while dragging a message row. */
   readonly onMessageDrag?: (id: string, y: number) => void;
   readonly onMessageDrop?: (id: string, y: number) => void;
@@ -123,6 +129,7 @@ export function SequenceView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
   onMessageDrag,
   onMessageDrop,
   onFragmentBottomDrag,
@@ -140,6 +147,7 @@ export function SequenceView({
 }: SequenceViewProps) {
   // pointer bookkeeping lives in the shared hook — all meaning stays in the
   // emitted intents; this component only routes them per drag kind.
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -147,6 +155,7 @@ export function SequenceView({
     dragKinds: ["message", "fragment-bottom", "divider", "lifeline", "spine"],
     onElementClick,
     onBackgroundClick,
+    selection: select,
     onDrag: (kind, id, x, y) => {
       if (kind === "message") onMessageDrag?.(id, y);
       else if (kind === "divider") onDividerDrag?.(id, y);
@@ -173,6 +182,7 @@ export function SequenceView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <defs>
@@ -225,8 +235,8 @@ export function SequenceView({
           <line x1={l.x} y1={l.spineTop} x2={l.x} y2={l.spineBottom} stroke="var(--gm-stroke, #999)" strokeDasharray="4 4" style={{ pointerEvents: "none" }} />
           <HeadShape
             l={l}
-            stroke={viewState.selectedId === l.id ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)"}
-            selected={viewState.selectedId === l.id}
+            stroke={sel.has(l.id) ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)"}
+            selected={sel.has(l.id)}
           />
           <TextLines
             text={l.name}
@@ -270,11 +280,11 @@ export function SequenceView({
 
       {/* fragment frames go under the messages */}
       {layout.fragments.map((f) => (
-        <FragmentView key={f.id} f={f} selected={viewState.selectedId === f.id} selectedId={viewState.selectedId} />
+        <FragmentView key={f.id} f={f} selected={sel.has(f.id)} sel={sel} />
       ))}
 
       {layout.messages.map((m) => (
-        <MessageView key={m.id} m={m} selected={viewState.selectedId === m.id} />
+        <MessageView key={m.id} m={m} selected={sel.has(m.id)} />
       ))}
 
       {layout.notes.map((n) => (
@@ -306,6 +316,11 @@ export function SequenceView({
         />
       )}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }
@@ -329,7 +344,7 @@ function NoteText({ n }: { n: NoteBox }) {
   );
 }
 
-function FragmentView({ f, selected, selectedId }: { f: FragmentFrame; selected: boolean; selectedId?: string | undefined }) {
+function FragmentView({ f, selected, sel }: { f: FragmentFrame; selected: boolean; sel: ReadonlySet<string> }) {
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #555)";
   const { x, y, w, h } = f.rect;
   if (f.fill !== undefined) {
@@ -395,7 +410,7 @@ function FragmentView({ f, selected, selectedId }: { f: FragmentFrame; selected:
               fontSize={11}
               fontStyle="italic"
               fontFamily="sans-serif"
-              fill={selectedId === b.id ? "var(--gm-selected, #1a73e8)" : "var(--gm-text, #444)"}
+              fill={sel.has(b.id) ? "var(--gm-selected, #1a73e8)" : "var(--gm-text, #444)"}
               style={{ userSelect: "none", cursor: "pointer" }}
             >
               [{b.condition}]
