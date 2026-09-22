@@ -1,8 +1,11 @@
 import type { JourneyLayout, JourneyMood, JourneySectionBand, JourneyTaskBox } from "@gmermaid/layout";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 export interface JourneyViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface JourneyViewProps {
@@ -11,8 +14,11 @@ export interface JourneyViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
 }
 
 const PADDING = 20;
@@ -32,7 +38,9 @@ export function JourneyView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
 }: JourneyViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -40,6 +48,7 @@ export function JourneyView({
     dragKinds: [],
     onElementClick,
     onBackgroundClick,
+    selection: select,
   });
 
   return (
@@ -51,6 +60,7 @@ export function JourneyView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
@@ -70,10 +80,10 @@ export function JourneyView({
           </text>
         )}
         {layout.sections.map((s) => (
-          <SectionView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+          <SectionView key={s.id} s={s} selected={sel.has(s.id)} />
         ))}
         {layout.tasks.map((t) => (
-          <TaskView key={t.id} t={t} selected={viewState.selectedId === t.id} />
+          <TaskView key={t.id} t={t} selected={sel.has(t.id)} />
         ))}
         {layout.legend.map((l) => (
           <g key={l.name}>
@@ -101,6 +111,11 @@ export function JourneyView({
           </g>
         ))}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }

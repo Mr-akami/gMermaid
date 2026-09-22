@@ -1,9 +1,12 @@
 import type { RequirementBox, RequirementEdge, RequirementLayout } from "@gmermaid/layout";
 import { edgePath } from "./edgePath";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 export interface RequirementViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface RequirementViewProps {
@@ -12,8 +15,11 @@ export interface RequirementViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
   /** Dragging from a box = draw a new relation to the drop target. */
   readonly onConnectDrag?: (fromId: string, x: number, y: number) => void;
   readonly onConnectDrop?: (fromId: string, x: number, y: number) => void;
@@ -31,11 +37,13 @@ export function RequirementView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
   onConnectDrag,
   onConnectDrop,
   connectLine,
   onGestureCancel,
 }: RequirementViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -43,6 +51,7 @@ export function RequirementView({
     dragKinds: ["connect"],
     onElementClick,
     onBackgroundClick,
+    selection: select,
     onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
     onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
     onGestureCancel,
@@ -57,6 +66,7 @@ export function RequirementView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <defs>
@@ -69,10 +79,10 @@ export function RequirementView({
 
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {layout.edges.map((e) => (
-          <RequirementEdgeView key={e.id} e={e} selected={viewState.selectedId === e.id} />
+          <RequirementEdgeView key={e.id} e={e} selected={sel.has(e.id)} />
         ))}
         {layout.boxes.map((b) => (
-          <RequirementBoxView key={b.id} b={b} selected={viewState.selectedId === b.id} />
+          <RequirementBoxView key={b.id} b={b} selected={sel.has(b.id)} />
         ))}
         {connectLine !== undefined && (
           <line
@@ -88,6 +98,11 @@ export function RequirementView({
           />
         )}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }

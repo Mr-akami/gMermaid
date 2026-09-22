@@ -1,8 +1,11 @@
 import type { TimelineLayout } from "@gmermaid/layout";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 export interface TimelineViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface TimelineViewProps {
@@ -11,8 +14,11 @@ export interface TimelineViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
 }
 
 const PADDING = 20;
@@ -29,7 +35,9 @@ export function TimelineView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
 }: TimelineViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -37,6 +45,7 @@ export function TimelineView({
     dragKinds: [],
     onElementClick,
     onBackgroundClick,
+    selection: select,
   });
 
   return (
@@ -48,6 +57,7 @@ export function TimelineView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
@@ -77,8 +87,8 @@ export function TimelineView({
               rx={4}
               fill={hue(s.colorIndex)}
               fillOpacity={0.18}
-              stroke={viewState.selectedId === s.id ? "var(--gm-selected, #1a73e8)" : hue(s.colorIndex)}
-              strokeWidth={viewState.selectedId === s.id ? 2.5 : 1.2}
+              stroke={sel.has(s.id) ? "var(--gm-selected, #1a73e8)" : hue(s.colorIndex)}
+              strokeWidth={sel.has(s.id) ? 2.5 : 1.2}
             />
             <Label
               rect={s.rect}
@@ -109,8 +119,8 @@ export function TimelineView({
               height={p.rect.h}
               rx={6}
               fill="var(--gm-bg, #fff)"
-              stroke={viewState.selectedId === p.id ? "var(--gm-selected, #1a73e8)" : hue(p.colorIndex)}
-              strokeWidth={viewState.selectedId === p.id ? 2.5 : 1.6}
+              stroke={sel.has(p.id) ? "var(--gm-selected, #1a73e8)" : hue(p.colorIndex)}
+              strokeWidth={sel.has(p.id) ? 2.5 : 1.6}
             />
             <Label rect={p.rect} text={p.label} fontSize={14} bold fill="var(--gm-text, #111)" />
           </g>
@@ -126,13 +136,18 @@ export function TimelineView({
               rx={5}
               fill={hue(e.colorIndex)}
               fillOpacity={0.75}
-              stroke={viewState.selectedId === e.id ? "var(--gm-selected, #1a73e8)" : hue(e.colorIndex)}
-              strokeWidth={viewState.selectedId === e.id ? 2.5 : 1}
+              stroke={sel.has(e.id) ? "var(--gm-selected, #1a73e8)" : hue(e.colorIndex)}
+              strokeWidth={sel.has(e.id) ? 2.5 : 1}
             />
             <Label rect={e.rect} text={e.text} fontSize={12} fill="#fff" />
           </g>
         ))}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }

@@ -7,10 +7,13 @@ import type {
   UsecaseNoteBox,
 } from "@gmermaid/layout";
 import { edgePath } from "./edgePath";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 export interface UsecaseViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface UsecaseViewProps {
@@ -19,8 +22,11 @@ export interface UsecaseViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
   /** Dragging from an actor / use case = draw a new relation to the drop target. */
   readonly onConnectDrag?: (fromId: string, x: number, y: number) => void;
   readonly onConnectDrop?: (fromId: string, x: number, y: number) => void;
@@ -47,11 +53,13 @@ export function UsecaseView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
   onConnectDrag,
   onConnectDrop,
   connectLine,
   onGestureCancel,
 }: UsecaseViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -59,6 +67,7 @@ export function UsecaseView({
     dragKinds: ["connect"],
     onElementClick,
     onBackgroundClick,
+    selection: select,
     onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
     onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
     onGestureCancel,
@@ -73,6 +82,7 @@ export function UsecaseView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <defs>
@@ -94,19 +104,19 @@ export function UsecaseView({
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {/* frames go under everything they contain */}
         {layout.boundaries.map((b) => (
-          <BoundaryView key={b.id} b={b} selected={viewState.selectedId === b.id} />
+          <BoundaryView key={b.id} b={b} selected={sel.has(b.id)} />
         ))}
         {layout.edges.map((e) => (
-          <EdgeView key={e.id} e={e} selected={viewState.selectedId === e.id} />
+          <EdgeView key={e.id} e={e} selected={sel.has(e.id)} />
         ))}
         {layout.usecases.map((u) => (
-          <UseCaseView key={u.id} u={u} selected={viewState.selectedId === u.id} />
+          <UseCaseView key={u.id} u={u} selected={sel.has(u.id)} />
         ))}
         {layout.actors.map((a) => (
-          <ActorView key={a.id} a={a} selected={viewState.selectedId === a.id} />
+          <ActorView key={a.id} a={a} selected={sel.has(a.id)} />
         ))}
         {layout.notes.map((n) => (
-          <NoteView key={n.id} n={n} selected={viewState.selectedId === n.id} />
+          <NoteView key={n.id} n={n} selected={sel.has(n.id)} />
         ))}
         {connectLine !== undefined && (
           <line
@@ -122,6 +132,11 @@ export function UsecaseView({
           />
         )}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }
