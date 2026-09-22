@@ -23,7 +23,7 @@ export function SelectionTools({ shell }: { readonly shell: EditorShell }) {
       title="ドラッグで範囲選択（Shift+ドラッグでも同じ）"
       onClick={shell.toggleMarqueeMode}
     >
-      ▭ 範囲選択
+      ▭ Select
     </button>
   );
 }

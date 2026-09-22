@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject }
 import { marqueeHits, type DiagramLayout } from "@gmermaid/layout";
 import { DIAGRAM_ROOT_ATTR, MIN_SCALE, type MenuRequest, type SelectionGestures, type Viewport } from "@gmermaid/renderer";
 import type { DiagramIR } from "@gmermaid/ir";
-import { copySelection, pasteInto } from "./diagramClipboard";
+import { copySelection, pasteInto } from "@gmermaid/clipboard";
 import { readClipboardText, writeClipboardText } from "./systemClipboard";
 
 // The behaviour every editor shell owes the user, written once: the camera
