@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ElementId, RelationId, RequirementId } from "./ids";
 import type { RequirementIR } from "./requirement";
-import { applyRequirementAction } from "./requirementActions";
+import { applyRequirementAction, requirementRelationRetargetRejection } from "./requirementActions";
 
 const Q = (s: string) => s as RequirementId;
 const E = (s: string) => s as ElementId;
@@ -60,5 +60,47 @@ describe("applyRequirementAction", () => {
     const removed = applyRequirementAction(ir, { type: "removeNode", id: E("test_entity") });
     expect(removed.elements).toEqual([]);
     expect(removed.relations.map((r) => r.id)).toEqual(["r2"]);
+  });
+});
+
+// Re-pointing a relation used to mean deleting it and drawing a new one,
+// which threw away its type.
+describe("retargetRelation", () => {
+  const second = applyRequirementAction(base, {
+    type: "addRequirement",
+    requirement: { id: Q("other_req"), name: "other_req", type: "designConstraint" },
+  });
+  const rich = applyRequirementAction(second, {
+    type: "addRelation",
+    relation: { id: R("r1"), from: Q("test_req"), to: E("test_entity"), type: "satisfies" },
+  });
+
+  it("moves one end and keeps the relation type", () => {
+    const next = applyRequirementAction(rich, { type: "retargetRelation", id: R("r1"), to: Q("other_req") });
+    expect(next.relations[0]).toEqual({ id: "r1", from: "test_req", to: "other_req", type: "satisfies" });
+  });
+
+  it("swaps both ends in one action, and either end may be a requirement or an element", () => {
+    const next = applyRequirementAction(rich, { type: "retargetRelation", id: R("r1"), from: E("test_entity"), to: Q("test_req") });
+    expect(next.relations[0]).toMatchObject({ from: "test_entity", to: "test_req", type: "satisfies" });
+  });
+
+  it("allows a self-relation", () => {
+    const next = applyRequirementAction(rich, { type: "retargetRelation", id: R("r1"), to: Q("test_req") });
+    expect(next.relations[0]).toMatchObject({ from: "test_req", to: "test_req" });
+  });
+
+  it("refuses an unknown end, an unknown relation and a no-op — same reference", () => {
+    expect(applyRequirementAction(rich, { type: "retargetRelation", id: R("r1"), to: Q("zzz") })).toBe(rich);
+    expect(applyRequirementAction(rich, { type: "retargetRelation", id: R("r1"), from: Q("zzz") })).toBe(rich);
+    expect(applyRequirementAction(rich, { type: "retargetRelation", id: R("ghost"), to: Q("other_req") })).toBe(rich);
+    expect(applyRequirementAction(rich, { type: "retargetRelation", id: R("r1"), from: Q("test_req"), to: E("test_entity") })).toBe(rich);
+  });
+
+  it("names each refusal, and none for a legal move", () => {
+    expect(requirementRelationRetargetRejection(rich, R("r1"), { from: Q("zzz") })).toBe("unknown source");
+    expect(requirementRelationRetargetRejection(rich, R("r1"), { to: Q("zzz") })).toBe("unknown target");
+    expect(requirementRelationRetargetRejection(rich, R("ghost"), { to: Q("test_req") })).toBe("unknown relation");
+    expect(requirementRelationRetargetRejection(rich, R("r1"), { to: Q("test_req") })).toBeUndefined();
   });
 });

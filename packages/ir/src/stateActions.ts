@@ -30,6 +30,10 @@ export type StateAction =
   | { type: "addTransition"; transition: StateTransition }
   | { type: "updateTransition"; id: TransitionId; label?: string }
   | { type: "removeTransition"; id: TransitionId }
+  // Re-point an existing transition instead of deleting and redrawing it
+  // (which loses its label and its XState detail). An omitted end keeps the
+  // state it has, so reversing one is ONE action: `from: t.to, to: t.from`.
+  | { type: "retargetTransition"; id: TransitionId; from?: StateId; to?: StateId }
   | { type: "addStateNote"; note: { id: NoteId; target: StateId; position: StateNotePosition; text: string } }
   | { type: "updateStateNote"; id: NoteId; text?: string; position?: StateNotePosition }
   | { type: "removeStateNote"; id: NoteId };
@@ -72,6 +76,29 @@ export function reparentRejection(ir: StateIR, id: StateId, parent: StateId | nu
   ) {
     return `the target region already has a ${s.role} [*]`;
   }
+  return undefined;
+}
+
+/**
+ * Why transition `id` cannot be re-pointed at `ends`, or undefined when it
+ * can. An omitted end means "keep the current one".
+ *
+ * These are addTransition's rules, said once so the reducer (which rejects)
+ * and the property window (which has to SHOW the refusal) cannot drift apart.
+ * A self-transition is legal here (`A --> A : tick`) and so is naming a
+ * composite or a `[*]` pseudo-state — mermaid spells all three.
+ */
+export function transitionRetargetRejection(
+  ir: StateIR,
+  id: TransitionId,
+  ends: { readonly from?: StateId; readonly to?: StateId },
+): string | undefined {
+  const t = ir.transitions.find((x) => x.id === id);
+  if (t === undefined) return "unknown transition";
+  const from = ends.from ?? t.from;
+  const to = ends.to ?? t.to;
+  if (!ir.states.some((s) => s.id === from)) return "unknown source state";
+  if (!ir.states.some((s) => s.id === to)) return "unknown target state";
   return undefined;
 }
 
@@ -213,6 +240,17 @@ export function applyStateAction(ir: StateIR, action: StateAction): StateIR {
     case "removeTransition": {
       if (!ir.transitions.some((t) => t.id === action.id)) return ir;
       return { ...ir, transitions: ir.transitions.filter((t) => t.id !== action.id) };
+    }
+
+    case "retargetTransition": {
+      const t = ir.transitions.find((x) => x.id === action.id);
+      if (t === undefined || transitionRetargetRejection(ir, action.id, action) !== undefined) return ir;
+      const from = action.from ?? t.from;
+      const to = action.to ?? t.to;
+      if (from === t.from && to === t.to) return ir;
+      // the label (and the XState detail hanging off it) travels with the
+      // transition — that is the whole reason not to redraw it
+      return { ...ir, transitions: ir.transitions.map((x) => (x.id === action.id ? { ...x, from, to } : x)) };
     }
 
     case "addStateNote": {

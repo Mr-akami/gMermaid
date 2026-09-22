@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BoxId, BranchId, FragmentId, LifecycleId, LifelineId, MessageId } from "./ids";
-import { applySequenceAction, normalizeSequenceNote } from "./sequenceActions";
+import { applySequenceAction, messageRetargetRejection, normalizeSequenceNote } from "./sequenceActions";
+import { findEventPosition, findSequenceEvent } from "./sequenceQuery";
 import { emptySequence } from "./sequence";
 import type { Message, Note, SequenceIR as SeqIR } from "./sequence";
 
@@ -404,5 +405,50 @@ describe("updateNote retargets a note", () => {
       expect(noteOf(ir).lifelines).toEqual(["A"]);
       expect(ir).toBe(start);
     }
+  });
+});
+
+// A message's ends are lifelines, but its POSITION is the event order — so
+// re-pointing one must move the arrow without moving the message.
+describe("retargetMessage", () => {
+  const withC: SeqIR = { ...base, lifelines: [...base.lifelines, { id: L("c"), name: "C", kind: "actor" }] };
+
+  it("moves one end and keeps the label, arrow and activation", () => {
+    const start = applySequenceAction(withC, { type: "updateMessage", id: M("m1"), activate: "start" });
+    const next = applySequenceAction(start, { type: "retargetMessage", id: M("m1"), to: L("c") });
+    expect(next.events[0]).toEqual({ kind: "message", id: "m1", from: "a", to: "c", label: "m1", arrow: "solid", activate: "start" });
+  });
+
+  it("swaps both ends in one action, reversing the arrow in place", () => {
+    const next = applySequenceAction(base, { type: "retargetMessage", id: M("m1"), from: L("b"), to: L("a") });
+    expect(next.events[0]).toMatchObject({ from: "b", to: "a" });
+  });
+
+  it("leaves a message nested in a fragment branch exactly where it was", () => {
+    const next = applySequenceAction(withC, { type: "retargetMessage", id: M("m2"), to: L("c") });
+    expect(findEventPosition(next, M("m2"))).toEqual(findEventPosition(withC, M("m2")));
+    expect(findSequenceEvent(next, M("m2"))).toMatchObject({ from: "a", to: "c" });
+  });
+
+  it("allows a self-message", () => {
+    const next = applySequenceAction(base, { type: "retargetMessage", id: M("m1"), to: L("a") });
+    expect(next.events[0]).toMatchObject({ from: "a", to: "a" });
+  });
+
+  it("refuses an unknown lifeline, an unknown/non-message id and a no-op — same reference", () => {
+    expect(applySequenceAction(base, { type: "retargetMessage", id: M("m1"), to: L("zzz") })).toBe(base);
+    expect(applySequenceAction(base, { type: "retargetMessage", id: M("m1"), from: L("zzz") })).toBe(base);
+    expect(applySequenceAction(base, { type: "retargetMessage", id: M("ghost"), to: L("a") })).toBe(base);
+    // a fragment id is not a message
+    expect(applySequenceAction(base, { type: "retargetMessage", id: F("f1") as unknown as MessageId, to: L("a") })).toBe(base);
+    expect(applySequenceAction(base, { type: "retargetMessage", id: M("m1"), from: L("a"), to: L("b") })).toBe(base);
+  });
+
+  it("names each refusal, and none for a legal move", () => {
+    expect(messageRetargetRejection(base, M("m1"), { from: L("zzz") })).toBe("unknown source lifeline");
+    expect(messageRetargetRejection(base, M("m1"), { to: L("zzz") })).toBe("unknown target lifeline");
+    expect(messageRetargetRejection(base, M("ghost"), { to: L("a") })).toBe("unknown message");
+    expect(messageRetargetRejection(base, F("f1") as unknown as MessageId, { to: L("a") })).toBe("unknown message");
+    expect(messageRetargetRejection(base, M("m1"), { to: L("a") })).toBeUndefined();
   });
 });

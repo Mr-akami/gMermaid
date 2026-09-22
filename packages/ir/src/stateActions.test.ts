@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { StateId, TransitionId } from "./ids";
 import type { StateIR } from "./statediagram";
 import { stateRegionCount } from "./statediagram";
-import { applyStateAction, newStateId, reparentRejection, stateNoteRejection, STATE_NAME_RE } from "./stateActions";
+import {
+  applyStateAction,
+  newStateId,
+  reparentRejection,
+  stateNoteRejection,
+  STATE_NAME_RE,
+  transitionRetargetRejection,
+} from "./stateActions";
 
 const S = (s: string) => s as StateId;
 const T = (s: string) => s as TransitionId;
@@ -205,5 +212,48 @@ describe("STATE_NAME_RE", () => {
   it("accepts any-script letters, digits, `_` and `.`; rejects `-`, spaces and a leading digit", () => {
     for (const ok of ["Still", "state_ab12cd34", "日本", "svc.api", "_x"]) expect(STATE_NAME_RE.test(ok), ok).toBe(true);
     for (const bad of ["a-b", "a b", "1a", "", "[*]"]) expect(STATE_NAME_RE.test(bad), bad).toBe(false);
+  });
+});
+
+// The only way to re-point a transition used to be deleting it and drawing a
+// new one, which threw away its label (and the XState detail hanging off it).
+describe("retargetTransition", () => {
+  // a composite (B contains C) and a `[*]` — both are legal transition ends
+  const withComposite: StateIR = {
+    ...base,
+    states: [...base.states, { id: S("C"), label: "C", role: "normal", parent: S("B") }],
+    transitions: [{ id: T("t1"), from: S("A"), to: S("B"), label: "go" }],
+  };
+
+  it("moves one end and keeps the label", () => {
+    const next = applyStateAction(base, { type: "retargetTransition", id: T("t1"), to: S("state_start") });
+    expect(next.transitions[0]).toEqual({ id: "t1", from: "A", to: "state_start", label: "go" });
+  });
+
+  it("swaps both ends in one action", () => {
+    const next = applyStateAction(base, { type: "retargetTransition", id: T("t1"), from: S("B"), to: S("A") });
+    expect(next.transitions[0]).toMatchObject({ from: "B", to: "A", label: "go" });
+  });
+
+  it("allows a self-transition and a composite end", () => {
+    const loop = applyStateAction(base, { type: "retargetTransition", id: T("t1"), to: S("A") });
+    expect(loop.transitions[0]).toMatchObject({ from: "A", to: "A" });
+    const comp = applyStateAction(withComposite, { type: "retargetTransition", id: T("t1"), from: S("C"), to: S("B") });
+    expect(comp.transitions[0]).toMatchObject({ from: "C", to: "B" });
+  });
+
+  it("refuses an unknown end, an unknown transition and a no-op — same reference", () => {
+    expect(applyStateAction(base, { type: "retargetTransition", id: T("t1"), to: S("zzz") })).toBe(base);
+    expect(applyStateAction(base, { type: "retargetTransition", id: T("t1"), from: S("zzz") })).toBe(base);
+    expect(applyStateAction(base, { type: "retargetTransition", id: T("ghost"), to: S("A") })).toBe(base);
+    expect(applyStateAction(base, { type: "retargetTransition", id: T("t1"), from: S("A"), to: S("B") })).toBe(base);
+  });
+
+  it("names each refusal, and none for a legal move", () => {
+    expect(transitionRetargetRejection(base, T("t1"), { from: S("zzz") })).toBe("unknown source state");
+    expect(transitionRetargetRejection(base, T("t1"), { to: S("zzz") })).toBe("unknown target state");
+    expect(transitionRetargetRejection(base, T("ghost"), { to: S("A") })).toBe("unknown transition");
+    expect(transitionRetargetRejection(base, T("t1"), { to: S("A") })).toBeUndefined();
+    expect(transitionRetargetRejection(withComposite, T("t1"), { from: S("C") })).toBeUndefined();
   });
 });
