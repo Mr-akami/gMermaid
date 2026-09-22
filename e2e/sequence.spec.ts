@@ -136,3 +136,37 @@ test("a note can be pointed at another lifeline", async ({ page }) => {
   await expectCode(editor).toContain("Note right of C");
   await expect(editor.getByLabel("Note second lifeline")).toHaveCount(0);
 });
+
+// A message's ends are lifelines but its POSITION is the event order, so
+// re-pointing one has to move the arrow without moving the message: it stays
+// in its fragment branch, with its activation and its note.
+test("a message names its lifelines and is re-pointed without leaving its fragment", async ({ page }) => {
+  const editor = await openEditor(page, "Sequence");
+  await setCode(
+    editor,
+    `sequenceDiagram
+  participant A
+  participant B
+  participant C
+  alt ok
+    A->>B: fetch
+  else ng
+    A->>C: fail
+  end
+`,
+  );
+  await expectCode(editor).toContain("A->>B: fetch");
+
+  await element(editor, "message-1").locator("path").first().click({ force: true });
+  await expect(editor.getByRole("heading", { name: "Message" })).toBeVisible();
+  await expect(editor.getByLabel("From", { exact: true })).toHaveValue("A");
+  await expect(editor.getByLabel("To", { exact: true })).toHaveValue("B");
+
+  await editor.getByLabel("To", { exact: true }).selectOption({ label: "C" });
+  // still the first arm of the alt, still labelled, just pointing elsewhere
+  await expectCode(editor).toMatch(/alt ok\n\s+A->>C: fetch\n\s+else ng/);
+
+  // reversing it in place is one action
+  await editor.getByRole("button", { name: "⇄ Swap ends" }).click();
+  await expectCode(editor).toMatch(/alt ok\n\s+C->>A: fetch\n\s+else ng/);
+});

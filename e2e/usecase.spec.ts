@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
-import { codeText, element, expectCode, openEditor, setCode } from "./helpers";
+import { clickPathMiddle, codeText, element, expectCode, openEditor, setCode } from "./helpers";
 
 /** A canvas element by the text it shows. GUI-created elements carry a
  * generated `data-element-id`, so only parsed diagrams can be looked up by
@@ -135,4 +135,30 @@ test("dragging from a use case to an actor connects them", async ({ page }) => {
 
   await expect(props.getByRole("heading", { name: "Relation" })).toBeVisible();
   await expectCode(editor).toContain("Track --> Support");
+});
+
+// A relation's two nodes were the one thing the property window never named.
+// The picker offers actors and use cases only — mermaid has no relation line
+// that names a system boundary.
+test("a relation names its ends and is re-pointed from the property window", async ({ page }) => {
+  const editor = await openEditor(page, "Usecase");
+  await setCode(editor, DOCS_SAMPLE);
+  await expectCode(editor).toContain("Customer --> Browse");
+
+  await clickPathMiddle(page, editor, "relation-1");
+  const props = editor.locator(".property-window");
+  await expect(props.getByRole("heading", { name: "Relation" })).toBeVisible();
+  await expect(props.getByLabel("From", { exact: true })).toHaveValue("Customer");
+  // `Browse("Browse catalogue")` is drawn by its label, so that is its name here
+  await expect(props.getByLabel("To", { exact: true }).locator("option:checked")).toHaveText("Browse catalogue");
+
+  await props.getByLabel("To", { exact: true }).selectOption({ label: "Track delivery" });
+  await expectCode(editor).toContain("Customer --> Track");
+  await expectCode(editor).not.toContain("Customer --> Browse");
+
+  // a system boundary is not on offer: it cannot carry a relation
+  await expect(props.getByLabel("To", { exact: true }).locator("option", { hasText: "Fulfilment" })).toHaveCount(0);
+
+  await props.getByRole("button", { name: "⇄ Swap ends" }).click();
+  await expectCode(editor).toContain("Track --> Customer");
 });

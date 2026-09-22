@@ -4,6 +4,7 @@ import {
   emptyUsecaseDiagram,
   newId,
   usecaseNameRejection,
+  usecaseRelationRetargetRejection,
   type BoundaryId,
   type UsecaseIR,
   type UsecaseNodeId,
@@ -160,6 +161,16 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
     setView({ selectedId: id });
   }
 
+  /** Re-point one end of the selected relation. The reducer's rules are the
+   * drag-to-connect rules, so its refusal surfaces exactly where a refused
+   * drop does — in the toolbar hint, never as a silent no-op. */
+  function retargetRelation(ends: { from?: UsecaseNodeId; to?: UsecaseNodeId }) {
+    if (!selectedRelation) return;
+    const reason = usecaseRelationRetargetRejection(ir, selectedRelation.id, ends);
+    setRejectHint(reason);
+    if (reason === undefined) h.dispatch({ type: "retargetRelation", id: selectedRelation.id, ...ends });
+  }
+
   function deleteSelected() {
     if (nodeId !== undefined) h.dispatch({ type: "removeNode", id: nodeId });
     else if (selectedBoundary) h.dispatch({ type: "removeBoundary", id: selectedBoundary.id });
@@ -275,6 +286,16 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
           <UsecasePropertyWindow
             selection={selection}
             boundaries={ir.boundaries}
+            actors={ir.actors}
+            usecases={ir.usecases}
+            onRetargetRelation={(end, id) => retargetRelation({ [end]: id as UsecaseNodeId })}
+            onSwapRelationEnds={() =>
+              selectedRelation && retargetRelation({ from: selectedRelation.to, to: selectedRelation.from })
+            }
+            onSelectElement={(id) => {
+              setRejectHint(undefined);
+              setView({ selectedId: id });
+            }}
             onChangeName={(name) => {
               const reason = usecaseNameRejection(name);
               setRejectHint(reason);

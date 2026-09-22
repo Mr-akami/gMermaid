@@ -8,6 +8,13 @@ import type {
   RelationHead,
   RelationLine,
 } from "@gmermaid/ir";
+import { ConnectorEnds, distinctNames, type ConnectorEndpointOption } from "./ConnectorEnds";
+
+/** What the canvas calls a class: its display label when it has one, else the
+ * name mermaid addresses it by. */
+function relationEndpoints(classes: readonly ClassNode[]): ConnectorEndpointOption[] {
+  return distinctNames(classes.map((c) => ({ id: c.id as string, name: c.label ?? c.name })));
+}
 
 export type ClassSelection =
   | { kind: "class"; node: ClassNode }
@@ -31,6 +38,12 @@ export interface ClassPropertyWindowProps {
   readonly onChangeNamespace: (id: NamespaceId | undefined) => void;
   readonly onChangeAttributesText: (text: string) => void;
   readonly onChangeMethodsText: (text: string) => void;
+  /** Re-point ONE end of a relation; the refusal is the editor's to show,
+   * the same way every other rejection there is. */
+  readonly onRetargetRelation: (end: "from" | "to", id: string) => void;
+  readonly onSwapRelationEnds: () => void;
+  /** Select an end on the canvas, so a dense diagram can be walked from here. */
+  readonly onSelectElement: (id: string) => void;
   readonly onChangeRelationLine: (line: RelationLine) => void;
   readonly onChangeHeadFrom: (head: RelationHead) => void;
   readonly onChangeHeadTo: (head: RelationHead) => void;
@@ -123,6 +136,17 @@ export function ClassPropertyWindow(props: ClassPropertyWindowProps) {
       {selection.kind === "relation" && (
         <>
           <h3>Relation</h3>
+          {/* the two classes it joins — the one thing that tells two
+              relations between the same pair apart */}
+          <ConnectorEnds
+            from={selection.relation.from as string}
+            to={selection.relation.to as string}
+            options={relationEndpoints(props.classes)}
+            onChangeFrom={(id) => props.onRetargetRelation("from", id)}
+            onChangeTo={(id) => props.onRetargetRelation("to", id)}
+            onSwap={props.onSwapRelationEnds}
+            onSelectEndpoint={props.onSelectElement}
+          />
           <label>
             Line
             <select value={selection.relation.line} onChange={(e) => props.onChangeRelationLine(e.target.value as RelationLine)}>

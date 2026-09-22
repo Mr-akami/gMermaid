@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   applyClassAction,
+  classRelationRetargetRejection,
   emptyClassDiagram,
   formatAttribute,
   formatMethod,
@@ -247,6 +248,16 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
     setView({ selectedId: relId });
   }
 
+  /** Re-point one end of the selected relation. The reducer's rules are the
+   * drag-to-relate rules, so its refusal surfaces exactly where a refused
+   * drop does — in the toolbar hint, never as a silent no-op. */
+  function retargetRelation(ends: { from?: ClassId; to?: ClassId }) {
+    if (!selectedRelation) return;
+    const reason = classRelationRetargetRejection(ir, selectedRelation.id, ends);
+    setRejectHint(reason);
+    if (reason === undefined) h.dispatch({ type: "retargetRelation", id: selectedRelation.id, ...ends });
+  }
+
   /** One delete path for the toolbar button, the property window and the
    * Delete/Backspace key — they must agree on what "the selection" is. */
   function deleteSelected() {
@@ -343,6 +354,15 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
             membersError={membersError}
             namespaces={ir.namespaces}
             classes={ir.classes}
+            onRetargetRelation={(end, id) => retargetRelation({ [end]: id as ClassId })}
+            onSwapRelationEnds={() =>
+              selectedRelation && retargetRelation({ from: selectedRelation.to, to: selectedRelation.from })
+            }
+            onSelectElement={(id) => {
+              setRejectHint(undefined);
+              setMemberDraft(null);
+              setView({ selectedId: id });
+            }}
             onChangeName={(name) => {
               if (!selectedClass) return;
               // a name mermaid cannot spell used to be dropped in silence
