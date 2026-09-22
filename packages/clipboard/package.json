@@ -1,0 +1,18 @@
+{
+  "name": "@gmermaid/clipboard",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gmermaid/ir": "workspace:*",
+    "@gmermaid/mermaid-codegen": "workspace:*",
+    "@gmermaid/mermaid-parser": "workspace:*"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "mermaid": "^12.0.0"
+  }
+}
