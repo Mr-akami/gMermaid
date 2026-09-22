@@ -5,8 +5,10 @@ import {
   newId,
   usecaseNameRejection,
   type BoundaryId,
+  type NoteId,
   type UsecaseIR,
   type UsecaseNodeId,
+  type UsecaseRelationId,
 } from "@gmermaid/ir";
 import { layoutUsecase } from "@gmermaid/layout";
 import { usecaseToMermaid } from "@gmermaid/mermaid-codegen";
@@ -17,8 +19,10 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { UsecasePropertyWindow, type UsecaseSelection } from "./UsecasePropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): UsecaseIR {
@@ -160,12 +164,20 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
     setView({ selectedId: id });
   }
 
-  function deleteSelected() {
-    if (nodeId !== undefined) h.dispatch({ type: "removeNode", id: nodeId });
-    else if (selectedBoundary) h.dispatch({ type: "removeBoundary", id: selectedBoundary.id });
-    else if (selectedRelation) h.dispatch({ type: "removeRelation", id: selectedRelation.id });
-    else if (selectedNote) h.dispatch({ type: "removeNote", id: selectedNote.id });
-    else return;
+  function removeById(id: string, txn: string) {
+    if (ir.actors.some((a) => a.id === id) || ir.usecases.some((u) => u.id === id)) {
+      h.dispatch({ type: "removeNode", id: id as UsecaseNodeId }, txn);
+    } else if (ir.boundaries.some((b) => b.id === id)) h.dispatch({ type: "removeBoundary", id: id as BoundaryId }, txn);
+    else if (ir.relations.some((r) => r.id === id)) h.dispatch({ type: "removeRelation", id: id as UsecaseRelationId }, txn);
+    else if (ir.notes.some((n) => n.id === id)) h.dispatch({ type: "removeNote", id: id as NoteId }, txn);
+  }
+
+  /** A whole selection leaves as ONE undo step: the shared txn key coalesces
+   * the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    for (const id of ids) removeById(id, txn);
     setRejectHint(undefined);
     setView({});
   }
@@ -206,7 +218,13 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
   }
 
   const shell = useEditorShell({
-    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
     onEscape: () => {
       setRejectHint(undefined);
       setView({});
@@ -232,7 +250,7 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
         >
           → Relation from selected
         </button>
-        <button onClick={deleteSelected} disabled={selection === undefined}>
+        <button onClick={() => deleteSelected(shell.selection.ids)} disabled={selection === undefined}>
           Delete
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>
@@ -244,6 +262,7 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         <select
           value={ir.direction ?? "TB"}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<UsecaseIR["direction"]> })}
@@ -260,10 +279,15 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
         <ErrorBoundary>
           <UsecaseView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
+            select={shell.gestures}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={handleElementClick}
+            onElementClick={(id, additive) => {
+              // an additive click is selection ONLY: it never fires the
+              // editor's own pending gesture (connect, …)
+              if (!shell.selection.click(id, additive)) handleElementClick(id);
+            }}
             onBackgroundClick={() => setView({})}
             onConnectDrag={handleConnectDrag}
             onConnectDrop={handleConnectDrop}
@@ -271,7 +295,8 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
             onGestureCancel={() => setConnectLine(undefined)}
           />
         </ErrorBoundary>
-        {selection && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selection && (
           <UsecasePropertyWindow
             selection={selection}
             boundaries={ir.boundaries}
@@ -313,7 +338,7 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
               selectedRelation && h.dispatch({ type: "updateRelation", id: selectedRelation.id, relationKind })
             }
             onChangeNoteText={(text) => selectedNote && h.dispatch({ type: "updateNote", id: selectedNote.id, text }, `uc:${selectedNote.id}:text`)}
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />

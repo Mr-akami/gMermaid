@@ -5,6 +5,7 @@ import {
   newId,
   REQ_NAME_RE,
   type ElementId,
+  type RelationId,
   type ReqNodeId,
   type RequirementIR,
   type RequirementId,
@@ -18,8 +19,10 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RequirementPropertyWindow, type RequirementSelection } from "./RequirementPropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): RequirementIR {
@@ -133,11 +136,18 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
     setView({ selectedId: id });
   }
 
-  function deleteSelected() {
-    if (selectedRequirement) h.dispatch({ type: "removeNode", id: selectedRequirement.id });
-    else if (selectedElement) h.dispatch({ type: "removeNode", id: selectedElement.id });
-    else if (selectedRelation) h.dispatch({ type: "removeRelation", id: selectedRelation.id });
-    else return;
+  function removeById(id: string, txn: string) {
+    if (ir.requirements.some((r) => r.id === id)) h.dispatch({ type: "removeNode", id: id as RequirementId }, txn);
+    else if (ir.elements.some((e) => e.id === id)) h.dispatch({ type: "removeNode", id: id as ElementId }, txn);
+    else if (ir.relations.some((r) => r.id === id)) h.dispatch({ type: "removeRelation", id: id as RelationId }, txn);
+  }
+
+  /** A whole selection leaves as ONE undo step: the shared txn key coalesces
+   * the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    for (const id of ids) removeById(id, txn);
     setRejectHint(undefined);
     setView({});
   }
@@ -163,7 +173,13 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
   const nodeId = (selectedRequirement?.id ?? selectedElement?.id) as RequirementId | ElementId | undefined;
 
   const shell = useEditorShell({
-    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
     onEscape: () => {
       setRejectHint(undefined);
       setView({});
@@ -179,7 +195,7 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
         {mode === "standalone" && <button onClick={() => saveMmd(code, "requirement.mmd")}>Save…</button>}
         <button onClick={addRequirement}>+ Requirement</button>
         <button onClick={addElement}>+ Element</button>
-        <button onClick={deleteSelected} disabled={selection === undefined}>
+        <button onClick={() => deleteSelected(shell.selection.ids)} disabled={selection === undefined}>
           Delete
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
@@ -187,6 +203,7 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         <select
           value={ir.direction ?? "TB"}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<RequirementIR["direction"]> })}
@@ -202,10 +219,14 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
         <ErrorBoundary>
           <RequirementView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
+            select={shell.gestures}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={(id) => setView({ selectedId: id })}
+            onElementClick={(id, additive) => {
+              if (shell.selection.click(id, additive)) return;
+              setView({ selectedId: id });
+            }}
             onBackgroundClick={() => setView({})}
             onConnectDrag={handleConnectDrag}
             onConnectDrop={handleConnectDrop}
@@ -213,7 +234,8 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
             onGestureCancel={() => setConnectLine(undefined)}
           />
         </ErrorBoundary>
-        {selection && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selection && (
           <RequirementPropertyWindow
             selection={selection}
             onChangeName={(name) => {
@@ -244,7 +266,7 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
             onChangeRelationType={(relationType) =>
               selectedRelation && h.dispatch({ type: "updateRelation", id: selectedRelation.id, relationType })
             }
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />

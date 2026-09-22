@@ -3,9 +3,11 @@ import {
   applyFlowchartAction,
   emptyFlowchart,
   newId,
+  type EdgeId,
   type FlowchartEndpoint,
   type FlowchartIR,
   type NodeId,
+  type SubgraphId,
 } from "@gmermaid/ir";
 import { layoutFlowchart } from "@gmermaid/layout";
 import { flowchartToMermaid } from "@gmermaid/mermaid-codegen";
@@ -16,8 +18,10 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { PropertyWindow } from "./PropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): FlowchartIR {
@@ -155,19 +159,35 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
     setView({ selectedId: id });
   }
 
-  /** One delete path for the toolbar button, the property window and the
-   * Delete/Backspace key — they must agree on what "the selection" is. */
-  function deleteSelected() {
-    if (selectedNode) h.dispatch({ type: "removeNode", id: selectedNode.id });
-    else if (selectedEdge) h.dispatch({ type: "removeEdge", id: selectedEdge.id });
-    else if (selectedSubgraph) h.dispatch({ type: "removeSubgraph", id: selectedSubgraph.id });
-    else return;
+  function removeById(id: string, txn: string) {
+    if (ir.nodes.some((n) => n.id === id)) h.dispatch({ type: "removeNode", id: id as NodeId }, txn);
+    else if (ir.edges.some((e) => e.id === id)) h.dispatch({ type: "removeEdge", id: id as EdgeId }, txn);
+    else if (ir.subgraphs.some((s) => s.id === id)) h.dispatch({ type: "removeSubgraph", id: id as SubgraphId }, txn);
+  }
+
+  /** One delete path for the toolbar button, the property window, the
+   * context menu and the Delete/Backspace key — they must agree on what
+   * "the selection" is. A whole selection leaves as ONE undo step: the
+   * shared txn key coalesces the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    for (const id of ids) removeById(id, txn);
     setRejectHint(undefined);
     setView({});
   }
 
   const shell = useEditorShell({
-    ...(selected !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
+    // a flowchart node's only "move" is being adopted by a subgraph as it is
+    // CREATED; there is no reparent action to offer, so this kind shows no
+    // Move entry rather than a dead one
     onEscape: () => {
       setRejectHint(undefined);
       setView({});
@@ -189,7 +209,7 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
         >
           → Connect from selected
         </button>
-        <button disabled={selected === undefined} onClick={deleteSelected}>
+        <button disabled={shell.selection.count === 0} onClick={() => deleteSelected(shell.selection.ids)}>
           Delete
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
@@ -197,6 +217,7 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         <select
           value={ir.direction}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as FlowchartIR["direction"] })}
@@ -213,18 +234,24 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
         <ErrorBoundary>
           <FlowchartView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={handleElementClick}
+            onElementClick={(id, additive) => {
+              // an additive click is selection ONLY: it never fires the
+              // editor's own pending gesture (connect, …)
+              if (!shell.selection.click(id, additive)) handleElementClick(id);
+            }}
             onBackgroundClick={() => setView({})}
+            select={shell.gestures}
             onConnectDrag={handleConnectDrag}
             onConnectDrop={handleConnectDrop}
             connectLine={connectLine}
             onGestureCancel={() => setConnectLine(undefined)}
           />
         </ErrorBoundary>
-        {selected && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selected && (
           <PropertyWindow
             element={selected}
             onChangeNodeLabel={(label) =>
@@ -245,7 +272,7 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
             onChangeSubgraphDirection={(direction) =>
               selectedSubgraph && h.dispatch({ type: "updateSubgraph", id: selectedSubgraph.id, direction })
             }
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />

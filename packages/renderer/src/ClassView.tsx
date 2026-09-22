@@ -1,10 +1,13 @@
 import type { ClassBox, ClassLayout, ClassNoteBox, NamespaceFrame, RelationPath } from "@gmermaid/layout";
 import { NAMESPACE_TITLE_BAND } from "@gmermaid/layout";
 import { edgePath } from "./edgePath";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 export interface ClassViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface ClassViewProps {
@@ -13,8 +16,11 @@ export interface ClassViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
   /** Dragging from a class = draw a new relation to the drop target. */
   readonly onConnectDrag?: (fromId: string, x: number, y: number) => void;
   readonly onConnectDrop?: (fromId: string, x: number, y: number) => void;
@@ -31,11 +37,13 @@ export function ClassView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
   onConnectDrag,
   onConnectDrop,
   connectLine,
   onGestureCancel,
 }: ClassViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -43,6 +51,7 @@ export function ClassView({
     dragKinds: ["connect"],
     onElementClick,
     onBackgroundClick,
+    selection: select,
     onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
     onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
     onGestureCancel,
@@ -57,6 +66,7 @@ export function ClassView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <defs>
@@ -86,21 +96,26 @@ export function ClassView({
 
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
         {layout.namespaces.map((n) => (
-          <NamespaceView key={n.id} n={n} selected={viewState.selectedId === n.id} />
+          <NamespaceView key={n.id} n={n} selected={sel.has(n.id)} />
         ))}
         {layout.relations.map((r) => (
-          <RelationView key={r.id} r={r} selected={viewState.selectedId === r.id} />
+          <RelationView key={r.id} r={r} selected={sel.has(r.id)} />
         ))}
         {layout.classes.map((c) => (
-          <ClassBoxView key={c.id} c={c} selected={viewState.selectedId === c.id} />
+          <ClassBoxView key={c.id} c={c} selected={sel.has(c.id)} />
         ))}
         {layout.notes.map((n) => (
-          <NoteView key={n.id} n={n} selected={viewState.selectedId === n.id} />
+          <NoteView key={n.id} n={n} selected={sel.has(n.id)} />
         ))}
         {connectLine !== undefined && (
           <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-cls-open)" style={{ pointerEvents: "none" }} />
         )}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }

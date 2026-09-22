@@ -2,12 +2,15 @@ import { type ReactNode } from "react";
 import type { EdgePath, FlowchartLayout, NodeBox, SubgraphBox } from "@gmermaid/layout";
 import { SUBGRAPH_TITLE_BAND } from "@gmermaid/layout";
 import { edgePath } from "./edgePath";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 // The renderer sees layout data (ids + geometry) only — never the IR.
 // Hit testing for click/hover is delegated to the DOM via data-element-id.
 export interface FlowchartViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface FlowchartViewProps {
@@ -16,8 +19,11 @@ export interface FlowchartViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
   /** Dragging from a node = draw a new edge to the drop target. */
   readonly onConnectDrag?: (fromId: string, x: number, y: number) => void;
   readonly onConnectDrop?: (fromId: string, x: number, y: number) => void;
@@ -35,11 +41,13 @@ export function FlowchartView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
   onConnectDrag,
   onConnectDrop,
   connectLine,
   onGestureCancel,
 }: FlowchartViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -47,6 +55,7 @@ export function FlowchartView({
     dragKinds: ["connect"],
     onElementClick,
     onBackgroundClick,
+    selection: select,
     onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
     onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
     onGestureCancel,
@@ -61,6 +70,7 @@ export function FlowchartView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <defs>
@@ -79,18 +89,23 @@ export function FlowchartView({
         {[...layout.subgraphs]
           .toSorted((a, b) => a.depth - b.depth)
           .map((s) => (
-            <SubgraphView key={s.id} s={s} selected={viewState.selectedId === s.id} />
+            <SubgraphView key={s.id} s={s} selected={sel.has(s.id)} />
           ))}
         {layout.edges.map((edge) => (
-          <EdgeView key={edge.id} edge={edge} selected={viewState.selectedId === edge.id} />
+          <EdgeView key={edge.id} edge={edge} selected={sel.has(edge.id)} />
         ))}
         {layout.nodes.map((node) => (
-          <NodeView key={node.id} node={node} selected={viewState.selectedId === node.id} />
+          <NodeView key={node.id} node={node} selected={sel.has(node.id)} />
         ))}
         {connectLine !== undefined && (
           <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-arrow)" style={{ pointerEvents: "none" }} />
         )}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }

@@ -1,10 +1,13 @@
 import type { StateBox, StateLayout, StateNoteBox, TransitionPath } from "@gmermaid/layout";
 import { COMPOSITE_TITLE_BAND } from "@gmermaid/layout";
 import { edgePath } from "./edgePath";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 export interface StateViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface StateViewProps {
@@ -13,8 +16,11 @@ export interface StateViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
   /** "connect" (default): dragging a state draws a new transition to the drop
    * target. "move": the same gesture reparents the state into the composite
    * under the pointer. One gesture, two meanings — the editor toggles it. */
@@ -38,6 +44,7 @@ export function StateView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
   dragMode = "connect",
   onConnectDrag,
   onConnectDrop,
@@ -46,6 +53,7 @@ export function StateView({
   connectLine,
   onGestureCancel,
 }: StateViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -53,6 +61,7 @@ export function StateView({
     dragKinds: [dragMode],
     onElementClick,
     onBackgroundClick,
+    selection: select,
     onDrag: (kind, id, x, y) => (kind === "move" ? onMoveDrag?.(id, x, y) : onConnectDrag?.(id, x, y)),
     onDrop: (kind, id, x, y) => (kind === "move" ? onMoveDrop?.(id, x, y) : onConnectDrop?.(id, x, y)),
     onGestureCancel,
@@ -67,6 +76,7 @@ export function StateView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <defs>
@@ -80,7 +90,7 @@ export function StateView({
           .filter((s) => s.composite)
           .toSorted((a, b) => a.depth - b.depth)
           .map((s) => (
-            <CompositeView key={s.id} s={s} selected={viewState.selectedId === s.id} dragMode={dragMode} />
+            <CompositeView key={s.id} s={s} selected={sel.has(s.id)} dragMode={dragMode} />
           ))}
         {/* `--` dividers between concurrency regions */}
         {layout.regionSeparators.map((sep, i) => (
@@ -98,12 +108,12 @@ export function StateView({
           />
         ))}
         {layout.transitions.map((t) => (
-          <TransitionView key={t.id} t={t} selected={viewState.selectedId === t.id} />
+          <TransitionView key={t.id} t={t} selected={sel.has(t.id)} />
         ))}
         {layout.states
           .filter((s) => !s.composite)
           .map((s) => (
-            <StateBoxView key={s.id} s={s} selected={viewState.selectedId === s.id} dragMode={dragMode} />
+            <StateBoxView key={s.id} s={s} selected={sel.has(s.id)} dragMode={dragMode} />
           ))}
         {layout.notes.map((n) => (
           <g key={n.id} data-element-id={n.id} style={{ cursor: "pointer" }}>
@@ -116,6 +126,11 @@ export function StateView({
           <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-state-arrow)" style={{ pointerEvents: "none" }} />
         )}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }

@@ -1,8 +1,11 @@
 import type { MindmapBranch, MindmapLayout, MindmapNodeBox } from "@gmermaid/layout";
-import { usePointerGestures, type Viewport } from "./usePointerGestures";
+import { usePointerGestures, type Viewport , type SelectionGestures } from "./usePointerGestures";
+import { MarqueeRect, selectionOf } from "./Marquee";
 
 export interface MindmapViewState {
   readonly selectedId?: string | undefined;
+  /** The whole selection; `selectedId` is always one of these. */
+  readonly selectedIds?: readonly string[] | undefined;
 }
 
 export interface MindmapViewProps {
@@ -11,8 +14,11 @@ export interface MindmapViewProps {
   /** Pan/zoom; undefined = default (identity, padding offset). */
   readonly viewport?: Viewport | undefined;
   readonly onViewportChange?: ((v: Viewport) => void) | undefined;
-  readonly onElementClick?: (id: string) => void;
+  /** `additive` = Ctrl/Cmd/Shift was held: add to the selection. */
+  readonly onElementClick?: (id: string, additive: boolean) => void;
   readonly onBackgroundClick?: () => void;
+  /** Marquee and context-menu gestures (see SelectionGestures). */
+  readonly select?: SelectionGestures | undefined;
   /** Dragging a node onto another one re-parents it. */
   readonly onConnectDrag?: (fromId: string, x: number, y: number) => void;
   readonly onConnectDrop?: (fromId: string, x: number, y: number) => void;
@@ -33,11 +39,13 @@ export function MindmapView({
   onViewportChange,
   onElementClick,
   onBackgroundClick,
+  select,
   onConnectDrag,
   onConnectDrop,
   connectLine,
   onGestureCancel,
 }: MindmapViewProps) {
+  const sel = selectionOf(viewState);
   const g = usePointerGestures({
     padding: PADDING,
     viewport,
@@ -45,6 +53,7 @@ export function MindmapView({
     dragKinds: ["connect"],
     onElementClick,
     onBackgroundClick,
+    selection: select,
     onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
     onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
     onGestureCancel,
@@ -59,6 +68,7 @@ export function MindmapView({
       onPointerMove={g.onPointerMove}
       onPointerUp={g.onPointerUp}
       onPointerCancel={g.onPointerCancel}
+      onContextMenu={g.onContextMenu}
       style={g.style}
     >
       <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-root="">
@@ -66,7 +76,7 @@ export function MindmapView({
           <BranchView key={b.id} branch={b} depth={layout.nodes.find((n) => n.id === b.to)?.depth ?? 1} />
         ))}
         {layout.nodes.map((n) => (
-          <NodeView key={n.id} node={n} selected={viewState.selectedId === n.id} />
+          <NodeView key={n.id} node={n} selected={sel.has(n.id)} />
         ))}
         {connectLine !== undefined && (
           <line
@@ -81,6 +91,11 @@ export function MindmapView({
           />
         )}
       </g>
+      {g.band !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
+          <MarqueeRect band={g.band} />
+        </g>
+      )}
     </svg>
   );
 }

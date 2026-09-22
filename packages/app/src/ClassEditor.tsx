@@ -11,6 +11,8 @@ import {
   type ClassMember,
   type ClassMethod,
   type NamespaceId,
+  type NoteId,
+  type RelationId,
 } from "@gmermaid/ir";
 import { layoutClassDiagram } from "@gmermaid/layout";
 import { classToMermaid } from "@gmermaid/mermaid-codegen";
@@ -21,8 +23,10 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ClassPropertyWindow, type ClassSelection } from "./ClassPropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): ClassIR {
@@ -249,12 +253,19 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   /** One delete path for the toolbar button, the property window and the
    * Delete/Backspace key — they must agree on what "the selection" is. */
-  function deleteSelected() {
-    if (selectedClass) h.dispatch({ type: "removeClass", id: selectedClass.id });
-    else if (selectedRelation) h.dispatch({ type: "removeRelation", id: selectedRelation.id });
-    else if (selectedNote) h.dispatch({ type: "removeNote", id: selectedNote.id });
-    else if (selectedNamespace) h.dispatch({ type: "removeNamespace", id: selectedNamespace.id });
-    else return;
+  function removeById(id: string, txn: string) {
+    if (ir.classes.some((c) => c.id === id)) h.dispatch({ type: "removeClass", id: id as ClassId }, txn);
+    else if (ir.relations.some((r) => r.id === id)) h.dispatch({ type: "removeRelation", id: id as RelationId }, txn);
+    else if (ir.notes.some((n) => n.id === id)) h.dispatch({ type: "removeNote", id: id as NoteId }, txn);
+    else if (ir.namespaces.some((n) => n.id === id)) h.dispatch({ type: "removeNamespace", id: id as NamespaceId }, txn);
+  }
+
+  /** A whole selection leaves as ONE undo step: the shared txn key coalesces
+   * the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    for (const id of ids) removeById(id, txn);
     setRejectHint(undefined);
     setMemberDraft(null);
     setView({});
@@ -273,7 +284,13 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
   }
 
   const shell = useEditorShell({
-    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
     onEscape: () => {
       setRejectHint(undefined);
       setMemberDraft(null);
@@ -297,7 +314,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
         >
           → Relation from selected
         </button>
-        <button disabled={selection === undefined} onClick={deleteSelected}>
+        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
           Delete
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
@@ -305,6 +322,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         <select
           value={ir.direction ?? "TB"}
           onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<ClassIR["direction"]> })}
@@ -321,10 +339,15 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
         <ErrorBoundary>
           <ClassView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
+            select={shell.gestures}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={handleElementClick}
+            onElementClick={(id, additive) => {
+              // an additive click is selection ONLY: it never fires the
+              // editor's own pending gesture (connect, …)
+              if (!shell.selection.click(id, additive)) handleElementClick(id);
+            }}
             onBackgroundClick={() => {
               setMemberDraft(null);
               setView({});
@@ -335,7 +358,8 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
             onGestureCancel={() => setConnectLine(undefined)}
           />
         </ErrorBoundary>
-        {selection && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selection && (
           <ClassPropertyWindow
             selection={selection}
             attributesText={attributesText}
@@ -389,7 +413,7 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
             onChangeNamespaceName={(name) =>
               selectedNamespace && h.dispatch({ type: "renameNamespace", id: selectedNamespace.id, name }, `ns:${selectedNamespace.id}:name`)
             }
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={() => {
               h.endEdit();

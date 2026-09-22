@@ -13,3 +13,4 @@ export * from "./usecase";
 export * from "./mindmap";
 export * from "./ganttTime";
 export * from "./gantt";
+export * from "./marquee";

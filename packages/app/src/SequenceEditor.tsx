@@ -23,8 +23,10 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SequencePropertyWindow, type BoxChoice, type SequenceSelection } from "./SequencePropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 // A composite sample showing alt / opt / loop nesting and a note.
@@ -350,24 +352,46 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
 
   /** One delete path for the toolbar button, the property window and the
    * Delete/Backspace key — they must agree on what "the selection" is. */
-  function deleteSelected() {
-    if (!selection) return;
-    if (selection.kind === "branch") {
+  /** True when it removed something; false when the id is a branch, which
+   * cannot go on its own. */
+  function removeById(id: string, txn: string): boolean {
+    if (ir.lifelines.some((l) => l.id === id)) {
+      h.dispatch({ type: "removeLifeline", id: id as LifelineId }, txn);
+      return true;
+    }
+    const event = findSequenceEvent(ir, id);
+    if (event !== undefined) {
+      h.dispatch({ type: "removeEvent", id: event.id }, txn);
+      return true;
+    }
+    return false;
+  }
+
+  /** A whole selection leaves as ONE undo step: the shared txn key coalesces
+   * the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    let removed = 0;
+    for (const id of ids) if (removeById(id, txn)) removed += 1;
+    if (removed === 0) {
       // an `else` arm only exists inside its fragment — there is nothing to
       // remove on its own, and a silent no-op would read as a broken key
       setRejectHint("a branch cannot be deleted on its own — delete the fragment");
       return;
     }
-    if (selection.kind === "lifeline") h.dispatch({ type: "removeLifeline", id: selection.lifeline.id });
-    if (selection.kind === "message") h.dispatch({ type: "removeEvent", id: selection.message.id });
-    if (selection.kind === "fragment") h.dispatch({ type: "removeEvent", id: selection.fragment.id });
-    if (selection.kind === "note") h.dispatch({ type: "removeEvent", id: selection.note.id });
     setRejectHint(undefined);
     setView({});
   }
 
   const shell = useEditorShell({
-    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
     onEscape: () => {
       setRejectHint(undefined);
       setView({});
@@ -438,7 +462,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
             </label>
           </>
         )}
-        <button disabled={selection === undefined} onClick={deleteSelected}>
+        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
           Delete
         </button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
@@ -446,6 +470,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         {view.messageFrom !== undefined && <span className="hint">click a target lifeline…</span>}
         {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
       </div>
@@ -453,10 +478,15 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
         <ErrorBoundary>
           <SequenceView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
+            select={shell.gestures}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={handleElementClick}
+            onElementClick={(id, additive) => {
+              // an additive click is selection ONLY: it never fires the
+              // editor's own pending gesture (connect, …)
+              if (!shell.selection.click(id, additive)) handleElementClick(id);
+            }}
             onBackgroundClick={() => setView({})}
             onMessageDrag={(_, y) => setDropY(nearestSlot(y)?.y)}
             onMessageDrop={handleMessageDrop}
@@ -478,7 +508,8 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
             }}
           />
         </ErrorBoundary>
-        {selection && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selection && (
           <SequencePropertyWindow
             selection={selection}
             onChangeLifelineName={(name) =>
@@ -563,7 +594,7 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
               selection.kind === "fragment" &&
               h.dispatch({ type: "addBranch", fragmentId: selection.fragment.id, branchId: newId("branch"), condition: "" })
             }
-            onDelete={deleteSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             deleteWarning={
               selection.kind === "lifeline" && messagesTouching(ir.events, selection.lifeline.id)
                 ? "also deletes its messages and notes"

@@ -21,8 +21,10 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { TimelinePropertyWindow, type TimelineSelection } from "./TimelinePropertyWindow";
+import { SelectionOverlay, SelectionTools } from "./SelectionUI";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
+import { withSelected } from "./viewSelection";
 import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): TimelineIR {
@@ -154,13 +156,27 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
     setView({ selectedId: id });
   }
 
-  function deleteSelected() {
-    if (selectedSection) h.dispatch({ type: "removeSection", id: selectedSection.id });
-    else if (selectedPeriod) h.dispatch({ type: "removePeriod", id: selectedPeriod.id });
-    else if (selectedEvent) h.dispatch({ type: "removeEvent", id: selectedEvent.id });
-    else return;
+  function removeById(id: string, txn: string) {
+    const periods = ir.sections.flatMap((s) => s.periods);
+    if (ir.sections.some((s) => s.id === id)) h.dispatch({ type: "removeSection", id: id as SectionId }, txn);
+    else if (periods.some((p) => p.id === id)) h.dispatch({ type: "removePeriod", id: id as PeriodId }, txn);
+    else if (periods.some((p) => p.events.some((e) => e.id === id))) h.dispatch({ type: "removeEvent", id: id as EventId }, txn);
+  }
+
+  /** A whole selection leaves as ONE undo step: the shared txn key coalesces
+   * the dispatches into a single history entry. */
+  function deleteSelected(ids: readonly string[]) {
+    if (ids.length === 0) return;
+    const txn = `delete:${ids.join(",")}`;
+    for (const id of ids) removeById(id, txn);
     setRejectHint(undefined);
     setView({});
+  }
+
+  /** The property window's ↑ ↓, shared with the context menu. */
+  function moveSelected(delta: -1 | 1) {
+    if (selectedPeriod) h.dispatch({ type: "movePeriod", id: selectedPeriod.id, delta });
+    if (selectedEvent) h.dispatch({ type: "moveEvent", id: selectedEvent.id, delta });
   }
 
   /** Text edits the reducer would silently drop get a visible reason. */
@@ -179,7 +195,22 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
         : undefined;
 
   const shell = useEditorShell({
-    ...(selection !== undefined ? { onDelete: deleteSelected } : {}),
+    ir,
+    layout,
+    selectedId: view.selectedId,
+    select: (id) => setView((v) => withSelected(v, id)),
+    onDelete: deleteSelected,
+    onPaste: (next) => h.pushIR(next),
+    notify: setRejectHint,
+    // "move" on a timeline is the property window's own ↑ ↓ reordering
+    ...(selectedPeriod !== undefined || selectedEvent !== undefined
+      ? {
+          moveItems: [
+            { label: "↑ 上へ移動", run: () => moveSelected(-1) },
+            { label: "↓ 下へ移動", run: () => moveSelected(1) },
+          ],
+        }
+      : {}),
     onEscape: () => {
       setRejectHint(undefined);
       setView({});
@@ -196,12 +227,13 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
         <button onClick={addSection}>+ Section</button>
         <button onClick={addPeriod}>+ Period</button>
         <button disabled={targetPeriod === undefined} onClick={addEvent}>+ Event</button>
-        <button disabled={selection === undefined} onClick={deleteSelected}>Delete</button>
+        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>Delete</button>
         <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
         <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
         <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
           ⤢ Fit
         </button>
+        <SelectionTools shell={shell} />
         <label className="toolbar-field">
           Timeline title
           <input
@@ -221,17 +253,20 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
         <ErrorBoundary>
           <TimelineView
             layout={layout}
-            viewState={{ selectedId: view.selectedId }}
+            viewState={{ selectedId: view.selectedId, selectedIds: shell.selection.ids }}
+            select={shell.gestures}
             viewport={shell.viewport}
             onViewportChange={shell.setViewport}
-            onElementClick={(id) => {
+            onElementClick={(id, additive) => {
+              if (shell.selection.click(id, additive)) return;
               setRejectHint(undefined);
               setView({ selectedId: id });
             }}
             onBackgroundClick={() => setView({})}
           />
         </ErrorBoundary>
-        {selection && (
+        <SelectionOverlay shell={shell} />
+        {shell.selection.count <= 1 && selection && (
           <TimelinePropertyWindow
             selection={selection}
             rejectHint={rejectHint}
@@ -253,11 +288,8 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
                 h.dispatch({ type: "updateEvent", id: selectedEvent.id, text }, `event:${selectedEvent.id}:text`),
               )
             }
-            onMove={(delta) => {
-              if (selectedPeriod) h.dispatch({ type: "movePeriod", id: selectedPeriod.id, delta });
-              if (selectedEvent) h.dispatch({ type: "moveEvent", id: selectedEvent.id, delta });
-            }}
-            onDelete={deleteSelected}
+            onMove={moveSelected}
+            onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}
           />
