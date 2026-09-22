@@ -14,6 +14,7 @@ import type {
   FragmentId,
   GanttIR,
   JourneyIR,
+  LifecycleId,
   LifelineId,
   MessageId,
   MindmapIR,
@@ -82,6 +83,7 @@ const sequence: SequenceIR = {
     { id: id<LifelineId>("lfl_00000001"), name: "Alice", kind: "actor" },
     { id: id<LifelineId>("lfl_00000002"), name: "Bob", kind: "participant" },
     { id: id<LifelineId>("lfl_00000003"), name: "DB", kind: "database" },
+    { id: id<LifelineId>("lfl_00000004"), name: "Temp", kind: "participant" },
   ],
   boxes: [{ id: id<BoxId>("pbx_00000001"), name: "Service", color: "lightblue", lifelines: [id<LifelineId>("lfl_00000002"), id<LifelineId>("lfl_00000003")] }],
   events: [
@@ -112,6 +114,28 @@ const sequence: SequenceIR = {
     { kind: "message", id: id<MessageId>("msg_00000004"), from: id<LifelineId>("lfl_00000003"), to: id<LifelineId>("lfl_00000002"), label: "rows", arrow: "dotted" },
     { kind: "activation", id: id<ActivationId>("atv_00000002"), lifeline: id<LifelineId>("lfl_00000003"), on: false },
     { kind: "message", id: id<MessageId>("msg_00000005"), from: id<LifelineId>("lfl_00000002"), to: id<LifelineId>("lfl_00000001"), label: "done", arrow: "dotted", activate: "end" },
+    { kind: "create", id: id<LifecycleId>("lfc_00000001"), lifeline: id<LifelineId>("lfl_00000004") },
+    { kind: "message", id: id<MessageId>("msg_00000006"), from: id<LifelineId>("lfl_00000002"), to: id<LifelineId>("lfl_00000004"), label: "spawn", arrow: "solid" },
+    { kind: "destroy", id: id<LifecycleId>("lfc_00000002"), lifeline: id<LifelineId>("lfl_00000004") },
+    { kind: "message", id: id<MessageId>("msg_00000008"), from: id<LifelineId>("lfl_00000002"), to: id<LifelineId>("lfl_00000004"), label: "gone", arrow: "cross" },
+    // an activation opened at the top level and closed INSIDE a fragment:
+    // copying the fragment alone must not take the `deactivate` with it
+    { kind: "activation", id: id<ActivationId>("atv_00000003"), lifeline: id<LifelineId>("lfl_00000002"), on: true },
+    {
+      kind: "fragment",
+      id: id<FragmentId>("frg_00000002"),
+      fragmentKind: "opt",
+      branches: [
+        {
+          id: id<BranchId>("brn_00000003"),
+          condition: "tidy up",
+          events: [
+            { kind: "message", id: id<MessageId>("msg_00000007"), from: id<LifelineId>("lfl_00000002"), to: id<LifelineId>("lfl_00000001"), label: "bye", arrow: "solid" },
+            { kind: "activation", id: id<ActivationId>("atv_00000004"), lifeline: id<LifelineId>("lfl_00000002"), on: false },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -317,7 +341,14 @@ export const FIXTURES: readonly Fixture[] = [
     ir: sequence,
     empty: emptySequence(),
     selections: [
-      ["everything", [...sequence.lifelines.map((l) => l.id), "msg_00000001", "nte_00000001", "frg_00000001", "atv_00000001", "msg_00000004", "atv_00000002", "msg_00000005"]],
+      [
+        "everything",
+        [
+          ...sequence.lifelines.map((l) => l.id),
+          "msg_00000001", "nte_00000001", "frg_00000001", "atv_00000001", "msg_00000004", "atv_00000002", "msg_00000005",
+          "lfc_00000001", "msg_00000006", "lfc_00000002", "msg_00000008", "atv_00000003", "frg_00000002",
+        ],
+      ],
       ["one message", ["msg_00000001"]],
       ["a message inside a fragment", ["msg_00000002"]],
       ["the whole fragment", ["frg_00000001"]],
@@ -326,6 +357,8 @@ export const FIXTURES: readonly Fixture[] = [
       ["a lifeline alone", ["lfl_00000003"]],
       ["a box", ["pbx_00000001"]],
       ["an unbalanced deactivate", ["atv_00000002", "msg_00000004"]],
+      ["a fragment closing an activation opened outside it", ["frg_00000002"]],
+      ["a whole lifecycle", ["lfc_00000001", "msg_00000006", "lfc_00000002", "msg_00000008"]],
     ],
   },
   {

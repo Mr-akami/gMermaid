@@ -47,7 +47,9 @@ function emit(ir: DiagramIR): string {
   }
 }
 
-const GENERATED_ID = new RegExp(String.raw`\b(?:${Object.values(ID_PREFIX).join("|")})_[0-9a-f]{8}\b`, "g");
+// no leading `\b`: mermaid's `-x` arrow abuts the id it points at, and a
+// word boundary would not fire between the `x` and the prefix
+const GENERATED_ID = new RegExp(String.raw`(?:${Object.values(ID_PREFIX).join("|")})_[0-9a-f]{8}(?![\w])`, "g");
 
 /** Number every generated id by first appearance, so two texts can be
  * compared modulo ids that are minted fresh on every paste. */

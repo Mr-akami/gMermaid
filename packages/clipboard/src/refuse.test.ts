@@ -15,6 +15,19 @@ describe("copy refuses what cannot be a diagram", () => {
     for (const f of FIXTURES) expect(copySelection(f.ir, ["nope", "also-nope"]), f.name).toBeUndefined();
   });
 
+  it("says nothing about a create/destroy whose message stayed behind", () => {
+    // mermaid reads both as a prefix on the next message; without it there is
+    // no statement left to write, so the selection copies to nothing
+    expect(copySelection(fixture("sequence").ir, ["lfc_00000001", "lfc_00000002"])).toBeUndefined();
+  });
+
+  it("drops a create whose message stayed behind but keeps the rest", () => {
+    // the next surviving message goes to Alice, not to the created Temp
+    const text = copySelection(fixture("sequence").ir, ["lfc_00000001", "msg_00000007"])!;
+    expect(text).not.toContain("create");
+    expect(text).toContain("bye");
+  });
+
   it("says nothing about two disjoint mindmap subtrees — a mindmap has one root", () => {
     const mindmap = fixture("mindmap");
     expect(copySelection(mindmap.ir, ["mmn_00000002", "mmn_00000004"])).toBeUndefined();
@@ -96,7 +109,7 @@ describe("paste keeps identities unique", () => {
     const once = pasteInto(f.ir, text);
     expect(once.ok).toBe(true);
     if (!once.ok) return;
-    expect((once.ir as SequenceIR).lifelines.map((l) => l.name)).toEqual(["Alice", "Bob", "DB", "Alice_2"]);
+    expect((once.ir as SequenceIR).lifelines.map((l) => l.name)).toEqual(["Alice", "Bob", "DB", "Temp", "Alice_2"]);
   });
 
   it("suffixes a gantt task id, and re-points the dependencies that name it", () => {

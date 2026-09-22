@@ -21,68 +21,90 @@ function lifelinesOf(e: SequenceEvent, out: Set<string>): void {
   }
 }
 
-/**
- * `create X` only makes sense in front of a message that reaches X, and
- * `destroy X` only after one that touches it — mermaid enforces both, so a
- * slice that lifted the message away has to drop the lifecycle event too.
- */
-function dropOrphanLifecycles(events: readonly SequenceEvent[]): readonly SequenceEvent[] {
-  const reaches = (from: number, to: number, want: LifelineId, asTarget: boolean): boolean => {
-    for (let i = from; i < to; i++) {
-      const e = events[i]!;
-      if (e.kind !== "message") continue;
-      if (asTarget ? e.to === want : e.from === want || e.to === want) return true;
+/** Every event of a slice in document order, fragment contents included —
+ * mermaid reads a fragment's body in line, so the two mermaid rules below
+ * have to be checked across the whole tree, not per container. */
+function flatten(events: readonly SequenceEvent[], out: SequenceEvent[] = []): SequenceEvent[] {
+  for (const e of events) {
+    out.push(e);
+    if (e.kind === "fragment") for (const b of e.branches) flatten(b.events, out);
+  }
+  return out;
+}
+
+/** Rebuild the tree without `drop`, and with `strip`'s messages demoted to a
+ * plain arrow. Identity-keyed, so it pairs with `flatten`. */
+function prune(
+  events: readonly SequenceEvent[],
+  drop: ReadonlySet<SequenceEvent>,
+  strip: ReadonlySet<SequenceEvent>,
+): SequenceEvent[] {
+  return events.flatMap<SequenceEvent>((e) => {
+    if (e.kind === "fragment") {
+      return [{ ...e, branches: e.branches.map((b) => ({ ...b, events: prune(b.events, drop, strip) })) }];
     }
-    return false;
-  };
-  return events.filter((e, i) => {
-    if (e.kind === "create") return reaches(i + 1, events.length, e.lifeline, true);
-    if (e.kind === "destroy") return reaches(0, i, e.lifeline, false);
-    return true;
+    if (drop.has(e)) return [];
+    if (strip.has(e) && e.kind === "message") return [omitUndefined({ ...e, activate: undefined })];
+    return [e];
   });
 }
 
 /**
- * Re-balance activation over a slice. `deactivate X` with no matching
- * `activate X` is a mermaid error, and a `->>-` whose `->>+` stayed behind
- * is the same error in suffix form; an activation that is never closed is
- * dropped for symmetry, so the copy neither leaks nor under-runs. Applied
- * only to the flattened top level: a fragment travels whole, so whatever is
- * inside it was already balanced by the source.
+ * mermaid reads `create X` and `destroy X` as a prefix on the NEXT message:
+ * a create wants that message to reach X, a destroy wants it to touch X, and
+ * either way mermaid refuses the statement when it does not. A slice that
+ * lifted the message away therefore has to drop the lifecycle event too —
+ * the lifeline then simply goes back to being declared up front.
  */
-function rebalanceActivation(events: readonly SequenceEvent[]): readonly SequenceEvent[] {
-  const open = new Map<string, number[]>();
-  const stackOf = (l: string): number[] => {
+function orphanLifecycles(events: readonly SequenceEvent[]): Set<SequenceEvent> {
+  const flat = flatten(events);
+  const doomed = new Set<SequenceEvent>();
+  for (let i = 0; i < flat.length; i++) {
+    const e = flat[i]!;
+    if (e.kind !== "create" && e.kind !== "destroy") continue;
+    const next = flat.slice(i + 1).find((x) => x.kind === "message");
+    const justified =
+      next !== undefined && (e.kind === "create" ? next.to === e.lifeline : next.from === e.lifeline || next.to === e.lifeline);
+    if (!justified) doomed.add(e);
+  }
+  return doomed;
+}
+
+/**
+ * `deactivate X` with no matching `activate X` is a mermaid error, and a
+ * `->>-` whose `->>+` stayed behind is the same error in suffix form; an
+ * activation that is never closed is dropped for symmetry, so a slice
+ * neither leaks nor under-runs.
+ */
+function unbalancedActivation(events: readonly SequenceEvent[]): {
+  readonly drop: Set<SequenceEvent>;
+  readonly strip: Set<SequenceEvent>;
+} {
+  const open = new Map<string, SequenceEvent[]>();
+  const stackOf = (l: string): SequenceEvent[] => {
     const s = open.get(l) ?? [];
     open.set(l, s);
     return s;
   };
   /** standalone `activate`/`deactivate` events to remove entirely */
-  const drop = new Set<number>();
+  const drop = new Set<SequenceEvent>();
   /** messages that keep their arrow but lose the `+`/`-` suffix */
-  const strip = new Set<number>();
+  const strip = new Set<SequenceEvent>();
 
-  events.forEach((e, i) => {
+  for (const e of flatten(events)) {
     if (e.kind === "activation") {
-      if (e.on) stackOf(e.lifeline).push(i);
-      else if (stackOf(e.lifeline).pop() === undefined) drop.add(i);
-      return;
+      if (e.on) stackOf(e.lifeline).push(e);
+      else if (stackOf(e.lifeline).pop() === undefined) drop.add(e);
+      continue;
     }
-    if (e.kind !== "message" || e.activate === undefined) return;
-    if (e.activate === "start") stackOf(e.to).push(i);
-    else if (stackOf(e.from).pop() === undefined) strip.add(i);
-  });
-
-  // whatever is still on a stack never closes, so the opener goes too
-  for (const stack of open.values()) {
-    for (const i of stack) (events[i]!.kind === "activation" ? drop : strip).add(i);
+    if (e.kind !== "message" || e.activate === undefined) continue;
+    if (e.activate === "start") stackOf(e.to).push(e);
+    else if (stackOf(e.from).pop() === undefined) strip.add(e);
   }
 
-  return events.flatMap((e, i) => {
-    if (drop.has(i)) return [];
-    if (strip.has(i) && e.kind === "message") return [omitUndefined({ ...e, activate: undefined })];
-    return [e];
-  });
+  // whatever is still on a stack never closes, so the opener goes too
+  for (const stack of open.values()) for (const e of stack) (e.kind === "activation" ? drop : strip).add(e);
+  return { drop, strip };
 }
 
 /** Closure: a branch resolves to its fragment, a fragment travels whole, an
@@ -105,7 +127,10 @@ function slice(ir: SequenceIR, ids: ReadonlySet<string>): SequenceIR | undefined
       return wanted.has(e.id) ? [e] : [];
     });
 
-  const events = rebalanceActivation(dropOrphanLifecycles(take(ir.events)));
+  const taken = take(ir.events);
+  const withoutOrphans = prune(taken, orphanLifecycles(taken), new Set());
+  const { drop, strip } = unbalancedActivation(withoutOrphans);
+  const events = prune(withoutOrphans, drop, strip);
 
   const lifelines = new Set<string>(ir.lifelines.filter((l) => ids.has(l.id)).map((l) => l.id));
   for (const e of events) lifelinesOf(e, lifelines);
