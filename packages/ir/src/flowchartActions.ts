@@ -23,6 +23,10 @@ export type FlowchartAction =
   | { type: "updateNode"; id: NodeId; label?: string; shape?: FlowchartNodeShape }
   | { type: "addEdge"; id: EdgeId; from: FlowchartEndpoint; to: FlowchartEndpoint; line?: FlowchartLineStyle; headEnd?: FlowchartEdgeHead }
   | { type: "removeEdge"; id: EdgeId }
+  // Re-point an existing edge instead of deleting and redrawing it (which
+  // loses its label, line style, heads and length). An omitted end keeps the
+  // endpoint it has, so reversing an edge is ONE action: `from: e.to, to: e.from`.
+  | { type: "retargetEdge"; id: EdgeId; from?: FlowchartEndpoint; to?: FlowchartEndpoint }
   // length: 1 (the default) is stored as absent
   | {
       type: "updateEdge";
@@ -69,6 +73,33 @@ export function normalizeFlowchartEdge(edge: FlowchartEdge, edited?: "headStart"
   }
   if (headStart === edge.headStart && headEnd === edge.headEnd && label === edge.label) return edge;
   return omitUndefined({ ...edge, headStart, headEnd, label });
+}
+
+/**
+ * Why edge `id` cannot be re-pointed at `ends`, or undefined when it can.
+ * An omitted end means "keep the current one".
+ *
+ * These are addEdge's rules, said once so the reducer (which rejects) and the
+ * property window (which has to SHOW the refusal) cannot drift apart — a
+ * silent no-op would read as "the select is broken".
+ */
+export function edgeRetargetRejection(
+  ir: FlowchartIR,
+  id: EdgeId,
+  ends: { readonly from?: FlowchartEndpoint; readonly to?: FlowchartEndpoint },
+): string | undefined {
+  const edge = ir.edges.find((e) => e.id === id);
+  if (edge === undefined) return "unknown edge";
+  const from = ends.from ?? edge.from;
+  const to = ends.to ?? edge.to;
+  // a subgraph is a legal endpoint, so both collections answer
+  const known = (x: FlowchartEndpoint) =>
+    ir.nodes.some((n) => (n.id as string) === (x as string)) ||
+    ir.subgraphs.some((s) => (s.id as string) === (x as string));
+  if (!known(from)) return "unknown source";
+  if (!known(to)) return "unknown target";
+  if ((from as string) === (to as string)) return "self-loop edges are not supported";
+  return undefined;
 }
 
 export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): FlowchartIR {
@@ -120,6 +151,17 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
     case "removeEdge": {
       if (!ir.edges.some((e) => e.id === action.id)) return ir;
       return { ...ir, edges: ir.edges.filter((e) => e.id !== action.id) };
+    }
+    case "retargetEdge": {
+      const edge = ir.edges.find((e) => e.id === action.id);
+      if (edge === undefined || edgeRetargetRejection(ir, action.id, action) !== undefined) return ir;
+      const from = action.from ?? edge.from;
+      const to = action.to ?? edge.to;
+      if (from === edge.from && to === edge.to) return ir;
+      // The heads stay on the END they sit on, so swapping the pair reverses
+      // the arrow — which is the whole point of the swap control. The pair is
+      // already normalized, and moving it cannot break that.
+      return { ...ir, edges: ir.edges.map((e) => (e.id === action.id ? { ...e, from, to } : e)) };
     }
     case "updateEdge": {
       const edge = ir.edges.find((e) => e.id === action.id);

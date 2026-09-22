@@ -9,6 +9,21 @@ import {
   type FlowchartShapeInfo,
   type FlowchartSubgraph,
 } from "@gmermaid/ir";
+import { ConnectorEnds, distinctNames, type ConnectorEndpointOption } from "./ConnectorEnds";
+
+/** Everything a flowchart edge may attach to: a node OR a subgraph (mermaid
+ * spells both), named the way the canvas names them. */
+function edgeEndpoints(
+  nodes: readonly FlowchartNode[],
+  subgraphs: readonly FlowchartSubgraph[],
+): ConnectorEndpointOption[] {
+  // grouping only earns its keep once there is a second collection to tell apart
+  const grouped = subgraphs.length > 0;
+  return distinctNames([
+    ...nodes.map((n) => ({ id: n.id as string, name: n.label, ...(grouped ? { group: "Nodes" } : {}) })),
+    ...subgraphs.map((s) => ({ id: s.id as string, name: s.label, ...(grouped ? { group: "Subgraphs" } : {}) })),
+  ]);
+}
 
 const SHAPE_GROUPS: readonly [FlowchartShapeInfo["group"], FlowchartShapeInfo[]][] = (
   ["Basic", "Process", "Data", "Flow", "Misc"] as const
@@ -27,6 +42,16 @@ const HEADS: readonly [FlowchartEdgeHead, string][] = [
 // session undoes as a single step.
 export interface PropertyWindowProps {
   readonly element: FlowchartNode | FlowchartEdge | FlowchartSubgraph;
+  /** Candidates for an edge's two ends — mermaid lets an edge attach to a
+   * subgraph, so both collections are offered. */
+  readonly nodes: readonly FlowchartNode[];
+  readonly subgraphs: readonly FlowchartSubgraph[];
+  /** Re-point ONE end; the refusal (self-loop, unknown end) is the editor's
+   * to show, the same way every other rejection there is. */
+  readonly onRetargetEdge: (end: "from" | "to", id: string) => void;
+  readonly onSwapEdgeEnds: () => void;
+  /** Select an end on the canvas, so a dense diagram can be walked from here. */
+  readonly onSelectElement: (id: string) => void;
   readonly onChangeNodeLabel: (label: string) => void;
   readonly onChangeNodeShape: (shape: FlowchartNodeShape) => void;
   readonly onChangeEdgeLabel: (label: string) => void;
@@ -123,6 +148,17 @@ export function PropertyWindow(props: PropertyWindowProps) {
       ) : (
         <>
           <h3>Edge</h3>
+          {/* which two elements it joins is the one thing that identifies an
+              edge when several run between the same pair */}
+          <ConnectorEnds
+            from={element.from as string}
+            to={element.to as string}
+            options={edgeEndpoints(props.nodes, props.subgraphs)}
+            onChangeFrom={(id) => props.onRetargetEdge("from", id)}
+            onChangeTo={(id) => props.onRetargetEdge("to", id)}
+            onSwap={props.onSwapEdgeEnds}
+            onSelectEndpoint={props.onSelectElement}
+          />
           <label>
             Label
             <input

@@ -9,6 +9,7 @@ import {
   reparentRejection,
   stateNoteRejection,
   stateRegionCount,
+  transitionRetargetRejection,
   type NoteId,
   type StateIR,
   type StateId,
@@ -350,6 +351,16 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
     setView({ selectedId: id, moveMode: view.moveMode === true });
   }
 
+  /** Re-point one end of the selected transition. The reducer's rules are the
+   * drag-to-connect rules, so its refusal surfaces exactly where a refused
+   * drop does — in the toolbar hint, never as a silent no-op. */
+  function retargetTransition(ends: { from?: StateId; to?: StateId }) {
+    if (!selectedTransition) return;
+    const reason = transitionRetargetRejection(ir, selectedTransition.id, ends);
+    setRejectHint(reason);
+    if (reason === undefined) h.dispatch({ type: "retargetTransition", id: selectedTransition.id, ...ends });
+  }
+
   /** One delete path for the toolbar button, the property window and the
    * Delete/Backspace key — they must agree on what "the selection" is. */
   function removeById(id: string, txn: string) {
@@ -501,6 +512,15 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         {shell.selection.count <= 1 && selection && (
           <StatePropertyWindow
             selection={selection}
+            states={ir.states}
+            onRetargetTransition={(end, id) => retargetTransition({ [end]: id as StateId })}
+            onSwapTransitionEnds={() =>
+              selectedTransition && retargetTransition({ from: selectedTransition.to, to: selectedTransition.from })
+            }
+            onSelectElement={(id) => {
+              setRejectHint(undefined);
+              setView({ selectedId: id, moveMode: view.moveMode === true });
+            }}
             onChangeStateLabel={(label) =>
               selectedState && h.dispatch({ type: "updateState", id: selectedState.id, label }, `state:${selectedState.id}:label`)
             }

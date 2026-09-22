@@ -169,6 +169,12 @@ body { margin: 0; font-family: sans-serif; }
 .property-window .tag-row { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; }
 .property-window .tag-check { display: flex; align-items: center; gap: 3px; margin: 0; }
 .property-window .tag-check input { width: auto; margin: 0; }
+/* a connector's From / To: the select fills the row, the jump button rides
+   beside it on the select's own line */
+.property-window .connector-end { display: flex; align-items: flex-end; gap: 4px; }
+.property-window .connector-end label { flex: 1; min-width: 0; }
+.property-window .endpoint-jump { flex: none; padding: 0 6px; line-height: 1.6; }
+.property-window .swap-ends { margin-top: 8px; }
 
 .review-app {
   display: flex;

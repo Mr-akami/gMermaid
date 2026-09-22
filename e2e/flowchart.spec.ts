@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { element, expectCode, openEditor, setCode } from "./helpers";
+import { clickPathMiddle, element, expectCode, openEditor, setCode } from "./helpers";
 
 // The three things the edge model, the shape registry and the id-less
 // subgraph form add on top of the old `-->`-only flowchart.
@@ -73,6 +73,38 @@ test("the property window edits an edge's heads, line style and length", async (
 
   await editor.getByLabel("Edge length").fill("3");
   await expectCode(editor).toContain("A o====o B");
+});
+
+// An edge's ends were the one thing the property window never named, and a
+// self-loop is the one re-pointing the reducer refuses — a refusal that has to
+// be SEEN, since the select would otherwise just snap back.
+test("an edge names its ends, re-points one onto a subgraph, and says why a self-loop is refused", async ({ page }) => {
+  const editor = await openEditor(page, "Flowchart");
+  await setCode(
+    editor,
+    `flowchart TB
+  A["Start"] -- takes a while --> B["Middle"]
+  subgraph g1["Group"]
+    C["Done"]
+  end
+`,
+  );
+  await expectCode(editor).toContain('A -->|"takes a while"| B');
+
+  await clickPathMiddle(page, editor, "edge-1");
+  await expect(editor.getByRole("heading", { name: "Edge" })).toBeVisible();
+  // named the way the canvas names them, not by their ids
+  await expect(editor.getByLabel("From", { exact: true })).toHaveValue("A");
+  await expect(editor.getByLabel("To", { exact: true })).toHaveValue("B");
+
+  // a subgraph is a legal end, and the label survives the move
+  await editor.getByLabel("To", { exact: true }).selectOption({ label: "Group" });
+  await expectCode(editor).toContain('A -->|"takes a while"| g1');
+
+  // pointing both ends at the same element is refused, with the reason shown
+  await editor.getByLabel("To", { exact: true }).selectOption({ label: "Start" });
+  await expect(editor.getByText("self-loop edges are not supported")).toBeVisible();
+  await expectCode(editor).toContain('A -->|"takes a while"| g1');
 });
 
 test("a subgraph's direction is editable from the property window", async ({ page }) => {

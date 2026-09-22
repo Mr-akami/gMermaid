@@ -37,6 +37,11 @@ export type SequenceAction =
   | { type: "addEventAt"; event: Message | Note | Activation | Lifecycle; container: EventContainer; index: number }
   // activate: undefined = keep, null = clear
   | { type: "updateMessage"; id: MessageId; label?: string; arrow?: MessageArrowType; activate?: "start" | "end" | null }
+  // Re-point an existing message at other lifelines WITHOUT moving it: its
+  // place in the event order (and therefore its fragment, its activation and
+  // the note anchored under it) is untouched. An omitted end keeps the
+  // lifeline it has, so reversing one is ONE action: `from: m.to, to: m.from`.
+  | { type: "retargetMessage"; id: MessageId; from?: LifelineId; to?: LifelineId }
   | { type: "updateNote"; id: NoteId; text?: string; position?: NotePosition; lifelines?: readonly LifelineId[] }
   | { type: "removeEvent"; id: SequenceEventId }
   | { type: "updateFragment"; id: FragmentId; fragmentKind?: FragmentKind }
@@ -160,6 +165,34 @@ export function normalizeFragment(fragment: Fragment): Fragment {
   return branches.some((b, i) => b !== fragment.branches[i]) ? { ...fragment, branches } : fragment;
 }
 
+/**
+ * Why message `id` cannot be re-pointed at `ends`, or undefined when it can.
+ * An omitted end means "keep the current one".
+ *
+ * These are addMessage's rules, said once so the reducer (which rejects) and
+ * the property window (which has to SHOW the refusal) cannot drift apart. A
+ * self-message is legal (`A ->> A: retry`), and the only other rule mermaid
+ * has is that both ends name a declared participant.
+ *
+ * Note what re-pointing does NOT do: a sequence message is positioned by the
+ * event order, not by its ends, so the message stays exactly where it was —
+ * inside the same fragment branch, with the same note anchored under it.
+ * Swapping the ends therefore reverses the arrow in place, which is what the
+ * user who drew it backwards is asking for.
+ */
+export function messageRetargetRejection(
+  ir: SequenceIR,
+  id: MessageId,
+  ends: { readonly from?: LifelineId; readonly to?: LifelineId },
+): string | undefined {
+  const m = findSequenceEvent(ir, id);
+  if (m === undefined || m.kind !== "message") return "unknown message";
+  const known = (l: LifelineId) => ir.lifelines.some((x) => x.id === l);
+  if (!known(ends.from ?? m.from)) return "unknown source lifeline";
+  if (!known(ends.to ?? m.to)) return "unknown target lifeline";
+  return undefined;
+}
+
 export function applySequenceAction(ir: SequenceIR, action: SequenceAction): SequenceIR {
   switch (action.type) {
     case "addLifeline":
@@ -267,6 +300,19 @@ export function applySequenceAction(ir: SequenceIR, action: SequenceAction): Seq
         return { ...ir, events: [...ir.events, message] };
       }
       const next = mapEvents(ir.events, (e) => (e.id === action.afterEventId ? [e, message] : e));
+      return next === ir.events ? ir : { ...ir, events: next };
+    }
+
+    case "retargetMessage": {
+      const m = findSequenceEvent(ir, action.id);
+      if (m === undefined || m.kind !== "message") return ir;
+      if (messageRetargetRejection(ir, action.id, action) !== undefined) return ir;
+      const from = action.from ?? m.from;
+      const to = action.to ?? m.to;
+      if (from === m.from && to === m.to) return ir;
+      const next = mapEvents(ir.events, (e) =>
+        e.kind === "message" && e.id === action.id ? { ...e, from, to } : e,
+      );
       return next === ir.events ? ir : { ...ir, events: next };
     }
 

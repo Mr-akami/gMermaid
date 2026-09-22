@@ -53,6 +53,10 @@ export type ClassAction =
   | { type: "setDirection"; direction: ClassDirection }
   | { type: "addRelation"; relation: ClassRelation }
   | { type: "removeRelation"; id: RelationId }
+  // Re-point an existing relation instead of deleting and redrawing it (which
+  // loses its line, heads, label and both cardinalities). An omitted end keeps
+  // the class it has, so reversing one is ONE action: `from: r.to, to: r.from`.
+  | { type: "retargetRelation"; id: RelationId; from?: ClassId; to?: ClassId }
   | {
       type: "updateRelation";
       id: RelationId;
@@ -74,6 +78,28 @@ export type ClassAction =
 
 const norm = (v: string | undefined) => (v === "" ? undefined : v);
 const cleanStereotypes = (list: readonly string[]): string[] => list.map((s) => s.trim()).filter((s) => s !== "" && !/[<>\r\n]/.test(s));
+
+/**
+ * Why relation `id` cannot be re-pointed at `ends`, or undefined when it can.
+ * An omitted end means "keep the current one".
+ *
+ * These are addRelation's rules, said once so the reducer (which rejects) and
+ * the property window (which has to SHOW the refusal) cannot drift apart. A
+ * self-relation is legal here — layout draws it as a detour off the node.
+ */
+export function classRelationRetargetRejection(
+  ir: ClassIR,
+  id: RelationId,
+  ends: { readonly from?: ClassId; readonly to?: ClassId },
+): string | undefined {
+  const r = ir.relations.find((x) => x.id === id);
+  if (r === undefined) return "unknown relation";
+  const from = ends.from ?? r.from;
+  const to = ends.to ?? r.to;
+  if (!ir.classes.some((c) => c.id === from)) return "unknown source class";
+  if (!ir.classes.some((c) => c.id === to)) return "unknown target class";
+  return undefined;
+}
 
 /** Drop namespaces no class belongs to — mermaid cannot express them. */
 function pruneNamespaces(ir: ClassIR): ClassIR {
@@ -199,6 +225,17 @@ export function applyClassAction(ir: ClassIR, action: ClassAction): ClassIR {
     case "removeRelation": {
       if (!ir.relations.some((r) => r.id === action.id)) return ir;
       return { ...ir, relations: ir.relations.filter((r) => r.id !== action.id) };
+    }
+
+    case "retargetRelation": {
+      const r = ir.relations.find((x) => x.id === action.id);
+      if (r === undefined || classRelationRetargetRejection(ir, action.id, action) !== undefined) return ir;
+      const from = action.from ?? r.from;
+      const to = action.to ?? r.to;
+      if (from === r.from && to === r.to) return ir;
+      // heads and cardinalities stay on the END they sit on: swapping the
+      // pair therefore reverses the relation, which is what "swap" means
+      return { ...ir, relations: ir.relations.map((x) => (x.id === action.id ? { ...x, from, to } : x)) };
     }
 
     case "updateRelation": {

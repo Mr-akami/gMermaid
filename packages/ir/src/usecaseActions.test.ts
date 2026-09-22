@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ActorId, BoundaryId, NoteId, UseCaseId, UsecaseRelationId } from "./ids";
 import type { UsecaseIR } from "./usecase";
 import { emptyUsecaseDiagram } from "./usecase";
-import { applyUsecaseAction, normalizeUsecaseRelation, usecaseNameRejection } from "./usecaseActions";
+import {
+  applyUsecaseAction,
+  normalizeUsecaseRelation,
+  usecaseNameRejection,
+  usecaseRelationRetargetRejection,
+} from "./usecaseActions";
 
 const A = (s: string) => s as ActorId;
 const U = (s: string) => s as UseCaseId;
@@ -143,5 +148,57 @@ describe("applyUsecaseAction", () => {
       ).toBe(ir);
     }
     expect(usecaseNameRejection("Checkout2")).toBeUndefined();
+  });
+});
+
+// Re-pointing a relation used to mean deleting it and drawing a new one,
+// which threw away its kind, markers and label.
+describe("retargetRelation", () => {
+  function rich(): UsecaseIR {
+    let ir = base();
+    ir = applyUsecaseAction(ir, { type: "addUseCase", usecase: { id: U("Refund"), name: "Refund", shape: "ellipse" } });
+    return applyUsecaseAction(ir, {
+      type: "addRelation",
+      relation: { id: R("r1"), from: A("Customer"), to: U("Checkout"), line: "solid", headFrom: "none", headTo: "arrow", label: "starts" },
+    });
+  }
+
+  it("moves one end and keeps the marker and label", () => {
+    const next = applyUsecaseAction(rich(), { type: "retargetRelation", id: R("r1"), to: U("Refund") });
+    expect(next.relations[0]).toMatchObject({ from: "Customer", to: "Refund", headTo: "arrow", label: "starts" });
+  });
+
+  it("swaps both ends in one action", () => {
+    const next = applyUsecaseAction(rich(), { type: "retargetRelation", id: R("r1"), from: U("Checkout"), to: A("Customer") });
+    expect(next.relations[0]).toMatchObject({ from: "Checkout", to: "Customer", headTo: "arrow" });
+  });
+
+  it("keeps an include relation dashed and unlabelled through the move", () => {
+    const ir = applyUsecaseAction(rich(), { type: "updateRelation", id: R("r1"), relationKind: "include" });
+    const next = applyUsecaseAction(ir, { type: "retargetRelation", id: R("r1"), to: U("Refund") });
+    expect(next.relations[0]).toMatchObject({ to: "Refund", kind: "include", line: "dashed", headTo: "none" });
+    expect(next.relations[0]!.label).toBeUndefined();
+  });
+
+  it("refuses a system boundary, an unknown end, an unknown relation and a no-op", () => {
+    const ir = rich();
+    expect(applyUsecaseAction(ir, { type: "retargetRelation", id: R("r1"), to: B("sb") as never })).toBe(ir);
+    expect(applyUsecaseAction(ir, { type: "retargetRelation", id: R("r1"), from: A("zzz") })).toBe(ir);
+    expect(applyUsecaseAction(ir, { type: "retargetRelation", id: R("ghost"), to: U("Refund") })).toBe(ir);
+    expect(applyUsecaseAction(ir, { type: "retargetRelation", id: R("r1"), from: A("Customer"), to: U("Checkout") })).toBe(ir);
+  });
+
+  it("names each refusal, and none for a legal move", () => {
+    const ir = rich();
+    expect(usecaseRelationRetargetRejection(ir, R("r1"), { to: B("sb") as never })).toBe(
+      "a relation cannot attach to a system boundary (target)",
+    );
+    expect(usecaseRelationRetargetRejection(ir, R("r1"), { from: B("sb") as never })).toBe(
+      "a relation cannot attach to a system boundary (source)",
+    );
+    expect(usecaseRelationRetargetRejection(ir, R("r1"), { from: A("zzz") })).toBe("unknown source");
+    expect(usecaseRelationRetargetRejection(ir, R("r1"), { to: U("zzz") })).toBe("unknown target");
+    expect(usecaseRelationRetargetRejection(ir, R("ghost"), { to: U("Refund") })).toBe("unknown relation");
+    expect(usecaseRelationRetargetRejection(ir, R("r1"), { to: U("Refund") })).toBeUndefined();
   });
 });

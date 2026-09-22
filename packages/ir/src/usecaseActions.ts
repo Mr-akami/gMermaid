@@ -98,6 +98,10 @@ export type UsecaseAction =
   | { type: "setDirection"; direction: UsecaseDirection }
   | { type: "addRelation"; relation: UsecaseRelation }
   | { type: "removeRelation"; id: UsecaseRelationId }
+  // Re-point an existing relation instead of deleting and redrawing it (which
+  // loses its kind, markers and label). An omitted end keeps the node it has,
+  // so reversing one is ONE action: `from: r.to, to: r.from`.
+  | { type: "retargetRelation"; id: UsecaseRelationId; from?: UsecaseNodeId; to?: UsecaseNodeId }
   | {
       type: "updateRelation";
       id: UsecaseRelationId;
@@ -127,6 +131,33 @@ function idTaken(ir: UsecaseIR, id: string): boolean {
 
 const isNode = (ir: UsecaseIR, id: string): boolean =>
   ir.actors.some((a) => a.id === id) || ir.usecases.some((u) => u.id === id);
+
+/**
+ * Why relation `id` cannot be re-pointed at `ends`, or undefined when it can.
+ * An omitted end means "keep the current one".
+ *
+ * These are addRelation's rules, said once so the reducer (which rejects) and
+ * the property window (which has to SHOW the refusal) cannot drift apart. Only
+ * actors and use cases are endpoints: mermaid has no relation line that names
+ * a system boundary, so a boundary is refused by name rather than just missing
+ * from the picker. A self-relation is legal.
+ */
+export function usecaseRelationRetargetRejection(
+  ir: UsecaseIR,
+  id: UsecaseRelationId,
+  ends: { readonly from?: UsecaseNodeId; readonly to?: UsecaseNodeId },
+): string | undefined {
+  const r = ir.relations.find((x) => x.id === id);
+  if (r === undefined) return "unknown relation";
+  const reason = (end: UsecaseNodeId, which: string): string | undefined => {
+    if (isNode(ir, end)) return undefined;
+    // ids are branded per kind, so the boundary check compares the raw text
+    return ir.boundaries.some((b) => (b.id as string) === (end as string))
+      ? `a relation cannot attach to a system boundary (${which})`
+      : `unknown ${which}`;
+  };
+  return reason(ends.from ?? r.from, "source") ?? reason(ends.to ?? r.to, "target");
+}
 
 export function applyUsecaseAction(ir: UsecaseIR, action: UsecaseAction): UsecaseIR {
   switch (action.type) {
@@ -283,6 +314,16 @@ export function applyUsecaseAction(ir: UsecaseIR, action: UsecaseAction): Usecas
     case "removeRelation": {
       if (!ir.relations.some((r) => r.id === action.id)) return ir;
       return { ...ir, relations: ir.relations.filter((r) => r.id !== action.id) };
+    }
+
+    case "retargetRelation": {
+      const r = ir.relations.find((x) => x.id === action.id);
+      if (r === undefined || usecaseRelationRetargetRejection(ir, action.id, action) !== undefined) return ir;
+      // the new ends go back through the normalizer: a generalization only
+      // exists in the `--|>` direction, so it may mirror the pair straight back
+      const next = normalizeUsecaseRelation({ ...r, from: action.from ?? r.from, to: action.to ?? r.to });
+      if (next.from === r.from && next.to === r.to) return ir;
+      return { ...ir, relations: ir.relations.map((x) => (x.id === action.id ? next : x)) };
     }
 
     case "updateRelation": {

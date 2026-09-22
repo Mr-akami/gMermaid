@@ -8,6 +8,7 @@ import {
   findSequenceEvent,
   getContainerEvents,
   hasLifecycle,
+  messageRetargetRejection,
   messagesTouching,
   newId,
   type EventContainer,
@@ -350,9 +351,22 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
 
   const selectedLifeline = selection?.kind === "lifeline" ? selection.lifeline : undefined;
 
+  /** Re-point one end of the selected message. The reducer's rules are
+   * addMessage's, so its refusal surfaces in the toolbar hint like every
+   * other rejection here — never as a silent no-op. The message does NOT
+   * move: its place in the event order is what positions it. */
+  function retargetMessage(ends: { from?: LifelineId; to?: LifelineId }) {
+    if (selection?.kind !== "message") return;
+    const id = selection.message.id;
+    const reason = messageRetargetRejection(ir, id, ends);
+    setRejectHint(reason);
+    if (reason === undefined) h.dispatch({ type: "retargetMessage", id, ...ends });
+  }
+
   /** One delete path for the toolbar button, the property window and the
-   * Delete/Backspace key — they must agree on what "the selection" is. */
-  /** True when it removed something; false when the id is a branch, which
+   * Delete/Backspace key — they must agree on what "the selection" is.
+   *
+   * True when it removed something; false when the id is a branch, which
    * cannot go on its own. */
   function removeById(id: string, txn: string): boolean {
     if (ir.lifelines.some((l) => l.id === id)) {
@@ -512,6 +526,14 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
         {shell.selection.count <= 1 && selection && (
           <SequencePropertyWindow
             selection={selection}
+            onRetargetMessage={(end, id) => retargetMessage({ [end]: id as LifelineId })}
+            onSwapMessageEnds={() =>
+              selection.kind === "message" && retargetMessage({ from: selection.message.to, to: selection.message.from })
+            }
+            onSelectElement={(id) => {
+              setRejectHint(undefined);
+              setView({ selectedId: id });
+            }}
             onChangeLifelineName={(name) =>
               selection.kind === "lifeline" &&
               h.dispatch({ type: "updateLifeline", id: selection.lifeline.id, name }, `lifeline:${selection.lifeline.id}:name`)

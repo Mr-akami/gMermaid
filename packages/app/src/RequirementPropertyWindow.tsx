@@ -11,6 +11,20 @@ import {
   type RiskLevel,
   type VerifyMethod,
 } from "@gmermaid/ir";
+import { ConnectorEnds, distinctNames, type ConnectorEndpointOption } from "./ConnectorEnds";
+
+/** Either end of a relation may be a requirement OR an element — mermaid
+ * shares one name space for both — so both collections are offered, grouped
+ * the way the canvas draws them. */
+function relationEndpoints(
+  requirements: readonly Requirement[],
+  elements: readonly ReqElement[],
+): ConnectorEndpointOption[] {
+  return distinctNames([
+    ...requirements.map((r) => ({ id: r.id as string, name: r.name, group: "Requirements" })),
+    ...elements.map((e) => ({ id: e.id as string, name: e.name, group: "Elements" })),
+  ]);
+}
 
 export type RequirementSelection =
   | { kind: "requirement"; requirement: Requirement }
@@ -19,6 +33,15 @@ export type RequirementSelection =
 
 export interface RequirementPropertyWindowProps {
   readonly selection: RequirementSelection;
+  /** Candidates for a relation's two ends. */
+  readonly requirements: readonly Requirement[];
+  readonly elements: readonly ReqElement[];
+  /** Re-point ONE end; the refusal is the editor's to show, the same way
+   * every other rejection there is. */
+  readonly onRetargetRelation: (end: "from" | "to", id: string) => void;
+  readonly onSwapRelationEnds: () => void;
+  /** Select an end on the canvas, so a dense diagram can be walked from here. */
+  readonly onSelectElement: (id: string) => void;
   readonly onChangeName: (name: string) => void;
   readonly onChangeRequirementType: (type: RequirementType) => void;
   readonly onChangeReqId: (reqId: string) => void;
@@ -106,6 +129,17 @@ export function RequirementPropertyWindow(props: RequirementPropertyWindowProps)
       {selection.kind === "relation" && (
         <>
           <h3>Relation</h3>
+          {/* the two nodes it joins: a relation whose only other property is
+              its type is otherwise indistinguishable from its neighbours */}
+          <ConnectorEnds
+            from={selection.relation.from as string}
+            to={selection.relation.to as string}
+            options={relationEndpoints(props.requirements, props.elements)}
+            onChangeFrom={(id) => props.onRetargetRelation("from", id)}
+            onChangeTo={(id) => props.onRetargetRelation("to", id)}
+            onSwap={props.onSwapRelationEnds}
+            onSelectEndpoint={props.onSelectElement}
+          />
           <label>
             Type
             <select value={selection.relation.type} onChange={(e) => props.onChangeRelationType(e.target.value as RequirementRelationType)}>

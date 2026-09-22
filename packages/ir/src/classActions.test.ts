@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClassId, NamespaceId, NoteId, RelationId } from "./ids";
 import type { ClassIR } from "./classdiagram";
-import { applyClassAction, CLASS_NAME_RE } from "./classActions";
+import { applyClassAction, classRelationRetargetRejection, CLASS_NAME_RE } from "./classActions";
 
 const C = (s: string) => s as ClassId;
 const R = (s: string) => s as RelationId;
@@ -180,5 +180,68 @@ describe("class namespaces", () => {
     for (const bad of ["a%%b", "a:::b", "a`b", "a~b", " "]) expect(CLASS_NAME_RE.test(bad), bad).toBe(false);
     for (const ok of ["Tree Node", "a:b", "a-b", "100% pure"]) expect(CLASS_NAME_RE.test(ok), ok).toBe(true);
     expect(applyClassAction(base, { type: "renameClass", id: C("Other"), name: "a%%b" })).toBe(base);
+  });
+});
+
+// Re-pointing a relation used to mean deleting it and drawing a new one,
+// which threw away its line, both heads, its label and both cardinalities.
+describe("retargetRelation", () => {
+  const third = applyClassAction(base, {
+    type: "addClass",
+    node: { id: C("Third"), name: "Third", stereotypes: [], attributes: [], methods: [] },
+  });
+  const rich = applyClassAction(third, {
+    type: "addRelation",
+    relation: {
+      id: R("r1"),
+      from: C("TreeNode"),
+      to: C("Other"),
+      line: "dashed",
+      headFrom: "composition",
+      headTo: "inheritance",
+      label: "owns",
+      fromCardinality: "1",
+      toCardinality: "*",
+    },
+  });
+
+  it("moves one end and keeps line, heads, label and both cardinalities", () => {
+    const next = applyClassAction(rich, { type: "retargetRelation", id: R("r1"), to: C("Third") });
+    expect(next.relations[0]).toEqual({
+      id: "r1",
+      from: "TreeNode",
+      to: "Third",
+      line: "dashed",
+      headFrom: "composition",
+      headTo: "inheritance",
+      label: "owns",
+      fromCardinality: "1",
+      toCardinality: "*",
+    });
+  });
+
+  it("swaps both ends in one action, reversing the relation", () => {
+    const next = applyClassAction(rich, { type: "retargetRelation", id: R("r1"), from: C("Other"), to: C("TreeNode") });
+    // heads and cardinalities stay on their END, so the picture reverses
+    expect(next.relations[0]).toMatchObject({ from: "Other", to: "TreeNode", headFrom: "composition", headTo: "inheritance" });
+  });
+
+  it("allows a self-relation", () => {
+    const next = applyClassAction(rich, { type: "retargetRelation", id: R("r1"), to: C("TreeNode") });
+    expect(next.relations[0]).toMatchObject({ from: "TreeNode", to: "TreeNode" });
+  });
+
+  it("refuses an unknown end, an unknown relation and a no-op — same reference", () => {
+    expect(applyClassAction(rich, { type: "retargetRelation", id: R("r1"), to: C("zzz") })).toBe(rich);
+    expect(applyClassAction(rich, { type: "retargetRelation", id: R("r1"), from: C("zzz") })).toBe(rich);
+    expect(applyClassAction(rich, { type: "retargetRelation", id: R("ghost"), to: C("Third") })).toBe(rich);
+    expect(applyClassAction(rich, { type: "retargetRelation", id: R("r1"), from: C("TreeNode"), to: C("Other") })).toBe(rich);
+  });
+
+  it("names each refusal, and none for a legal move", () => {
+    expect(classRelationRetargetRejection(rich, R("r1"), { from: C("zzz") })).toBe("unknown source class");
+    expect(classRelationRetargetRejection(rich, R("r1"), { to: C("zzz") })).toBe("unknown target class");
+    expect(classRelationRetargetRejection(rich, R("ghost"), { to: C("Third") })).toBe("unknown relation");
+    expect(classRelationRetargetRejection(rich, R("r1"), { to: C("TreeNode") })).toBeUndefined();
   });
 });

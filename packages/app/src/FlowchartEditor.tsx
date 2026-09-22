@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   applyFlowchartAction,
+  edgeRetargetRejection,
   emptyFlowchart,
   newId,
   type EdgeId,
@@ -159,6 +160,16 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
     setView({ selectedId: id });
   }
 
+  /** Re-point one end of the selected edge. The reducer's rules are the
+   * drag-to-connect rules, so its refusal has to surface exactly where a
+   * refused drop does — in the toolbar hint, never as a silent no-op. */
+  function retargetEdge(ends: { from?: FlowchartEndpoint; to?: FlowchartEndpoint }) {
+    if (!selectedEdge) return;
+    const reason = edgeRetargetRejection(ir, selectedEdge.id, ends);
+    setRejectHint(reason);
+    if (reason === undefined) h.dispatch({ type: "retargetEdge", id: selectedEdge.id, ...ends });
+  }
+
   function removeById(id: string, txn: string) {
     if (ir.nodes.some((n) => n.id === id)) h.dispatch({ type: "removeNode", id: id as NodeId }, txn);
     else if (ir.edges.some((e) => e.id === id)) h.dispatch({ type: "removeEdge", id: id as EdgeId }, txn);
@@ -254,6 +265,14 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
         {shell.selection.count <= 1 && selected && (
           <PropertyWindow
             element={selected}
+            nodes={ir.nodes}
+            subgraphs={ir.subgraphs}
+            onRetargetEdge={(end, id) => retargetEdge({ [end]: id as FlowchartEndpoint })}
+            onSwapEdgeEnds={() => selectedEdge && retargetEdge({ from: selectedEdge.to, to: selectedEdge.from })}
+            onSelectElement={(id) => {
+              setRejectHint(undefined);
+              setView({ selectedId: id });
+            }}
             onChangeNodeLabel={(label) =>
               selectedNode && h.dispatch({ type: "updateNode", id: selectedNode.id, label }, `node:${selectedNode.id}:label`)
             }

@@ -62,6 +62,29 @@ test("the property window swaps a relation's start head, changing the token", as
   await expectCode(editor).toContain("Animal -- Dog");
 });
 
+// A relation's two classes were the one thing the property window never named
+// — and re-pointing it meant redrawing it, losing the heads, label and both
+// cardinalities.
+test("a relation names its ends by display label, re-points one and swaps in one action", async ({ page }) => {
+  const editor = await openEditor(page, "Class");
+  await setCode(editor, DEEP_SAMPLE);
+
+  await clickPathMiddle(page, editor, "relation-1");
+  await expect(editor.getByRole("heading", { name: "Relation" })).toBeVisible();
+  // `class Dog["A dog!"]` is drawn as "A dog!", so that is what the end is called
+  await expect(editor.getByLabel("From", { exact: true })).toHaveValue("Animal");
+  await expect(editor.getByLabel("To", { exact: true }).locator("option:checked")).toHaveText("A dog!");
+
+  // the inheritance head rides along instead of being redrawn
+  await editor.getByLabel("To", { exact: true }).selectOption({ label: "Cat" });
+  await expectCode(editor).toContain("Animal <|-- Cat");
+  await expectCode(editor).not.toContain("Animal <|-- Dog");
+
+  // and swapping reverses the relation, head and all
+  await editor.getByRole("button", { name: "⇄ Swap ends" }).click();
+  await expectCode(editor).toContain("Cat <|-- Animal");
+});
+
 test("+ Note attaches a note to the selected class", async ({ page }) => {
   const editor = await openEditor(page, "Class");
   // parsed diagrams key their elements by class name

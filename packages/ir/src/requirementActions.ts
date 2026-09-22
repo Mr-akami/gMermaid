@@ -37,7 +37,11 @@ export type RequirementAction =
   | { type: "setDirection"; direction: RequirementDirection }
   | { type: "addRelation"; relation: RequirementRelation }
   | { type: "removeRelation"; id: RelationId }
-  | { type: "updateRelation"; id: RelationId; relationType: RequirementRelationType };
+  | { type: "updateRelation"; id: RelationId; relationType: RequirementRelationType }
+  // Re-point an existing relation instead of deleting and redrawing it (which
+  // loses its type). An omitted end keeps the node it has, so reversing one is
+  // ONE action: `from: r.to, to: r.from`.
+  | { type: "retargetRelation"; id: RelationId; from?: ReqNodeId; to?: ReqNodeId };
 
 // "" is how a cleared select/input arrives; an absent optional field is the
 // IR's only representation of "unset" (exactOptionalPropertyTypes).
@@ -50,6 +54,29 @@ function nameTaken(ir: RequirementIR, name: string): boolean {
 
 function idTaken(ir: RequirementIR, id: string): boolean {
   return ir.requirements.some((r) => r.id === id) || ir.elements.some((e) => e.id === id);
+}
+
+/**
+ * Why relation `id` cannot be re-pointed at `ends`, or undefined when it can.
+ * An omitted end means "keep the current one".
+ *
+ * These are addRelation's rules, said once so the reducer (which rejects) and
+ * the property window (which has to SHOW the refusal) cannot drift apart.
+ * Either end may be a requirement OR an element — mermaid shares one name
+ * space for both — and a self-relation is legal.
+ */
+export function requirementRelationRetargetRejection(
+  ir: RequirementIR,
+  id: RelationId,
+  ends: { readonly from?: ReqNodeId; readonly to?: ReqNodeId },
+): string | undefined {
+  const r = ir.relations.find((x) => x.id === id);
+  if (r === undefined) return "unknown relation";
+  const from = ends.from ?? r.from;
+  const to = ends.to ?? r.to;
+  if (!idTaken(ir, from)) return "unknown source";
+  if (!idTaken(ir, to)) return "unknown target";
+  return undefined;
 }
 
 export function applyRequirementAction(ir: RequirementIR, action: RequirementAction): RequirementIR {
@@ -145,6 +172,17 @@ export function applyRequirementAction(ir: RequirementIR, action: RequirementAct
       const r = ir.relations.find((x) => x.id === action.id);
       if (!r || r.type === action.relationType) return ir;
       return { ...ir, relations: ir.relations.map((x) => (x.id === action.id ? { ...x, type: action.relationType } : x)) };
+    }
+
+    case "retargetRelation": {
+      const r = ir.relations.find((x) => x.id === action.id);
+      if (r === undefined || requirementRelationRetargetRejection(ir, action.id, action) !== undefined) return ir;
+      const from = action.from ?? r.from;
+      const to = action.to ?? r.to;
+      if (from === r.from && to === r.to) return ir;
+      // the relation TYPE is directional prose (`A - satisfies -> B`), so
+      // swapping the ends is exactly how a wrong-way-round trace is fixed
+      return { ...ir, relations: ir.relations.map((x) => (x.id === action.id ? { ...x, from, to } : x)) };
     }
   }
 }
