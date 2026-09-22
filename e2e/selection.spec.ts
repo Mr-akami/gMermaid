@@ -50,7 +50,7 @@ test("a rubber band selects several elements and Delete removes them all", async
   await expect(editor.locator("svg [data-element-id]")).toHaveCount(5); // 3 nodes, 2 edges
 
   // the toolbar toggle is the discoverable half of the gesture
-  await editor.getByRole("button", { name: "▭ 範囲選択" }).click();
+  await editor.getByRole("button", { name: "▭ Select" }).click();
   const canvas = (await editor.locator(".canvas").boundingBox())!;
   await band(page, editor, { x: 3, y: 3 }, { x: canvas.width - 3, y: canvas.height - 3 });
 
@@ -205,7 +205,7 @@ test("text from another diagram kind is refused, with the reason", async ({ page
 
   await editor.locator(".canvas").click({ position: { x: 4, y: 4 } });
   await page.keyboard.press("ControlOrMeta+v");
-  await expect(editor.getByText("貼り付けられません", { exact: false })).toBeVisible();
+  await expect(editor.getByText("cannot paste a sequence diagram", { exact: false })).toBeVisible();
   await expect(editor.locator("svg [data-element-id]")).toHaveCount(3);
 });
 
@@ -216,7 +216,7 @@ test("text that is no diagram at all is refused too", async ({ page }) => {
 
   await editor.locator(".canvas").click({ position: { x: 4, y: 4 } });
   await page.keyboard.press("ControlOrMeta+v");
-  await expect(editor.getByText("Mermaid の図として読めない", { exact: false })).toBeVisible();
+  await expect(editor.getByText("does not hold a mermaid diagram", { exact: false })).toBeVisible();
 });
 
 test("copy and paste inside a property field stay the user's own", async ({ page }) => {
@@ -250,3 +250,28 @@ test("copy and paste inside the code pane stay the user's own", async ({ page })
   await countInCode(editor, '"Third"').toBe(1);
   await expect(editor.getByText("読めない", { exact: false })).toHaveCount(0);
 });
+
+// The app shipped against a three-kind stand-in while the clipboard model was
+// built separately; these are the kinds that used to be refused by name.
+const COPYABLE: ReadonlyArray<readonly [Parameters<typeof openEditor>[1], string, string, string]> = [
+  ["Class", "classDiagram\n  class Alpha\n  class Beta\n  Alpha --> Beta\n", "Alpha", "Alpha"],
+  ["Sequence", "sequenceDiagram\n  participant Ann\n  participant Bob\n  Ann->>Bob: hello\n", "hello", "hello"],
+  ["Timeline", "timeline\n  section Early\n    2002 : LinkedIn\n    2004 : Facebook\n", "LinkedIn", "LinkedIn"],
+];
+
+for (const [kind, source, clickLabel, needle] of COPYABLE) {
+  test(`${kind} copies and pastes through the real clipboard`, async ({ page }) => {
+    const editor = await openEditor(page, kind);
+    await setCode(editor, source);
+    await expectCode(editor).toContain(needle);
+
+    // the label is a <tspan> with pointer events off; the group carrying the
+    // element id is what the canvas listens on
+    await editor.locator("svg [data-element-id]").filter({ hasText: clickLabel }).first().click();
+    await page.keyboard.press("ControlOrMeta+c");
+    await page.keyboard.press("ControlOrMeta+v");
+
+    // the copy lands with a fresh identity, so the name appears twice
+    await countInCode(editor, needle).toBeGreaterThan(1);
+  });
+}

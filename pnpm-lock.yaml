@@ -29,6 +29,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.8
         version: 6.43.8
+      '@gmermaid/clipboard':
+        specifier: workspace:*
+        version: link:../clipboard
       '@gmermaid/ir':
         specifier: workspace:*
         version: link:../ir
