@@ -85,11 +85,12 @@ import { usecaseClipboard } from "./usecase";
  *   surviving event names comes along, in source order, and a `box` comes
  *   along pruned to its surviving members. Two mermaid rules are then
  *   enforced over the whole sliced tree — fragment bodies included, since
- *   mermaid reads them in line: a `create` is dropped unless the message
- *   that justifies it is still the next one (the lifeline then goes back to
- *   being declared up front), and activation is re-balanced, so an
- *   `activate` with no `deactivate`, or a `->>-` whose `->>+` stayed behind,
- *   is dropped. Without either, the copied text would not parse at all.
+ *   mermaid reads them in line: `create`/`destroy` are a prefix on the NEXT
+ *   message, so each is dropped when the message that justifies it stayed
+ *   behind (the lifeline then goes back to being declared up front), and
+ *   activation is re-balanced, so an `activate` with no `deactivate`, or a
+ *   `->>-` whose `->>+` stayed behind, is dropped. Without either, the
+ *   copied text would not parse at all.
  * - **requirement** / **usecase** — a selected relation pulls both ends;
  *   induced relations come along. A selected usecase boundary pulls its
  *   members; a member whose boundary is not selected leaves it behind. Notes
