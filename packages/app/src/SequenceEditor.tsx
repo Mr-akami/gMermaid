@@ -24,7 +24,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { SequencePropertyWindow, type BoxChoice, type SequenceSelection } from "./SequencePropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { DeleteButton, EditorToolbar } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -416,78 +417,86 @@ export function SequenceEditor({ loadRequest, initialCode, mode = "standalone", 
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "sequence.mmd")}>Save…</button>}
-        <button onClick={addLifeline}>+ Lifeline</button>
-        <button
-          disabled={selectedLifeline === undefined}
-          onClick={() => selectedLifeline && setView({ ...view, messageFrom: selectedLifeline.id })}
-        >
-          → Message from selected
-        </button>
-        <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("alt")}>Wrap in alt</button>
-        <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("opt")}>opt</button>
-        <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("loop")}>loop</button>
-        <button disabled={selection?.kind !== "message"} onClick={() => wrapSelected("rect")}>rect</button>
-        <button onClick={addNote}>+ Note</button>
-        <label className="hint" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <input
-            type="checkbox"
-            aria-label="autonumber"
-            checked={ir.autonumber !== undefined}
-            onChange={(e) => h.dispatch({ type: "setAutonumber", autonumber: e.target.checked ? { start: 1, step: 1 } : null })}
-          />
-          autonumber
-        </label>
-        {ir.autonumber !== undefined && (
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "sequence.mmd") } : undefined}
+        tools={
           <>
-            <label className="hint">
-              start
-              <input
-                aria-label="autonumber start"
-                style={{ width: 44, marginLeft: 4 }}
-                inputMode="numeric"
-                value={ir.autonumber.start}
-                onChange={(e) =>
-                  h.dispatch(
-                    { type: "setAutonumber", autonumber: { start: Number(e.target.value.replaceAll(/[^0-9]/g, "")) || 0, step: ir.autonumber!.step } },
-                    "autonumber",
-                  )
-                }
-                onBlur={h.endEdit}
-              />
-            </label>
-            <label className="hint">
-              step
-              <input
-                aria-label="autonumber step"
-                style={{ width: 44, marginLeft: 4 }}
-                inputMode="numeric"
-                value={ir.autonumber.step}
-                onChange={(e) =>
-                  h.dispatch(
-                    { type: "setAutonumber", autonumber: { start: ir.autonumber!.start, step: Number(e.target.value.replaceAll(/[^0-9]/g, "")) || 0 } },
-                    "autonumber",
-                  )
-                }
-                onBlur={h.endEdit}
-              />
-            </label>
+            <button className="btn" onClick={addLifeline}>+ Lifeline</button>
+            <button className="btn" onClick={addNote}>+ Note</button>
           </>
-        )}
-        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
-          Delete
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
-        <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        {view.messageFrom !== undefined && <span className="hint">click a target lifeline…</span>}
-        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
-      </div>
+        }
+        settings={
+          <>
+            <label className="toolbar-field">
+              <input
+                type="checkbox"
+                aria-label="autonumber"
+                checked={ir.autonumber !== undefined}
+                onChange={(e) => h.dispatch({ type: "setAutonumber", autonumber: e.target.checked ? { start: 1, step: 1 } : null })}
+              />
+              <span>autonumber</span>
+            </label>
+            {ir.autonumber !== undefined && (
+              <>
+                <label className="toolbar-field">
+                  <span>start</span>
+                  <input
+                    aria-label="autonumber start"
+                    className="numeric"
+                    inputMode="numeric"
+                    value={ir.autonumber.start}
+                    onChange={(e) =>
+                      h.dispatch(
+                        { type: "setAutonumber", autonumber: { start: Number(e.target.value.replaceAll(/[^0-9]/g, "")) || 0, step: ir.autonumber!.step } },
+                        "autonumber",
+                      )
+                    }
+                    onBlur={h.endEdit}
+                  />
+                </label>
+                <label className="toolbar-field">
+                  <span>step</span>
+                  <input
+                    aria-label="autonumber step"
+                    className="numeric"
+                    inputMode="numeric"
+                    value={ir.autonumber.step}
+                    onChange={(e) =>
+                      h.dispatch(
+                        { type: "setAutonumber", autonumber: { start: ir.autonumber!.start, step: Number(e.target.value.replaceAll(/[^0-9]/g, "")) || 0 } },
+                        "autonumber",
+                      )
+                    }
+                    onBlur={h.endEdit}
+                  />
+                </label>
+              </>
+            )}
+          </>
+        }
+        selectionActions={
+          <>
+            {selectedLifeline !== undefined && (
+              <button className="btn" onClick={() => setView({ ...view, messageFrom: selectedLifeline.id })}>
+                → Message from selected
+              </button>
+            )}
+            {selection?.kind === "message" && (
+              <span className="btn-cluster" role="group" aria-label="Wrap in fragment">
+                <button className="btn" onClick={() => wrapSelected("alt")}>Wrap in alt</button>
+                <button className="btn" onClick={() => wrapSelected("opt")}>opt</button>
+                <button className="btn" onClick={() => wrapSelected("loop")}>loop</button>
+                <button className="btn" onClick={() => wrapSelected("rect")}>rect</button>
+              </span>
+            )}
+            <DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />
+          </>
+        }
+        prompt={view.messageFrom !== undefined ? "click a target lifeline…" : undefined}
+        notice={rejectHint}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <SequenceView

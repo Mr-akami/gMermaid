@@ -20,7 +20,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { UsecasePropertyWindow, type UsecaseSelection } from "./UsecasePropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { DeleteButton, DirectionSelect, EditorToolbar } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -246,46 +247,34 @@ export function UsecaseEditor({ loadRequest, initialCode, mode = "standalone", o
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "usecase.mmd")}>Save…</button>}
-        <button onClick={addActor}>+ Actor</button>
-        <button onClick={addUseCase}>+ Use case</button>
-        <button onClick={addBoundary}>+ Boundary</button>
-        <button onClick={addNote} disabled={nodeId === undefined}>
-          + Note
-        </button>
-        <button
-          disabled={nodeId === undefined}
-          onClick={() => nodeId !== undefined && setView({ selectedId: nodeId, relateFrom: nodeId })}
-        >
-          → Relation from selected
-        </button>
-        <button onClick={() => deleteSelected(shell.selection.ids)} disabled={selection === undefined}>
-          Delete
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>
-          Undo
-        </button>
-        <button onClick={h.redo} disabled={!h.canRedo}>
-          Redo
-        </button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <select
-          value={ir.direction ?? "TB"}
-          onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<UsecaseIR["direction"]> })}
-        >
-          <option value="TB">Top→Bottom</option>
-          <option value="LR">Left→Right</option>
-          <option value="BT">Bottom→Top</option>
-          <option value="RL">Right→Left</option>
-        </select>
-        {view.relateFrom !== undefined && <span className="hint">click the target actor or use case…</span>}
-        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "usecase.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addActor}>+ Actor</button>
+            <button className="btn" onClick={addUseCase}>+ Use case</button>
+            <button className="btn" onClick={addBoundary}>+ Boundary</button>
+            <button className="btn" onClick={addNote} disabled={nodeId === undefined} title="Select an actor or use case to attach a note">
+              + Note
+            </button>
+          </>
+        }
+        settings={<DirectionSelect value={ir.direction ?? "TB"} onChange={(direction) => h.dispatch({ type: "setDirection", direction })} />}
+        selectionActions={
+          <>
+            {nodeId !== undefined && (
+              <button className="btn" onClick={() => setView({ selectedId: nodeId, relateFrom: nodeId })}>
+                → Relation from selected
+              </button>
+            )}
+            <DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />
+          </>
+        }
+        prompt={view.relateFrom !== undefined ? "click the target actor or use case…" : undefined}
+        notice={rejectHint}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <UsecaseView

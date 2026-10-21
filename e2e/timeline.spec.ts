@@ -47,7 +47,7 @@ test("adding an event through the GUI writes `: text` back into the code", async
   await editor.getByRole("button", { name: "↑ Move up" }).click();
   await expectCode(editor).toContain("2002 : Bought by Microsoft : LinkedIn");
 
-  await editor.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
   await expectCode(editor).toContain("2002 : LinkedIn : Bought by Microsoft");
 });
 

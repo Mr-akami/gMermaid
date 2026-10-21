@@ -67,7 +67,7 @@ test("the property window edits start and end, and the toolbar edits the axis", 
   // reorder within the section
   await editor.getByRole("button", { name: "Move later" }).click();
   await expectCode(editor).toMatch(/Another task[\s\S]*A task/);
-  await editor.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
   await expectCode(editor).toMatch(/A task[\s\S]*Another task/);
 
   await editor.getByLabel("Axis format").fill("%d/%m");

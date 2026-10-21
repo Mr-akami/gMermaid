@@ -52,7 +52,7 @@ export function ReviewApp({ sessionId, kind, mermaid, title, onSubmit }: ReviewA
           {state === "confirmed" ? (
             <span className="review-confirmed">LLM に返しました。チャットへ戻ってください。</span>
           ) : (
-            <button disabled={!valid || state === "submitting"} onClick={submit}>
+            <button className="primary" disabled={!valid || state === "submitting"} onClick={submit}>
               {state === "submitting" ? "送信中…" : "LLMへ返す"}
             </button>
           )}

@@ -112,7 +112,7 @@ test("move mode drags a state into a composite frame", async ({ page }) => {
   );
   await expectCode(editor).toContain("state Outside");
 
-  await editor.getByRole("button", { name: "⇱ Move mode" }).click();
+  await editor.getByRole("button", { name: "Move mode" }).click();
   await expect(editor.getByText("drag a state onto a composite frame")).toBeVisible();
 
   const from = (await element(editor, "Outside").locator("rect").first().boundingBox())!;

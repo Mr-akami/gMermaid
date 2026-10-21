@@ -1,93 +1,395 @@
-* { box-sizing: border-box; }
-body { margin: 0; font-family: sans-serif; }
+/* ── tokens ─────────────────────────────────────────────────────────────
+   One cool neutral ramp, one accent. The accent is also the renderer's
+   selection colour (--gm-selected), so "selected" reads the same in the
+   chrome and on the canvas. */
+:root {
+  --ink: #1b2130;
+  --ink-2: #4a5263;
+  --ink-3: #6b7385;
+  --ink-faint: #a3a9b6;
+  --surface: #ffffff;
+  --chrome: #f4f5f8;
+  --canvas: #f8f9fb;
+  --line: #dcdfe6;
+  --line-soft: #e9ebf0;
+  --hover: #eef0f4;
+  --accent: #2563d9;
+  --accent-ink: #1d4fb0;
+  --accent-soft: #e7eefc;
+  --danger: #c4312b;
+  --danger-soft: #fcebea;
+  --warn-ink: #7a5300;
+  --warn-soft: #fff4d9;
+  --warn-line: #ecd398;
+  --overlay-ink: #1d2230;
 
+  --radius: 6px;
+  --control-h: 28px;
+  --code-w: clamp(300px, 32vw, 480px);
+  --shadow-pop: 0 1px 2px rgba(20, 26, 40, 0.06), 0 8px 24px rgba(20, 26, 40, 0.12);
+  --font: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --gm-selected: var(--accent);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink);
+  background: var(--chrome);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+/* ── controls ───────────────────────────────────────────────────────────
+   :where() keeps these at zero specificity so every surface (property
+   windows, menus, tabs) can restyle a control without fighting them. */
+:where(button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-h);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 13px/1 var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+}
+:where(button):hover:not(:disabled) { background: var(--hover); }
+:where(button):active:not(:disabled) { background: var(--line-soft); }
+:where(button):disabled {
+  color: var(--ink-faint);
+  background: transparent;
+  border-color: var(--line-soft);
+  cursor: not-allowed;
+}
+:where(button)[aria-pressed="true"],
+:where(button).active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent-ink);
+}
+:where(button).danger { color: var(--danger); }
+:where(button).danger:hover:not(:disabled) { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+:where(button).primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+:where(button).primary:hover:not(:disabled) { background: var(--accent-ink); }
+:where(button).primary:disabled { background: var(--line-soft); border-color: var(--line-soft); color: var(--ink-faint); }
+.btn.icon-only { width: var(--control-h); padding: 0; }
+.icon { flex: none; display: block; }
+
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  height: var(--control-h);
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: 13px var(--font);
+  caret-color: var(--accent);
+}
+:where(textarea) { height: auto; padding: 6px 8px; line-height: 1.4; }
+:where(select) { padding-right: 4px; }
+:where(input, select, textarea):disabled { background: var(--chrome); color: var(--ink-faint); }
+:where(input[type="checkbox"]) { accent-color: var(--accent); width: 14px; height: 14px; margin: 0; }
+
+:where(button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+:where(input, select, textarea):focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: 600 10px/1.4 var(--font);
+  opacity: 0.7;
+}
+.hint { color: var(--ink-3); font-size: 12px; }
+
+/* ── app shell ──────────────────────────────────────────────────────── */
 .app {
   display: flex;
   flex-direction: column;
   height: 100vh;
 }
-.tabs {
+.appbar {
   display: flex;
-  gap: 4px;
-  padding: 6px 8px 0;
-  border-bottom: 1px solid #ddd;
-  background: #f4f4f4;
+  align-items: center;
+  gap: 16px;
+  height: 48px;
+  padding: 0 12px 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
-.tab {
-  border: 1px solid #ddd;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  padding: 5px 14px;
-  background: #e8e8e8;
-  cursor: pointer;
+.brand {
+  flex: none;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.01em;
 }
-.tab.active {
-  background: #fff;
+.kind-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.kind-tab {
+  flex: none;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.kind-tab[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
   font-weight: 600;
 }
-.editor {
+.appbar-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.appbar-actions > .tool-group:empty { display: none; }
+.appbar-actions > .tool-group + .btn,
+.appbar-actions > .btn + .tool-group {
+  margin-left: 6px;
+}
+.appbar-actions > .btn + .tool-group {
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+/* below this width the app-bar actions drop their words, icons only */
+@media (max-width: 1199px) {
+  .appbar { gap: 10px; }
+  .appbar-actions .btn-label { display: none; }
+  .appbar-actions .btn:has(.btn-label) { width: var(--control-h); padding: 0; }
+  .kind-tab { padding: 0 8px; }
+}
+@media (max-width: 1100px) {
+  .brand { display: none; }
+  .appbar { padding-left: 8px; }
+}
+
+/* ── editor grid ────────────────────────────────────────────────────────
+   tool strip over the canvas, code pane down the whole right side. The
+   floating layer shares the canvas cell instead of being positioned. */
+.editor,
+.review-editor {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr;
-  grid-template-columns: 1fr 380px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--code-w);
 }
 .editor.hidden { display: none; }
+.editor > .toolbar, .review-editor > .toolbar { grid-area: 1 / 1; }
+.editor > .canvas, .review-editor > .canvas { grid-area: 2 / 1; }
+.editor > .canvas-float, .review-editor > .canvas-float { grid-area: 2 / 1; }
+.editor > .code-pane, .editor > .code-tabs,
+.review-editor > .code-pane, .review-editor > .code-tabs { grid-area: 1 / 2 / 3 / 3; }
+
 .toolbar {
-  grid-column: 1 / 3;
   display: flex;
-  gap: 8px;
-  padding: 8px;
-  border-bottom: 1px solid #ddd;
   align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  /* a narrow canvas wraps the strip onto a second row rather than hiding
+     tools behind a scroll nobody notices */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
-.toolbar button { padding: 4px 10px; }
+.tool-group {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.toolbar > .tool-group + .tool-group {
+  padding-left: 8px;
+  border-left: 1px solid var(--line-soft);
+}
+.toolbar > .tools-view { margin-left: auto; border-left: none !important; }
+.toolbar > .tools-add { flex: 0 1 auto; flex-wrap: wrap; row-gap: 6px; }
+/* buttons that belong together sit flush, like one segmented control */
+.btn-cluster { display: inline-flex; }
+.btn-cluster > button { border-radius: 0; margin-left: -1px; }
+.btn-cluster > button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+.btn-cluster > button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.btn-cluster > button:hover:not(:disabled) { position: relative; }
+
+.toolbar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.toolbar-field input:not([type="checkbox"]) { width: 160px; }
+.toolbar-field input.narrow { width: 100px; }
+.toolbar-field input.numeric { width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
+
 .canvas {
   /* pan/zoom replaces scrolling: the svg fills the cell, content moves via transform */
   overflow: hidden;
-  background: #fafafa;
+  background: var(--canvas);
   position: relative;
 }
-.code-banner {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 10px;
-  background: #fff6df;
-  border-bottom: 1px solid #e5d59a;
-  font-size: 12px;
+.canvas-error {
+  padding: 16px;
+  color: var(--danger);
 }
+
+/* ── floating layer: prompts and the selection bar ───────────────────── */
+.canvas-float {
+  z-index: 5;
+  align-self: end;
+  justify-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  margin-bottom: 16px;
+  pointer-events: none;
+}
+.canvas-float > * { pointer-events: auto; }
+.float-prompt, .float-notice, .float-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  box-shadow: var(--shadow-pop);
+  animation: float-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.float-prompt { background: var(--accent); color: #fff; font-weight: 500; }
+.float-notice { background: var(--warn-soft); color: var(--warn-ink); border: 1px solid var(--warn-line); }
+.float-tip { background: var(--surface); color: var(--ink-3); border: 1px solid var(--line); box-shadow: none; }
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--overlay-ink);
+  color: #e9ecf2;
+  box-shadow: var(--shadow-pop);
+  overflow-x: auto;
+  animation: float-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.selection-count {
+  padding: 0 8px 0 6px;
+  color: #9aa2b3;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.selection-bar button {
+  border-color: transparent;
+  background: transparent;
+  color: #e9ecf2;
+}
+.selection-bar button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+.selection-bar button.danger { color: #ff9b94; }
+.selection-bar button.danger:hover:not(:disabled) { background: rgba(255, 120, 110, 0.16); border-color: transparent; }
+.selection-bar .btn-cluster {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius);
+}
+.selection-bar .btn-cluster > button { margin-left: 0; }
+.selection-bar .btn-cluster > button + button { border-left: 1px solid rgba(255, 255, 255, 0.16); }
+
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .float-prompt, .float-notice, .selection-bar { animation: none; }
+}
+
+/* ── code pane ──────────────────────────────────────────────────────── */
 .code-pane {
-  border-left: 1px solid #ddd;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-.code-errors {
+.code-pane .cm-editor { font-size: 12.5px; }
+.code-pane .cm-scroller { font-family: var(--mono); line-height: 1.6; }
+.code-pane .cm-gutters { background: var(--surface); border-right: 1px solid var(--line-soft); color: var(--ink-faint); }
+.code-pane .cm-activeLine { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.code-pane .cm-activeLineGutter { background: transparent; color: var(--ink-2); }
+.code-pane .cm-editor.cm-focused { outline: none; }
+
+.code-banner {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--warn-soft);
+  border-bottom: 1px solid var(--warn-line);
+  color: var(--warn-ink);
+  font-size: 12px;
+}
+.code-banner button { height: 24px; font-size: 12px; }
+.code-errors,
+.code-warnings,
+.code-mermaid-error {
   max-height: 120px;
   overflow: auto;
-  border-top: 1px solid #e0b4b4;
-  background: #fff6f6;
-  color: #9f3a38;
   font-size: 12px;
-  font-family: monospace;
-  padding: 6px 10px;
+  font-family: var(--mono);
+  line-height: 1.5;
+  padding: 8px 12px;
+}
+.code-errors {
+  border-top: 1px solid #ecc2bf;
+  background: var(--danger-soft);
+  color: #8f2420;
 }
 /* dropped statements: informational, never blocking — calmer than an error */
 .code-warnings {
-  max-height: 120px;
-  overflow: auto;
-  border-top: 1px solid #e6d6a8;
-  background: #fffdf3;
-  color: #7d6608;
-  font-size: 12px;
-  font-family: monospace;
-  padding: 6px 10px;
+  border-top: 1px solid var(--warn-line);
+  background: #fffbf0;
+  color: var(--warn-ink);
 }
+/* the real mermaid parser refused the text: our own parser was happy, so this
+   is a different failure from .code-errors and must not look like it */
+.code-mermaid-error {
+  border-top: 1px solid #cdb9e6;
+  background: #f6f1fd;
+  color: #553388;
+}
+
 /* two texts for one IR (mermaid / XState): the inactive tab stays mounted so
    an unfinished draft is not thrown away by switching */
 .code-tabs {
-  border-left: 1px solid #ddd;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -95,20 +397,25 @@ body { margin: 0; font-family: sans-serif; }
 .code-tab-strip {
   display: flex;
   gap: 4px;
-  padding: 4px 6px 0;
-  border-bottom: 1px solid #ddd;
+  min-height: 44px;
+  padding: 0 10px;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--line);
 }
 .code-tab {
-  padding: 4px 12px;
-  border: 1px solid transparent;
-  border-bottom: none;
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: none;
+  color: var(--ink-3);
   font-size: 12px;
-  cursor: pointer;
 }
+.code-tab:hover:not(:disabled) { background: none; color: var(--ink); }
 .code-tab.active {
-  border-color: #ddd;
-  background: #fff;
+  border-bottom-color: var(--accent);
+  color: var(--ink);
   font-weight: 600;
 }
 .code-tab-panel {
@@ -120,62 +427,61 @@ body { margin: 0; font-family: sans-serif; }
 .code-tab-panel.hidden { display: none; }
 .code-tabs .code-pane { border-left: none; flex: 1; }
 .code-tab-hint {
-  padding: 5px 10px;
-  background: #f6f8fa;
-  border-bottom: 1px solid #eee;
-  color: #666;
+  padding: 6px 12px;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-3);
   font-size: 11px;
 }
 
-/* the real mermaid parser refused the text: our own parser was happy, so this
-   is a different failure from .code-errors and must not look like it */
-.code-mermaid-error {
-  max-height: 120px;
-  overflow: auto;
-  border-top: 1px solid #c7b0dd;
-  background: #f8f4fd;
-  color: #5b3a8e;
-  font-size: 12px;
-  font-family: monospace;
-  padding: 6px 10px;
-}
-.canvas-error {
-  padding: 16px;
-  color: #9f3a38;
-}
+/* ── property window ────────────────────────────────────────────────────
+   docked to the canvas's top-right corner, scrolling inside itself when
+   an element has more fields than the canvas is tall */
 .property-window {
-  position: fixed;
-  top: 100px;
-  right: 400px;
-  width: 240px;
-  background: #fff;
-  border: 1px solid #bbb;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  padding: 12px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 264px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  padding: 12px 14px 14px;
   z-index: 10;
 }
-.property-window h3 { margin: 0 0 8px; font-size: 13px; }
-.property-window label { display: block; font-size: 12px; margin-top: 8px; }
-.property-window input[type="text"], .property-window input:not([type]), .property-window select { width: 100%; margin-top: 2px; }
-.property-window textarea { width: 100%; margin-top: 2px; font: inherit; resize: vertical; }
-.property-window .danger { margin-top: 12px; color: #b00; }
-.hint { color: #888; font-size: 12px; }
-/* a toolbar button that stays pressed while its mode is on */
-.toolbar button.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
-.toolbar-field { display: flex; align-items: center; gap: 4px; font-size: 12px; }
-.property-window .row-buttons { display: flex; gap: 6px; margin-top: 10px; }
+.property-window h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.property-window label {
+  display: block;
+  margin-top: 10px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.property-window input:not([type="checkbox"]):not([type="radio"]), .property-window select { width: 100%; margin-top: 4px; }
+.property-window textarea { width: 100%; margin-top: 4px; resize: vertical; }
+.property-window label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: 6px; color: var(--ink-2); }
+.property-window button { margin-top: 0; }
+.property-window .danger { margin-top: 14px; }
+.property-window .row-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.property-window .row-buttons .danger { margin-top: 0; }
+.property-window p.hint { margin: 6px 0 0; line-height: 1.5; }
 /* gantt task tags: a compact wrap of checkboxes, not one row per tag */
-.property-window .tag-row { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; }
-.property-window .tag-check { display: flex; align-items: center; gap: 3px; margin: 0; }
+.property-window .tag-row { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; font-size: 12px; }
+.property-window .tag-check { display: flex; align-items: center; gap: 4px; margin: 0; }
 .property-window .tag-check input { width: auto; margin: 0; }
 /* a connector's From / To: the select fills the row, the jump button rides
    beside it on the select's own line */
 .property-window .connector-end { display: flex; align-items: flex-end; gap: 4px; }
 .property-window .connector-end label { flex: 1; min-width: 0; }
-.property-window .endpoint-jump { flex: none; padding: 0 6px; line-height: 1.6; }
+.property-window .endpoint-jump { flex: none; width: var(--control-h); padding: 0; }
 .property-window .swap-ends { margin-top: 8px; }
 
+/* ── review surface ─────────────────────────────────────────────────── */
 .review-app {
   display: flex;
   flex-direction: column;
@@ -186,39 +492,32 @@ body { margin: 0; font-family: sans-serif; }
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #ddd;
-  background: #f4f4f4;
+  height: 48px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
+.review-header strong { font-size: 14px; }
 .review-actions { display: flex; align-items: center; gap: 10px; }
-.review-actions button { padding: 6px 14px; font-weight: 600; }
-.review-error { color: #9f3a38; font-size: 12px; }
+.review-error { color: var(--danger); font-size: 12px; }
 .review-confirmed { color: #176b35; font-size: 12px; font-weight: 600; }
-.review-editor {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  grid-template-columns: 1fr 380px;
-}
-.review-editor > .toolbar { grid-column: 1 / 3; }
 
+/* ── files panel ────────────────────────────────────────────────────── */
 .files-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(20, 26, 40, 0.32);
   z-index: 100;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 60px;
+  padding: 64px 16px 16px;
 }
 .files-panel {
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  min-width: 560px;
-  max-width: 80vw;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(20, 26, 40, 0.08), 0 24px 48px rgba(20, 26, 40, 0.24);
+  width: min(720px, 100%);
   max-height: 70vh;
   overflow: auto;
 }
@@ -226,46 +525,57 @@ body { margin: 0; font-family: sans-serif; }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid #ddd;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--line);
 }
-.files-header h3 { margin: 0; font-size: 14px; }
+.files-header h3 { margin: 0; font-size: 14px; font-weight: 650; }
 .files-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
+.files-table th {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .files-table th, .files-table td {
   text-align: left;
-  padding: 6px 12px;
-  border-bottom: 1px solid #eee;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line-soft);
   white-space: nowrap;
 }
-.files-table .danger { color: #b00; }
+.files-table td { font-variant-numeric: tabular-nums; }
+.files-table tbody tr:hover { background: var(--chrome); }
+.files-table td:last-child { text-align: right; }
+.files-table td:last-child button + button { margin-left: 4px; }
+.files-footnote { padding: 10px 16px; }
 
-/* The long-press / right-click menu. Placed in client coordinates by
-   ContextMenu, which nudges it back inside the viewport after measuring. */
+/* ── context menu ─────────────────────────────────────────────────────
+   Placed in client coordinates by ContextMenu, which nudges it back inside
+   the viewport after measuring. */
 .context-menu {
   position: fixed;
   z-index: 30;
-  min-width: 140px;
+  min-width: 168px;
   padding: 4px;
-  background: #fff;
-  border: 1px solid #bbb;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-pop);
   display: flex;
   flex-direction: column;
 }
 .context-menu button {
+  justify-content: flex-start;
   border: 0;
   background: none;
   text-align: left;
-  padding: 6px 10px;
-  font: inherit;
+  padding: 0 10px;
+  font-weight: 400;
   border-radius: 4px;
-  cursor: pointer;
 }
-.context-menu button:hover:not(:disabled) { background: #eef3fd; }
-.context-menu button:disabled { color: #aaa; cursor: default; }
-.property-window p.hint { margin: 4px 0 0; }
+.context-menu button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-ink); }
+.context-menu button:disabled { color: var(--ink-faint); background: none; }
