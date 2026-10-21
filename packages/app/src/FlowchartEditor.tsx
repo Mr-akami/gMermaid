@@ -19,7 +19,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { PropertyWindow } from "./PropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { DeleteButton, DirectionSelect, EditorToolbar } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -209,38 +210,32 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "flowchart.mmd")}>Save…</button>}
-        <button onClick={addNode}>+ Node</button>
-        <button onClick={addSubgraph}>+ Subgraph</button>
-        <button
-          disabled={selectedNode === undefined}
-          onClick={() => selectedNode && setView({ ...view, connectFrom: selectedNode.id })}
-        >
-          → Connect from selected
-        </button>
-        <button disabled={shell.selection.count === 0} onClick={() => deleteSelected(shell.selection.ids)}>
-          Delete
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
-        <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <select
-          value={ir.direction}
-          onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as FlowchartIR["direction"] })}
-        >
-          <option value="TB">Top→Bottom</option>
-          <option value="LR">Left→Right</option>
-          <option value="BT">Bottom→Top</option>
-          <option value="RL">Right→Left</option>
-        </select>
-        {view.connectFrom !== undefined && <span className="hint">click a target node to connect…</span>}
-        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "flowchart.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addNode}>+ Node</button>
+            <button className="btn" onClick={addSubgraph}>+ Subgraph</button>
+          </>
+        }
+        settings={
+          <DirectionSelect value={ir.direction} onChange={(direction) => h.dispatch({ type: "setDirection", direction })} />
+        }
+        selectionActions={
+          <>
+            {selectedNode !== undefined && (
+              <button className="btn" onClick={() => setView({ ...view, connectFrom: selectedNode.id })}>
+                → Connect from selected
+              </button>
+            )}
+            <DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />
+          </>
+        }
+        prompt={view.connectFrom !== undefined ? "click a target node to connect…" : undefined}
+        notice={rejectHint}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <FlowchartView

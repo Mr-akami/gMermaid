@@ -19,7 +19,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GanttPropertyWindow, type GanttSelection } from "./GanttPropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { EditorToolbar, DeleteButton } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -201,54 +202,53 @@ export function GanttEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "gantt.mmd")}>Save…</button>}
-        <button onClick={addSection}>+ Section</button>
-        <button disabled={targetSection === undefined} onClick={addTask}>
-          + Task
-        </button>
-        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
-          Delete
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>
-          Undo
-        </button>
-        <button onClick={h.redo} disabled={!h.canRedo}>
-          Redo
-        </button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <label className="toolbar-field">
-          Title
-          <input
-            aria-label="Gantt title"
-            value={ir.title ?? ""}
-            onBlur={h.endEdit}
-            onChange={(e) => h.dispatch({ type: "setGanttOptions", patch: { title: e.target.value } }, "gantt:title")}
-          />
-        </label>
-        <label className="toolbar-field">
-          dateFormat
-          <input
-            aria-label="Date format"
-            value={ir.dateFormat ?? ""}
-            onBlur={h.endEdit}
-            onChange={(e) => h.dispatch({ type: "setGanttOptions", patch: { dateFormat: e.target.value } }, "gantt:dateFormat")}
-          />
-        </label>
-        <label className="toolbar-field">
-          axisFormat
-          <input
-            aria-label="Axis format"
-            value={ir.axisFormat ?? ""}
-            onBlur={h.endEdit}
-            onChange={(e) => h.dispatch({ type: "setGanttOptions", patch: { axisFormat: e.target.value } }, "gantt:axisFormat")}
-          />
-        </label>
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "gantt.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addSection}>+ Section</button>
+            <button className="btn" disabled={targetSection === undefined} onClick={addTask}>
+              + Task
+            </button>
+          </>
+        }
+        settings={
+          <>
+            <label className="toolbar-field">
+              <span>Title</span>
+              <input
+                aria-label="Gantt title"
+                value={ir.title ?? ""}
+                onBlur={h.endEdit}
+                onChange={(e) => h.dispatch({ type: "setGanttOptions", patch: { title: e.target.value } }, "gantt:title")}
+              />
+            </label>
+            <label className="toolbar-field">
+              <span>dateFormat</span>
+              <input
+                aria-label="Date format"
+                className="narrow"
+                value={ir.dateFormat ?? ""}
+                onBlur={h.endEdit}
+                onChange={(e) => h.dispatch({ type: "setGanttOptions", patch: { dateFormat: e.target.value } }, "gantt:dateFormat")}
+              />
+            </label>
+            <label className="toolbar-field">
+              <span>axisFormat</span>
+              <input
+                aria-label="Axis format"
+                className="narrow"
+                value={ir.axisFormat ?? ""}
+                onBlur={h.endEdit}
+                onChange={(e) => h.dispatch({ type: "setGanttOptions", patch: { axisFormat: e.target.value } }, "gantt:axisFormat")}
+              />
+            </label>
+          </>
+        }
+        selectionActions={<DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <GanttView

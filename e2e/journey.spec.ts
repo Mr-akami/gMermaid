@@ -65,7 +65,7 @@ test("the toolbar adds a section and the property window renames and reorders it
   const code = await codeText(editor);
   expect(code.indexOf("section Evening")).toBeLessThan(code.indexOf("section First use"));
 
-  await editor.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
   expect(await codeText(editor)).toMatch(/section First use[\s\S]*section Evening/);
 
   await editor.getByRole("button", { name: "Delete", exact: true }).click();

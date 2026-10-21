@@ -20,7 +20,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RequirementPropertyWindow, type RequirementSelection } from "./RequirementPropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { DeleteButton, DirectionSelect, EditorToolbar } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -201,31 +202,20 @@ export function RequirementEditor({ loadRequest, initialCode, mode = "standalone
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "requirement.mmd")}>Save…</button>}
-        <button onClick={addRequirement}>+ Requirement</button>
-        <button onClick={addElement}>+ Element</button>
-        <button onClick={() => deleteSelected(shell.selection.ids)} disabled={selection === undefined}>
-          Delete
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
-        <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <select
-          value={ir.direction ?? "TB"}
-          onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<RequirementIR["direction"]> })}
-        >
-          <option value="TB">Top→Bottom</option>
-          <option value="LR">Left→Right</option>
-          <option value="BT">Bottom→Top</option>
-          <option value="RL">Right→Left</option>
-        </select>
-        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "requirement.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addRequirement}>+ Requirement</button>
+            <button className="btn" onClick={addElement}>+ Element</button>
+          </>
+        }
+        settings={<DirectionSelect value={ir.direction ?? "TB"} onChange={(direction) => h.dispatch({ type: "setDirection", direction })} />}
+        selectionActions={<DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />}
+        notice={rejectHint}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <RequirementView

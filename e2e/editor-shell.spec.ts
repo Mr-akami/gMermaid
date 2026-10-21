@@ -34,16 +34,29 @@ async function clipped(editor: Locator): Promise<string[]> {
 }
 
 test("every editor offers the same undo/redo, delete and fit controls", async ({ page }) => {
+  test.slow(); // reloads the app once per diagram kind
   for (const kind of KINDS) {
     const editor = await openEditor(page, kind);
-    await expect(editor.getByRole("button", { name: "Undo", exact: true }), kind).toBeVisible();
-    await expect(editor.getByRole("button", { name: "Redo", exact: true }), kind).toBeVisible();
+    // undo/redo act on the whole document, so they sit in the app bar —
+    // exactly one pair, the visible editor's
+    await expect(page.getByRole("button", { name: "Undo", exact: true }), kind).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Redo", exact: true }), kind).toHaveCount(1);
     await expect(editor.getByLabel("Fit view"), kind).toBeVisible();
-    await expect(editor.getByRole("button", { name: /^Delete/ }), kind).toBeVisible();
+    // delete acts on the selection, so it appears with one
+    const selectionBar = editor.getByRole("toolbar", { name: "Selection actions" });
+    await expect(selectionBar, kind).toBeHidden();
+    // the first drawn element is not always clickable at its box centre (an
+    // edge, a box behind its lifelines), so walk until one takes the click
+    const elements = editor.locator("svg [data-element-id]");
+    for (let i = 0; i < 6 && !(await selectionBar.isVisible()); i++) {
+      await elements.nth(i).click({ force: true });
+    }
+    await expect(selectionBar.getByRole("button", { name: /^Delete/ }), kind).toBeVisible();
   }
 });
 
 test("no sample diagram opens clipped by the canvas", async ({ page }) => {
+  test.slow(); // reloads the app once per diagram kind
   for (const kind of KINDS) {
     const editor = await openEditor(page, kind);
     expect(await clipped(editor), `${kind} sample`).toEqual([]);

@@ -50,7 +50,7 @@ test("a rubber band selects several elements and Delete removes them all", async
   await expect(editor.locator("svg [data-element-id]")).toHaveCount(5); // 3 nodes, 2 edges
 
   // the toolbar toggle is the discoverable half of the gesture
-  await editor.getByRole("button", { name: "▭ Select" }).click();
+  await editor.getByRole("button", { name: "Select", exact: true }).click();
   const canvas = (await editor.locator(".canvas").boundingBox())!;
   await band(page, editor, { x: 3, y: 3 }, { x: canvas.width - 3, y: canvas.height - 3 });
 

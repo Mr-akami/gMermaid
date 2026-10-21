@@ -21,7 +21,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { TimelinePropertyWindow, type TimelineSelection } from "./TimelinePropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { EditorToolbar, DeleteButton } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -221,34 +222,35 @@ export function TimelineEditor({ loadRequest, initialCode, mode = "standalone", 
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "timeline.mmd")}>Save…</button>}
-        <button onClick={addSection}>+ Section</button>
-        <button onClick={addPeriod}>+ Period</button>
-        <button disabled={targetPeriod === undefined} onClick={addEvent}>+ Event</button>
-        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>Delete</button>
-        <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
-        <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <label className="toolbar-field">
-          Timeline title
-          <input
-            value={ir.title ?? ""}
-            onFocus={() => {}}
-            onBlur={h.endEdit}
-            onChange={(e) => {
-              const reason = timelineTitleRejection(e.target.value);
-              setTitleHint(reason);
-              if (reason === undefined) h.dispatch({ type: "setTitle", title: e.target.value }, "timeline:title");
-            }}
-          />
-        </label>
-        {titleHint !== undefined && <span className="hint">{titleHint}</span>}
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "timeline.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addSection}>+ Section</button>
+            <button className="btn" onClick={addPeriod}>+ Period</button>
+            <button className="btn" disabled={targetPeriod === undefined} onClick={addEvent}>+ Event</button>
+          </>
+        }
+        settings={
+          <label className="toolbar-field">
+            <span>Title</span>
+            <input
+              aria-label="Timeline title"
+              value={ir.title ?? ""}
+              onBlur={h.endEdit}
+              onChange={(e) => {
+                const reason = timelineTitleRejection(e.target.value);
+                setTitleHint(reason);
+                if (reason === undefined) h.dispatch({ type: "setTitle", title: e.target.value }, "timeline:title");
+              }}
+            />
+          </label>
+        }
+        selectionActions={<DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />}
+        notice={titleHint}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <TimelineView

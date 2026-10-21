@@ -60,7 +60,7 @@ test("adding a child through the GUI and reshaping it writes the bracket form ba
   await editor.getByLabel("Icon").blur();
   await expectCode(editor).toContain("::icon(fa fa-book)");
 
-  await editor.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
   await expectCode(editor).not.toContain("::icon(fa fa-book)");
 });
 

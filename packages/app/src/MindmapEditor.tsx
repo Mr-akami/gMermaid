@@ -19,7 +19,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { MindmapPropertyWindow } from "./MindmapPropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { EditorToolbar, DeleteButton } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -205,29 +206,22 @@ export function MindmapEditor({ loadRequest, initialCode, mode = "standalone", o
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "mindmap.mmd")}>Save…</button>}
-        <button onClick={addChild}>+ Child</button>
-        <button disabled={selected === undefined || selected.parent === undefined} onClick={addSibling}>
-          + Sibling
-        </button>
-        <button disabled={selected === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
-          Delete subtree
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>
-          Undo
-        </button>
-        <button onClick={h.redo} disabled={!h.canRedo}>
-          Redo
-        </button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <span className="hint">drag a node onto another to re-parent it</span>
-        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "mindmap.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addChild}>+ Child</button>
+            <button className="btn" disabled={selected === undefined || selected.parent === undefined} onClick={addSibling}>
+              + Sibling
+            </button>
+          </>
+        }
+        selectionActions={selected !== undefined && <DeleteButton label="Delete subtree" onClick={() => deleteSelected(shell.selection.ids)} />}
+        notice={rejectHint}
+        tip="drag a node onto another to re-parent it"
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <MindmapView

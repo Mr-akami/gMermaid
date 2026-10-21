@@ -26,7 +26,9 @@ import { loadInitial, openMmd, readStoredCode, saveMmd, useAutosave, useLoadWarn
 import { CodeTabs } from "./CodeTabs";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { StatePropertyWindow, type StateSelection } from "./StatePropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { DeleteButton, DirectionSelect, EditorToolbar } from "./EditorToolbar";
+import { Icon } from "./icons";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -419,72 +421,75 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "state.mmd")}>Save…</button>}
-        <button onClick={addState}>+ State</button>
-        <button disabled={childRejection !== undefined} title={childRejection} onClick={addChildState}>
-          + Child state
-        </button>
-        <button title={pseudoRejection("start")} onClick={() => addPseudo("start")}>
-          + Start [*]
-        </button>
-        <button title={pseudoRejection("end")} onClick={() => addPseudo("end")}>
-          + End [*]
-        </button>
-        <button onClick={() => addSpecial("choice")}>+ Choice</button>
-        <button onClick={() => addSpecial("fork")}>+ Fork</button>
-        <button onClick={() => addSpecial("join")}>+ Join</button>
-        <button disabled={selectedState === undefined || noteRejection !== undefined} title={noteRejection} onClick={addNote}>
-          + Note
-        </button>
-        <button
-          disabled={selectedState === undefined}
-          onClick={() => selectedState && setView({ ...view, transitionFrom: selectedState.id })}
-        >
-          → Transition from selected
-        </button>
-        <button
-          disabled={selectedState === undefined}
-          onClick={() => selectedState && setView({ selectedId: selectedState.id, moveInto: selectedState.id, moveMode: view.moveMode === true })}
-        >
-          ⊂ Move into…
-        </button>
-        <button disabled={selectedState === undefined} onClick={addRegion}>
-          + Region
-        </button>
-        <button
-          aria-pressed={view.moveMode === true}
-          className={view.moveMode === true ? "active" : undefined}
-          onClick={() => setView({ ...view, moveMode: view.moveMode !== true })}
-        >
-          ⇱ Move mode
-        </button>
-        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
-          Delete
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
-        <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <select
-          value={ir.direction ?? "TB"}
-          onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<StateIR["direction"]> })}
-        >
-          <option value="TB">Top→Bottom</option>
-          <option value="LR">Left→Right</option>
-          <option value="BT">Bottom→Top</option>
-          <option value="RL">Right→Left</option>
-        </select>
-        {view.moveMode === true && (
-          <span className="hint">drag a state onto a composite frame to move it in (background = top level)</span>
-        )}
-        {view.transitionFrom !== undefined && <span className="hint">click a target state…</span>}
-        {view.moveInto !== undefined && <span className="hint">click the container state (background = top level)…</span>}
-        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "state.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addState}>+ State</button>
+            <button className="btn" disabled={childRejection !== undefined} title={childRejection} onClick={addChildState}>
+              + Child state
+            </button>
+            <span className="btn-cluster" role="group" aria-label="Pseudo states">
+              <button className="btn" title={pseudoRejection("start")} onClick={() => addPseudo("start")}>
+                + Start [*]
+              </button>
+              <button className="btn" title={pseudoRejection("end")} onClick={() => addPseudo("end")}>
+                + End [*]
+              </button>
+              <button className="btn" onClick={() => addSpecial("choice")}>+ Choice</button>
+              <button className="btn" onClick={() => addSpecial("fork")}>+ Fork</button>
+              <button className="btn" onClick={() => addSpecial("join")}>+ Join</button>
+            </span>
+            <button className="btn" disabled={selectedState === undefined || noteRejection !== undefined} title={noteRejection ?? "Select a state to attach a note"} onClick={addNote}>
+              + Note
+            </button>
+            <button className="btn" disabled={selectedState === undefined} title="Select a composite state to add a region" onClick={addRegion}>
+              + Region
+            </button>
+          </>
+        }
+        settings={<DirectionSelect value={ir.direction ?? "TB"} onChange={(direction) => h.dispatch({ type: "setDirection", direction })} />}
+        modes={
+          <button
+            className="btn"
+            aria-pressed={view.moveMode === true}
+            title="Drag a state onto a composite frame to move it in"
+            onClick={() => setView({ ...view, moveMode: view.moveMode !== true })}
+          >
+            <Icon name="move" />
+            Move mode
+          </button>
+        }
+        selectionActions={
+          <>
+            {selectedState !== undefined && (
+              <>
+                <button className="btn" onClick={() => setView({ ...view, transitionFrom: selectedState.id })}>
+                  → Transition from selected
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => setView({ selectedId: selectedState.id, moveInto: selectedState.id, moveMode: view.moveMode === true })}
+                >
+                  Move into…
+                </button>
+              </>
+            )}
+            <DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />
+          </>
+        }
+        prompt={
+          view.transitionFrom !== undefined
+            ? "click a target state…"
+            : view.moveInto !== undefined
+              ? "click the container state (background = top level)…"
+              : undefined
+        }
+        notice={rejectHint}
+        tip={view.moveMode === true ? "drag a state onto a composite frame to move it in (background = top level)" : undefined}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <StateView

@@ -17,7 +17,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { JourneyPropertyWindow, type JourneySelection } from "./JourneyPropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { EditorToolbar, DeleteButton } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -195,36 +196,31 @@ export function JourneyEditor({ loadRequest, initialCode, mode = "standalone", o
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "journey.mmd")}>Save…</button>}
-        <button onClick={addSection}>+ Section</button>
-        <button disabled={targetSection === undefined} onClick={addTask}>
-          + Task
-        </button>
-        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
-          Delete
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>
-          Undo
-        </button>
-        <button onClick={h.redo} disabled={!h.canRedo}>
-          Redo
-        </button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <label className="toolbar-field">
-          Title
-          <input
-            aria-label="Journey title"
-            value={ir.title ?? ""}
-            onBlur={h.endEdit}
-            onChange={(e) => h.dispatch({ type: "setJourneyTitle", title: e.target.value }, "journey:title")}
-          />
-        </label>
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "journey.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addSection}>+ Section</button>
+            <button className="btn" disabled={targetSection === undefined} onClick={addTask}>
+              + Task
+            </button>
+          </>
+        }
+        settings={
+          <label className="toolbar-field">
+            <span>Title</span>
+            <input
+              aria-label="Journey title"
+              value={ir.title ?? ""}
+              onBlur={h.endEdit}
+              onChange={(e) => h.dispatch({ type: "setJourneyTitle", title: e.target.value }, "journey:title")}
+            />
+          </label>
+        }
+        selectionActions={<DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <JourneyView

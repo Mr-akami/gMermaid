@@ -24,7 +24,8 @@ import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./p
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ClassPropertyWindow, type ClassSelection } from "./ClassPropertyWindow";
-import { SelectionOverlay, SelectionTools } from "./SelectionUI";
+import { SelectionOverlay } from "./SelectionUI";
+import { DeleteButton, DirectionSelect, EditorToolbar } from "./EditorToolbar";
 import { useDiagramHistory } from "./useDiagramHistory";
 import { useEditorShell } from "./useEditorShell";
 import { withSelected } from "./viewSelection";
@@ -313,39 +314,33 @@ export function ClassEditor({ loadRequest, initialCode, mode = "standalone", onC
 
   return (
     <>
-      <div className="toolbar">
-        {mode === "standalone" && <button onClick={openFile}>Open…</button>}
-        {mode === "standalone" && <button onClick={() => saveMmd(code, "class.mmd")}>Save…</button>}
-        <button onClick={addClass}>+ Class</button>
-        <button onClick={addNote}>+ Note</button>
-        <button disabled={selectedClass === undefined} onClick={addNamespace}>+ Namespace</button>
-        <button
-          disabled={selectedClass === undefined}
-          onClick={() => selectedClass && setView({ ...view, relateFrom: selectedClass.id })}
-        >
-          → Relation from selected
-        </button>
-        <button disabled={selection === undefined} onClick={() => deleteSelected(shell.selection.ids)}>
-          Delete
-        </button>
-        <button onClick={h.undo} disabled={!h.canUndo}>Undo</button>
-        <button onClick={h.redo} disabled={!h.canRedo}>Redo</button>
-        <button aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
-          ⤢ Fit
-        </button>
-        <SelectionTools shell={shell} />
-        <select
-          value={ir.direction ?? "TB"}
-          onChange={(e) => h.dispatch({ type: "setDirection", direction: e.target.value as NonNullable<ClassIR["direction"]> })}
-        >
-          <option value="TB">Top→Bottom</option>
-          <option value="LR">Left→Right</option>
-          <option value="BT">Bottom→Top</option>
-          <option value="RL">Right→Left</option>
-        </select>
-        {view.relateFrom !== undefined && <span className="hint">click a target class…</span>}
-        {rejectHint !== undefined && <span className="hint">{rejectHint}</span>}
-      </div>
+      <EditorToolbar
+        shell={shell}
+        history={h}
+        file={mode === "standalone" ? { open: openFile, save: () => saveMmd(code, "class.mmd") } : undefined}
+        tools={
+          <>
+            <button className="btn" onClick={addClass}>+ Class</button>
+            <button className="btn" onClick={addNote}>+ Note</button>
+            <button className="btn" disabled={selectedClass === undefined} title="Select a class to wrap it in a namespace" onClick={addNamespace}>
+              + Namespace
+            </button>
+          </>
+        }
+        settings={<DirectionSelect value={ir.direction ?? "TB"} onChange={(direction) => h.dispatch({ type: "setDirection", direction })} />}
+        selectionActions={
+          <>
+            {selectedClass !== undefined && (
+              <button className="btn" onClick={() => setView({ ...view, relateFrom: selectedClass.id })}>
+                → Relation from selected
+              </button>
+            )}
+            <DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />
+          </>
+        }
+        prompt={view.relateFrom !== undefined ? "click a target class…" : undefined}
+        notice={rejectHint}
+      />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
           <ClassView

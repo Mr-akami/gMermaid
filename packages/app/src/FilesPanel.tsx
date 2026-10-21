@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "./icons";
 import { deleteStoredEntry, listStoredEntries, type StoredEntry } from "./persistence";
 
 export interface FilesPanelProps {
@@ -36,10 +37,12 @@ export function FilesPanel({ onLoad, onDeleted, onClose }: FilesPanelProps) {
       <div className="files-panel" onClick={(e) => e.stopPropagation()}>
         <div className="files-header">
           <h3>Browser storage</h3>
-          <button onClick={onClose}>✕</button>
+          <button className="btn icon-only" aria-label="Close" onClick={onClose}>
+            <Icon name="close" />
+          </button>
         </div>
         {entries.length === 0 ? (
-          <div className="hint" style={{ padding: 12 }}>No stored diagrams.</div>
+          <div className="hint files-footnote">No stored diagrams.</div>
         ) : (
           <table className="files-table">
             <thead>
@@ -67,7 +70,7 @@ export function FilesPanel({ onLoad, onDeleted, onClose }: FilesPanelProps) {
             </tbody>
           </table>
         )}
-        <div className="hint" style={{ padding: "8px 12px" }}>
+        <div className="hint files-footnote">
           自動保存エントリは編集すると再作成されます。Delete 後にエディタも初期状態へ戻ります。
         </div>
       </div>
