@@ -1,0 +1,9 @@
+{
+  "name": "gmermaid",
+  "description": "Skill for designing with the user through a shared Mermaid diagram: the agent writes it, the user edits it in the gMermaid GUI and sends it back with a note",
+  "author": { "name": "Mr-akami" },
+  "homepage": "https://github.com/Mr-akami/gMermaid",
+  "repository": "https://github.com/Mr-akami/gMermaid",
+  "license": "MIT",
+  "keywords": ["mermaid", "diagram", "design", "review"]
+}

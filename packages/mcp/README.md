@@ -17,7 +17,19 @@ by side; work in progress is saved in the browser's local storage.
 ## Use it from a coding agent (CLI + Skill)
 
 For agents with a shell — Claude Code, Codex and the like — install the
-bundled skill once:
+skill once. In Claude Code, as a plugin (it updates with the repository):
+
+```text
+/plugin install gmermaid --marketplace Mr-akami/gMermaid
+```
+
+For Codex, Cursor and other agents, with the [skills](https://skills.sh) CLI:
+
+```sh
+npx skills add Mr-akami/gMermaid
+```
+
+Or copy the skill bundled in this package (re-run after upgrading):
 
 ```sh
 npx -y @mr-akami/gmermaid install-skill            # ~/.claude/skills/gmermaid

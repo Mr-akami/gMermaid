@@ -19,7 +19,7 @@
   },
   "files": ["dist", "skill", "README.md"],
   "scripts": {
-    "build": "vite build && vite build --config vite.editor.config.ts && tsup",
+    "build": "vite build && vite build --config vite.editor.config.ts && tsup && node scripts/copy-skill.mjs",
     "prepack": "pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { installSkill } from "./installSkill";
 
-const SOURCE = join(import.meta.dirname, "..", "skill", "gmermaid", "SKILL.md");
+// the one source; the npm build copies it into the package (scripts/copy-skill.mjs)
+const SOURCE = join(import.meta.dirname, "..", "..", "..", "plugins", "gmermaid", "skills", "gmermaid", "SKILL.md");
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
