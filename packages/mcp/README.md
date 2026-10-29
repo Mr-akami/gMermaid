@@ -75,7 +75,7 @@ For clients configured with JSON:
 
 The LLM calls `review_mermaid` with Mermaid source. MCP Apps-capable clients
 render the editor inline; other local clients open it in the default browser.
-Once the user selects **Send to chat**, the LLM receives the canonical source
+Once the user selects **Send to agent**, the LLM receives the canonical source
 through `get_mermaid_review`.
 
 ChatGPT web does not read local MCP configuration — use ChatGPT desktop or

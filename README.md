@@ -94,7 +94,7 @@ For clients configured with JSON, use:
 }
 ```
 
-The LLM calls `review_mermaid` with Mermaid source for any diagram kind above. MCP Apps-capable clients show the editor inline; other local clients open it in the default browser. After the user selects **Send to chat**, the LLM receives the canonical source through `get_mermaid_review`.
+The LLM calls `review_mermaid` with Mermaid source for any diagram kind above. MCP Apps-capable clients show the editor inline; other local clients open it in the default browser. After the user selects **Send to agent**, the LLM receives the canonical source through `get_mermaid_review`.
 
 ChatGPT web does not read local MCP configuration; use ChatGPT desktop or another local MCP client for the `npx` distribution.
 

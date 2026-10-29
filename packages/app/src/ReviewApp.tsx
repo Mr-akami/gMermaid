@@ -50,10 +50,10 @@ export function ReviewApp({ sessionId, kind, mermaid, title, onSubmit }: ReviewA
           {!valid && <span className="review-error">Fix the syntax errors first</span>}
           {error !== undefined && <span className="review-error">{error}</span>}
           {state === "confirmed" ? (
-            <span className="review-confirmed">Sent. Go back to the chat to continue.</span>
+            <span className="review-confirmed">Sent to the agent. Go back to the chat to continue.</span>
           ) : (
             <button className="primary" disabled={!valid || state === "submitting"} onClick={submit}>
-              {state === "submitting" ? "Sending…" : "Send to chat"}
+              {state === "submitting" ? "Sending…" : "Send to agent"}
             </button>
           )}
         </div>
