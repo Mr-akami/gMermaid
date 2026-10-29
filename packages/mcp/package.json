@@ -32,6 +32,8 @@
   },
   "devDependencies": {
     "@gmermaid/app": "workspace:*",
+    "@gmermaid/ir": "workspace:*",
+    "@gmermaid/mermaid-codegen": "workspace:*",
     "@gmermaid/mermaid-parser": "workspace:*",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",

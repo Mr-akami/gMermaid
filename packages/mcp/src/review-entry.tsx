@@ -2,7 +2,7 @@ import { StrictMode, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App as McpApp } from "@modelcontextprotocol/ext-apps";
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
-import { DIAGRAM_KINDS, ReviewApp, type DiagramKind } from "@gmermaid/app/review";
+import { DIAGRAM_KINDS, FileSessionApp, ReviewApp, type DiagramKind, type FileSessionApi } from "@gmermaid/app/review";
 import "@gmermaid/app/style.css";
 
 interface Bootstrap {
@@ -14,9 +14,18 @@ interface Bootstrap {
   readonly token?: string | undefined;
 }
 
+/** `gmermaid open`: a shared file rather than a one-shot review. */
+interface FileBootstrap {
+  readonly mode: "file";
+  readonly sessionId: string;
+  readonly token: string;
+  readonly file: string;
+  readonly title?: string | undefined;
+}
+
 declare global {
   interface Window {
-    gMermaidBootstrap?: Bootstrap;
+    gMermaidBootstrap?: Bootstrap | FileBootstrap;
   }
 }
 
@@ -108,7 +117,43 @@ function BrowserReview({ bootstrap }: { readonly bootstrap: Bootstrap }) {
   );
 }
 
+function fileApi(token: string): FileSessionApi {
+  const api = (path: string) => `${path}?token=${encodeURIComponent(token)}`;
+  async function post<T>(path: string, body: unknown): Promise<T> {
+    const response = await fetch(api(path), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const value = (await response.json()) as T & { error?: string };
+    if (!response.ok) throw new Error(value.error ?? `Request failed (${response.status})`);
+    return value;
+  }
+  return {
+    subscribe(onFile, onLost) {
+      const events = new EventSource(api("/api/events"));
+      events.addEventListener("file", (e) => onFile(JSON.parse((e as MessageEvent<string>).data)));
+      // the server is a local process; once it is gone it is not coming back
+      events.addEventListener("error", () => {
+        events.close();
+        onLost();
+      });
+      return () => events.close();
+    },
+    save: async (mermaid) => (await post<{ saved: boolean }>("/api/save", { mermaid })).saved,
+    handBack: (mermaid, comment) => post<{ round: number }>("/api/handback", { mermaid, comment }),
+  };
+}
+
 const bootstrap = window.gMermaidBootstrap;
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>{bootstrap?.mode === "browser" ? <BrowserReview bootstrap={bootstrap} /> : <EmbeddedReview />}</StrictMode>,
+  <StrictMode>
+    {bootstrap?.mode === "file" ? (
+      <FileSessionApp file={bootstrap.file} title={bootstrap.title} api={fileApi(bootstrap.token)} />
+    ) : bootstrap?.mode === "browser" ? (
+      <BrowserReview bootstrap={bootstrap} />
+    ) : (
+      <EmbeddedReview />
+    )}
+  </StrictMode>,
 );

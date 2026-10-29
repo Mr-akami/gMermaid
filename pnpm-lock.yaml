@@ -127,6 +127,12 @@ importers:
       '@gmermaid/app':
         specifier: workspace:*
         version: link:../app
+      '@gmermaid/ir':
+        specifier: workspace:*
+        version: link:../ir
+      '@gmermaid/mermaid-codegen':
+        specifier: workspace:*
+        version: link:../mermaid-codegen
       '@gmermaid/mermaid-parser':
         specifier: workspace:*
         version: link:../mermaid-parser

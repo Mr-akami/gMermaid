@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import open from "open";
 import type { SessionStore } from "./session";
+import { injectBootstrap } from "./bootstrap";
 import { validateDiagram } from "./diagram";
 
 const MAX_BODY_BYTES = 300 * 1024;
@@ -65,15 +66,14 @@ export class BrowserReviewServer {
       if (session === undefined) return json(res, 404, { error: "Unknown or expired review session" });
 
       if (req.method === "GET") {
-        const bootstrap = JSON.stringify({
+        const html = injectBootstrap(this.html, {
           mode: "browser",
           sessionId: session.id,
           kind: session.kind,
           mermaid: session.originalMermaid,
           title: session.title,
           token: session.token,
-        }).replaceAll("<", "\\u003c");
-        const html = this.html.replace("</head>", `<script>window.gMermaidBootstrap=${bootstrap}</script></head>`);
+        });
         res.writeHead(200, {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
