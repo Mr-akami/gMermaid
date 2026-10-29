@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SectionId, TaskId } from "./ids";
 import type { GanttIR } from "./gantt";
-import { applyGanttAction, sanitizeGanttName } from "./ganttActions";
+import { applyGanttAction, ganttTaskNameRejection, sanitizeGanttName } from "./ganttActions";
 
 const S = (s: string) => s as SectionId;
 const T = (s: string) => s as TaskId;
@@ -100,5 +100,26 @@ describe("applyGanttAction", () => {
       patch: { start: { kind: "after", ids: [" a1 ", "bad id", "b2"] } },
     });
     expect(next.sections[0]!.tasks[1]!.start).toEqual({ kind: "after", ids: ["a1", "b2"] });
+  });
+});
+
+describe("ganttTaskNameRejection", () => {
+  it("accepts an ordinary name", () => {
+    expect(ganttTaskNameRejection("Design review")).toBeUndefined();
+  });
+
+  it("refuses an empty name: the task line would start with `:`", () => {
+    expect(ganttTaskNameRejection("   ")).toBe("task name cannot be empty");
+  });
+
+  it("refuses a name mermaid would read as a statement, and says why", () => {
+    for (const name of ["section Build", "title", "excludes weekends", "dateFormat x"]) {
+      expect(ganttTaskNameRejection(name), name).toMatch(/cannot start with a mermaid keyword/);
+    }
+  });
+
+  it("allows a keyword that is only the start of a longer word", () => {
+    expect(ganttTaskNameRejection("sectional view")).toBeUndefined();
+    expect(ganttTaskNameRejection("titles page")).toBeUndefined();
   });
 });

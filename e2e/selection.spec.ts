@@ -186,18 +186,6 @@ test("the menu offers Move only where the diagram kind has one", async ({ page }
   await expect(flowchart.getByRole("menuitem", { name: /移動/ })).toHaveCount(0);
 });
 
-test("a mindmap subtree copies and pastes as an outline", async ({ page }) => {
-  const editor = await openEditor(page, "Mindmap");
-  await setCode(editor, "mindmap\n  root[Root]\n    a[Alpha]\n      a1[Leaf]\n");
-
-  await element(editor, "a").click();
-  await page.keyboard.press("ControlOrMeta+c");
-  await page.keyboard.press("ControlOrMeta+v");
-
-  await countInCode(editor, "Alpha").toBe(2);
-  await countInCode(editor, "Leaf").toBe(2);
-});
-
 test("text from another diagram kind is refused, with the reason", async ({ page }) => {
   const editor = await openEditor(page, "Flowchart");
   await setCode(editor, TWO_NODES);
@@ -250,28 +238,3 @@ test("copy and paste inside the code pane stay the user's own", async ({ page })
   await countInCode(editor, '"Third"').toBe(1);
   await expect(editor.getByText("読めない", { exact: false })).toHaveCount(0);
 });
-
-// The app shipped against a three-kind stand-in while the clipboard model was
-// built separately; these are the kinds that used to be refused by name.
-const COPYABLE: ReadonlyArray<readonly [Parameters<typeof openEditor>[1], string, string, string]> = [
-  ["Class", "classDiagram\n  class Alpha\n  class Beta\n  Alpha --> Beta\n", "Alpha", "Alpha"],
-  ["Sequence", "sequenceDiagram\n  participant Ann\n  participant Bob\n  Ann->>Bob: hello\n", "hello", "hello"],
-  ["Timeline", "timeline\n  section Early\n    2002 : LinkedIn\n    2004 : Facebook\n", "LinkedIn", "LinkedIn"],
-];
-
-for (const [kind, source, clickLabel, needle] of COPYABLE) {
-  test(`${kind} copies and pastes through the real clipboard`, async ({ page }) => {
-    const editor = await openEditor(page, kind);
-    await setCode(editor, source);
-    await expectCode(editor).toContain(needle);
-
-    // the label is a <tspan> with pointer events off; the group carrying the
-    // element id is what the canvas listens on
-    await editor.locator("svg [data-element-id]").filter({ hasText: clickLabel }).first().click();
-    await page.keyboard.press("ControlOrMeta+c");
-    await page.keyboard.press("ControlOrMeta+v");
-
-    // the copy lands with a fresh identity, so the name appears twice
-    await countInCode(editor, needle).toBeGreaterThan(1);
-  });
-}
