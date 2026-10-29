@@ -1,5 +1,18 @@
 # Changelog
 
+## [v2026.1029.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1021.0...v2026.1029.0) - 2026-10-29
+
+### Other changes
+- feat(cli): gmermaid validate by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/50
+- feat(cli): share a diagram file between an agent and the user by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/52
+- feat(cli): agent skill + install-skill by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/53
+- fix(app): plain-English hand-back wording by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/54
+- feat: distribute the skill as a Claude Code plugin and via npx skills by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/55
+- fix(app): one name for the hand-back button: Send to agent by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/56
+- test(e2e): halve the suite's time by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/57
+- test(e2e): drop tests that duplicate unit coverage or each other by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/58
+- test: fewer e2e page loads — docs samples to vitest, same-setup cases merged by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/59
+
 ## [v2026.1021.0](https://github.com/Mr-akami/gMermaid/compare/v2026.818.0...v2026.1021.0) - 2026-10-21
 
 ### Other changes
