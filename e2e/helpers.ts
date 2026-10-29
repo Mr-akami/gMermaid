@@ -4,9 +4,13 @@ export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement" 
 
 /** Open the app fresh (no autosave) and switch to a diagram tab. */
 export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
-  await page.goto("/");
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
+  if (page.url() === "about:blank") {
+    // every test gets a fresh browser context, so its storage is already empty
+    await page.goto("/");
+  } else {
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+  }
   await page.getByRole("button", { name: kind, exact: true }).click();
   const editor = page.locator(".editor:not(.hidden)");
   await expect(editor).toBeVisible();
@@ -127,4 +131,25 @@ export async function panAway(page: Page, editor: Locator): Promise<void> {
   await page.mouse.down();
   await page.mouse.move(canvas.x + canvas.width - 12, canvas.y + canvas.height - 12, { steps: 8 });
   await page.mouse.up();
+}
+
+/** Ids of elements the canvas is currently cutting off. */
+export async function clipped(editor: Locator): Promise<string[]> {
+  return editor.evaluate((root) => {
+    const canvas = root.querySelector(".canvas")!.getBoundingClientRect();
+    const out: string[] = [];
+    for (const el of root.querySelectorAll("svg [data-element-id]")) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue; // a zero-length edge has no box
+      if (r.left < canvas.left - 1 || r.top < canvas.top - 1 || r.right > canvas.right + 1 || r.bottom > canvas.bottom + 1) {
+        out.push(el.getAttribute("data-element-id") ?? "?");
+      }
+    }
+    return out;
+  });
+}
+
+/** Wait for mermaid.js's verdict on the visible code pane. */
+export function mermaidVerdict(editor: Locator, verdict: "ok" | "rejected"): Locator {
+  return editor.locator(`.code-pane:visible[data-mermaid="${verdict}"]`);
 }
