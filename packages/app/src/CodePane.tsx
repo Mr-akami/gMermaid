@@ -151,7 +151,9 @@ export function CodePane<T>({
   }
 
   return (
-    <div className="code-pane">
+    // data-mermaid: mermaid.js's verdict, readable by the e2e suite so it can
+    // wait for the answer instead of sleeping through the debounce
+    <div className="code-pane" data-mermaid={mermaidText ? mermaidVerdict.status : undefined}>
       {staleWhileFocused && (
         <div className="code-banner">
           図が変更されました。

@@ -1,67 +1,8 @@
-import { expect, test, type Locator } from "@playwright/test";
-import { element, expectCode, expectInsideCanvas, openEditor, openStoredEditor, panAway, setCode, type Kind } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { clipped, element, expectCode, expectInsideCanvas, openEditor, openStoredEditor, panAway, setCode } from "./helpers";
 
 // The behaviour every editor owes the user, checked where it can be driven
 // for real: the keys that act on the selection, and the camera.
-
-const KINDS: readonly Kind[] = [
-  "Flowchart",
-  "Sequence",
-  "Class",
-  "State",
-  "Timeline",
-  "Journey",
-  "Requirement",
-  "Usecase",
-  "Mindmap",
-  "Gantt",
-];
-
-/** Ids of elements the canvas is currently cutting off. */
-async function clipped(editor: Locator): Promise<string[]> {
-  return editor.evaluate((root) => {
-    const canvas = root.querySelector(".canvas")!.getBoundingClientRect();
-    const out: string[] = [];
-    for (const el of root.querySelectorAll("svg [data-element-id]")) {
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) continue; // a zero-length edge has no box
-      if (r.left < canvas.left - 1 || r.top < canvas.top - 1 || r.right > canvas.right + 1 || r.bottom > canvas.bottom + 1) {
-        out.push(el.getAttribute("data-element-id") ?? "?");
-      }
-    }
-    return out;
-  });
-}
-
-test("every editor offers the same undo/redo, delete and fit controls", async ({ page }) => {
-  test.slow(); // reloads the app once per diagram kind
-  for (const kind of KINDS) {
-    const editor = await openEditor(page, kind);
-    // undo/redo act on the whole document, so they sit in the app bar —
-    // exactly one pair, the visible editor's
-    await expect(page.getByRole("button", { name: "Undo", exact: true }), kind).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Redo", exact: true }), kind).toHaveCount(1);
-    await expect(editor.getByLabel("Fit view"), kind).toBeVisible();
-    // delete acts on the selection, so it appears with one
-    const selectionBar = editor.getByRole("toolbar", { name: "Selection actions" });
-    await expect(selectionBar, kind).toBeHidden();
-    // the first drawn element is not always clickable at its box centre (an
-    // edge, a box behind its lifelines), so walk until one takes the click
-    const elements = editor.locator("svg [data-element-id]");
-    for (let i = 0; i < 6 && !(await selectionBar.isVisible()); i++) {
-      await elements.nth(i).click({ force: true });
-    }
-    await expect(selectionBar.getByRole("button", { name: /^Delete/ }), kind).toBeVisible();
-  }
-});
-
-test("no sample diagram opens clipped by the canvas", async ({ page }) => {
-  test.slow(); // reloads the app once per diagram kind
-  for (const kind of KINDS) {
-    const editor = await openEditor(page, kind);
-    expect(await clipped(editor), `${kind} sample`).toEqual([]);
-  }
-});
 
 test("Delete removes the selected node, Escape drops the selection", async ({ page }) => {
   const editor = await openEditor(page, "Flowchart");
