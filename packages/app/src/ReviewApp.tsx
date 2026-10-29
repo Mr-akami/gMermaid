@@ -47,13 +47,13 @@ export function ReviewApp({ sessionId, kind, mermaid, title, onSubmit }: ReviewA
           <span className="hint"> {kind}</span>
         </div>
         <div className="review-actions">
-          {!valid && <span className="review-error">構文エラーを修正してください</span>}
+          {!valid && <span className="review-error">Fix the syntax errors first</span>}
           {error !== undefined && <span className="review-error">{error}</span>}
           {state === "confirmed" ? (
-            <span className="review-confirmed">LLM に返しました。チャットへ戻ってください。</span>
+            <span className="review-confirmed">Sent. Go back to the chat to continue.</span>
           ) : (
             <button className="primary" disabled={!valid || state === "submitting"} onClick={submit}>
-              {state === "submitting" ? "送信中…" : "LLMへ返す"}
+              {state === "submitting" ? "Sending…" : "Send to chat"}
             </button>
           )}
         </div>

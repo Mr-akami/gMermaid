@@ -117,9 +117,9 @@ describe("formatHandoff", () => {
   it("prints what the agent needs to act on", () => {
     expect(formatHandoff({ round: 2, file: "d.mmd", edited: true, comment: "line one\nline two", mermaid: "flowchart TB\n  A\n" })).toBe(
       [
-        "The user handed back d.mmd (round 2).",
+        "The user sent d.mmd back (round 2).",
         "Edited by the user: yes",
-        "Comment:",
+        "Note from the user:",
         "  line one",
         "  line two",
         "Diagram as it now stands in the file:",

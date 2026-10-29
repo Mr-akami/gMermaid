@@ -29,17 +29,17 @@ The skill teaches the agent this loop, built on a **shared file**:
 ```sh
 gmermaid validate docs/design/auth.mmd   # agent wrote a diagram; check it
 gmermaid open docs/design/auth.mmd       # show it to the user; returns at once
-gmermaid wait docs/design/auth.mmd       # blocks until the user hands it back
+gmermaid wait docs/design/auth.mmd       # blocks until the user sends it back
 gmermaid close docs/design/auth.mmd      # design settled
 ```
 
 While the editor is open the file is the master copy both ways: the agent edits
 the file and the editor follows; the user edits on the canvas or in the code
 pane and every change is saved into the file. When the user presses
-**Agent に返す** (with an optional comment such as "add an error branch after
-Verify"), `wait` prints the comment and the diagram, and the agent fixes or
+**Send to agent** (with an optional note such as "add an error branch after
+Verify"), `wait` prints the note and the diagram, and the agent fixes or
 reconsiders the design, updates the file, and waits again — as many rounds as it
-takes. `wait` exits 3 when the user has not handed back yet (run it again) and
+takes. `wait` exits 3 when the user has not sent it back yet (run it again) and
 4 when no session is open.
 
 ## Use it from an LLM (MCP)
@@ -63,7 +63,7 @@ For clients configured with JSON:
 
 The LLM calls `review_mermaid` with Mermaid source. MCP Apps-capable clients
 render the editor inline; other local clients open it in the default browser.
-Once the user selects **LLMへ返す**, the LLM receives the canonical source
+Once the user selects **Send to chat**, the LLM receives the canonical source
 through `get_mermaid_review`.
 
 ChatGPT web does not read local MCP configuration — use ChatGPT desktop or
@@ -77,7 +77,7 @@ another local MCP client for the `npx` distribution.
 | `gmermaid editor`   | Same as above, stated explicitly    |
 | `gmermaid validate <file\|->…` | Check `.mmd` files or the mermaid blocks of a `.md`; exit 1 on errors |
 | `gmermaid open <file> [--title T] [--no-browser]` | Share a file with the user in the editor; returns at once |
-| `gmermaid wait <file> [--timeout SEC] [--json]` | Wait for the user to hand the file back |
+| `gmermaid wait <file> [--timeout SEC] [--json]` | Wait for the user to send the file back |
 | `gmermaid close <file>` / `gmermaid status` | Stop sharing a file / list shared files |
 | `gmermaid install-skill [--project \| --dir PATH]` | Install the agent skill |
 | `gmermaid mcp`      | Run the MCP STDIO server            |

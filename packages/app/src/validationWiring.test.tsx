@@ -64,7 +64,7 @@ async function mount(node: ReactNode): Promise<HTMLDivElement> {
 }
 
 function submitButton(host: HTMLElement): HTMLButtonElement {
-  const button = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("LLMへ返す"));
+  const button = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Send to chat"));
   expect(button, "the submit button should be rendered").toBeDefined();
   return button as HTMLButtonElement;
 }

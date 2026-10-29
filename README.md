@@ -62,7 +62,7 @@ the browser's local storage.
 Coding agents with a shell (Claude Code, Codex, …) can use the CLI instead of
 MCP: `npx -y @mr-akami/gmermaid install-skill` installs a skill that has the
 agent write a diagram to a file, `gmermaid open` it for you, and `gmermaid wait`
-for you to edit it and hand it back with a comment. See the
+for you to edit it and send it back with a note. See the
 [package README](packages/mcp/README.md#use-it-from-a-coding-agent-cli--skill).
 
 Install the local STDIO server in Codex, ChatGPT desktop, or another MCP client:
@@ -84,7 +84,7 @@ For clients configured with JSON, use:
 }
 ```
 
-The LLM calls `review_mermaid` with Mermaid source for any diagram kind above. MCP Apps-capable clients show the editor inline; other local clients open it in the default browser. After the user selects **LLMへ返す**, the LLM receives the canonical source through `get_mermaid_review`.
+The LLM calls `review_mermaid` with Mermaid source for any diagram kind above. MCP Apps-capable clients show the editor inline; other local clients open it in the default browser. After the user selects **Send to chat**, the LLM receives the canonical source through `get_mermaid_review`.
 
 ChatGPT web does not read local MCP configuration; use ChatGPT desktop or another local MCP client for the `npx` distribution.
 
