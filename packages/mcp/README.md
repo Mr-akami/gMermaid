@@ -14,7 +14,35 @@ This starts a loopback-only server on a random port and opens the editor in
 your default browser. Diagrams are edited on a canvas and as Mermaid text side
 by side; work in progress is saved in the browser's local storage.
 
-## Use it from an LLM
+## Use it from a coding agent (CLI + Skill)
+
+For agents with a shell — Claude Code, Codex and the like — install the
+bundled skill once:
+
+```sh
+npx -y @mr-akami/gmermaid install-skill            # ~/.claude/skills/gmermaid
+npx -y @mr-akami/gmermaid install-skill --project  # ./.claude/skills/gmermaid
+```
+
+The skill teaches the agent this loop, built on a **shared file**:
+
+```sh
+gmermaid validate docs/design/auth.mmd   # agent wrote a diagram; check it
+gmermaid open docs/design/auth.mmd       # show it to the user; returns at once
+gmermaid wait docs/design/auth.mmd       # blocks until the user hands it back
+gmermaid close docs/design/auth.mmd      # design settled
+```
+
+While the editor is open the file is the master copy both ways: the agent edits
+the file and the editor follows; the user edits on the canvas or in the code
+pane and every change is saved into the file. When the user presses
+**Agent に返す** (with an optional comment such as "add an error branch after
+Verify"), `wait` prints the comment and the diagram, and the agent fixes or
+reconsiders the design, updates the file, and waits again — as many rounds as it
+takes. `wait` exits 3 when the user has not handed back yet (run it again) and
+4 when no session is open.
+
+## Use it from an LLM (MCP)
 
 ```sh
 codex mcp add gmermaid -- npx -y @mr-akami/gmermaid mcp
@@ -47,16 +75,22 @@ another local MCP client for the `npx` distribution.
 | ------------------- | ----------------------------------- |
 | `gmermaid`          | Open the local editor in a browser  |
 | `gmermaid editor`   | Same as above, stated explicitly    |
-| `gmermaid mcp`      | Run the MCP STDIO server            |
 | `gmermaid validate <file\|->…` | Check `.mmd` files or the mermaid blocks of a `.md`; exit 1 on errors |
+| `gmermaid open <file> [--title T] [--no-browser]` | Share a file with the user in the editor; returns at once |
+| `gmermaid wait <file> [--timeout SEC] [--json]` | Wait for the user to hand the file back |
+| `gmermaid close <file>` / `gmermaid status` | Stop sharing a file / list shared files |
+| `gmermaid install-skill [--project \| --dir PATH]` | Install the agent skill |
+| `gmermaid mcp`      | Run the MCP STDIO server            |
 | `gmermaid --help`   | Show usage                          |
 | `gmermaid --version`| Show the version                    |
 
 ## Requirements and scope
 
-Requires Node.js 20 or later. Both modes bind only to `127.0.0.1` on a random
-port. Diagram contents and review sessions stay in memory and expire after 30
-minutes.
+Requires Node.js 20 or later. Every mode binds only to `127.0.0.1` on a random
+port. MCP review sessions stay in memory and expire after 30 minutes. A file
+shared with `gmermaid open` is served by a background process, guarded by a
+per-session token kept under `$XDG_STATE_HOME/gmermaid` (owner-only); it stops
+on `gmermaid close`, or after two hours with no editor open and no `wait`.
 
 ## License
 

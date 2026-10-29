@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { packageVersion } from "./metadata";
 import { runClose, runOpen, runServe, runStatus, runWait } from "./fileCommands";
+import { installSkill, type SkillTarget } from "./installSkill";
 import { createGMermaidServer } from "./server";
 import { StandaloneEditorServer } from "./standalone";
 import { extractBlocks, formatReports, hasErrors, validateBlock } from "./validate";
@@ -32,6 +33,10 @@ Share a diagram file with the user (for agents):
                                diagram. Exit 3: not yet, run again
   gmermaid close <file>        Stop sharing the file
   gmermaid status              List shared files
+
+  gmermaid install-skill [--project | --dir PATH]
+                               Install the agent skill (default
+                               ~/.claude/skills; --project: ./.claude/skills)
 
   gmermaid mcp                 Run the MCP STDIO server
   gmermaid --help              Show this help
@@ -143,6 +148,19 @@ try {
   } else if (command === "status") {
     noArgs(command, rest);
     process.exitCode = await runStatus();
+  } else if (command === "install-skill") {
+    const { values, positionals } = parseArgs({
+      args: rest,
+      allowPositionals: true,
+      options: { project: { type: "boolean" }, dir: { type: "string" } },
+    });
+    if (positionals.length > 0 || (values.project === true && values.dir !== undefined)) {
+      throw new UsageError("install-skill: give --project or --dir PATH, not both");
+    }
+    const target: SkillTarget =
+      values.dir !== undefined ? { kind: "dir", path: values.dir } : values.project === true ? { kind: "project" } : { kind: "user" };
+    const { path, status } = installSkill(join(DIST_DIR, "..", "skill", "gmermaid", "SKILL.md"), target);
+    console.log(`${status === "unchanged" ? "Already up to date" : status === "updated" ? "Updated" : "Installed"}: ${path}`);
   } else if (command === "serve") {
     // internal: the detached process behind `open`
     const { values, positionals } = parseArgs({
