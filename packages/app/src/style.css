@@ -500,6 +500,19 @@ kbd {
 .review-header strong { font-size: 14px; }
 .review-actions { display: flex; align-items: center; gap: 10px; }
 .review-error { color: var(--danger); font-size: 12px; }
+/* a shared file: which file, and whether it matches what is on screen */
+.session-id { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.session-file {
+  font: 12px var(--mono);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-status { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.session-status.attention { color: var(--accent-ink); font-weight: 600; }
+.handback-comment { width: min(320px, 30vw); }
+.file-session > .code-banner { border-bottom: 1px solid var(--warn-line); }
 .review-confirmed { color: #176b35; font-size: 12px; font-weight: 600; }
 
 /* ── files panel ────────────────────────────────────────────────────── */

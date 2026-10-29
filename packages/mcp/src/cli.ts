@@ -2,8 +2,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
+import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { packageVersion } from "./metadata";
+import { runClose, runOpen, runServe, runStatus, runWait } from "./fileCommands";
 import { createGMermaidServer } from "./server";
 import { StandaloneEditorServer } from "./standalone";
 import { extractBlocks, formatReports, hasErrors, validateBlock } from "./validate";
@@ -18,6 +20,19 @@ Usage:
   gmermaid editor              Open the local Mermaid editor
   gmermaid validate <file|->…  Check Mermaid files (.mmd, or the mermaid
                                blocks of a .md); exit 1 on any error
+
+Share a diagram file with the user (for agents):
+  gmermaid open <file> [--title T] [--no-browser]
+                               Show the file in the editor and return at once.
+                               The file is shared both ways: edits to it show
+                               in the editor, the user's edits are saved to it
+  gmermaid wait <file> [--timeout SEC] [--json]
+                               Wait until the user hands the diagram back
+                               (default 540s); prints their comment and the
+                               diagram. Exit 3: not yet, run again
+  gmermaid close <file>        Stop sharing the file
+  gmermaid status              List shared files
+
   gmermaid mcp                 Run the MCP STDIO server
   gmermaid --help              Show this help
   gmermaid --version           Show the version
@@ -101,6 +116,43 @@ try {
     await runMcp();
   } else if (command === "validate") {
     process.exitCode = await runValidate(rest);
+  } else if (command === "open") {
+    const { values, positionals } = parseArgs({
+      args: rest,
+      allowPositionals: true,
+      options: { title: { type: "string" }, "no-browser": { type: "boolean" } },
+    });
+    const [file, ...extra] = positionals;
+    if (file === undefined || extra.length > 0) throw new UsageError("open: give exactly one file");
+    process.exitCode = await runOpen(file, { title: values.title, browser: values["no-browser"] !== true, cliPath: fileURLToPath(import.meta.url) });
+  } else if (command === "wait") {
+    const { values, positionals } = parseArgs({
+      args: rest,
+      allowPositionals: true,
+      options: { timeout: { type: "string" }, json: { type: "boolean" } },
+    });
+    const [file, ...extra] = positionals;
+    if (file === undefined || extra.length > 0) throw new UsageError("wait: give exactly one file");
+    const timeoutSec = values.timeout === undefined ? 540 : Number(values.timeout);
+    if (!Number.isFinite(timeoutSec) || timeoutSec < 0) throw new UsageError("wait: --timeout takes seconds");
+    process.exitCode = await runWait(file, { timeoutSec, json: values.json === true });
+  } else if (command === "close") {
+    const [file, ...extra] = rest;
+    if (file === undefined || extra.length > 0) throw new UsageError("close: give exactly one file");
+    process.exitCode = await runClose(file);
+  } else if (command === "status") {
+    noArgs(command, rest);
+    process.exitCode = await runStatus();
+  } else if (command === "serve") {
+    // internal: the detached process behind `open`
+    const { values, positionals } = parseArgs({
+      args: rest,
+      allowPositionals: true,
+      options: { title: { type: "string" }, display: { type: "string" } },
+    });
+    const file = positionals[0];
+    if (file === undefined) throw new UsageError("serve: give a file");
+    await runServe(file, values.display ?? file, values.title, readFileSync(join(DIST_DIR, "review.html"), "utf8"));
   } else if (command === undefined || command === "editor") {
     noArgs(command ?? "editor", rest);
     await runEditor();
