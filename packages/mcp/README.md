@@ -48,6 +48,7 @@ another local MCP client for the `npx` distribution.
 | `gmermaid`          | Open the local editor in a browser  |
 | `gmermaid editor`   | Same as above, stated explicitly    |
 | `gmermaid mcp`      | Run the MCP STDIO server            |
+| `gmermaid validate <file\|->…` | Check `.mmd` files or the mermaid blocks of a `.md`; exit 1 on errors |
 | `gmermaid --help`   | Show usage                          |
 | `gmermaid --version`| Show the version                    |
 
