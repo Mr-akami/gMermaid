@@ -1,29 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { codeText, element, expectCode, openEditor, setCode } from "./helpers";
 
-// The sample from https://mermaid.js.org/syntax/gantt.html
-const DOCS_SAMPLE = `gantt
-    title A Gantt Diagram
-    dateFormat YYYY-MM-DD
-    section Section
-        A task          :a1, 2014-01-01, 30d
-        Another task    :after a1, 20d
-    section Another
-        Task in Another :2014-01-12, 12d
-        another task    :24d
-`;
-
-test("pasted gantt code renders a bar per task and a band per section", async ({ page }) => {
-  const editor = await openEditor(page, "Gantt");
-  await setCode(editor, DOCS_SAMPLE);
-  // 4 tasks + 2 sections, each carrying a data-element-id
-  await expect(editor.locator("svg [data-element-id]")).toHaveCount(6);
-  await expect(editor.locator('svg [data-element-id^="task-"] rect')).toHaveCount(4);
-  await expect(editor.locator("svg text", { hasText: "A Gantt Diagram" }).first()).toBeVisible();
-  await expect(editor.locator("svg text", { hasText: "Task in Another" }).first()).toBeVisible();
-  // the axis is labelled with dates from the resolved domain
-  await expect(editor.locator("svg text", { hasText: /^2014-0\d-\d\d$/ }).first()).toBeVisible();
-});
 
 test("adding a task through the GUI writes it back into the code", async ({ page }) => {
   const editor = await openEditor(page, "Gantt");

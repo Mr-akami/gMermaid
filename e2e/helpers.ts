@@ -153,3 +153,12 @@ export async function clipped(editor: Locator): Promise<string[]> {
 export function mermaidVerdict(editor: Locator, verdict: "ok" | "rejected"): Locator {
   return editor.locator(`.code-pane:visible[data-mermaid="${verdict}"]`);
 }
+
+/** Switch to a diagram tab WITHOUT reloading: for a test that goes on to a
+ * second case in the same page. The case is expected to set its own code. */
+export async function switchEditor(page: Page, kind: Kind): Promise<Locator> {
+  await page.getByRole("button", { name: kind, exact: true }).click();
+  const editor = page.locator(".editor:not(.hidden)");
+  await expect(editor).toBeVisible();
+  return editor;
+}

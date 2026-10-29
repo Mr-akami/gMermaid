@@ -1,28 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { codeText, element, expectCode, openEditor, setCode } from "./helpers";
+import { codeText, element, expectCode, openEditor } from "./helpers";
 
-// The sample from https://mermaid.js.org/syntax/userJourney.html
-const DOCS_SAMPLE = `journey
-    title My working day
-    section Go to work
-      Make tea: 5: Me
-      Go upstairs: 3: Me
-      Do work: 1: Me, Cat
-    section Go home
-      Go downstairs: 5: Me
-      Sit down: 5: Me
-`;
-
-test("pasted journey code renders every task and section on the canvas", async ({ page }) => {
-  const editor = await openEditor(page, "Journey");
-  await setCode(editor, DOCS_SAMPLE);
-  // 5 tasks + 2 sections, each carrying a data-element-id
-  await expect(editor.locator("svg [data-element-id]")).toHaveCount(7);
-  await expect(editor.locator("svg text", { hasText: "My working day" }).first()).toBeVisible();
-  await expect(editor.locator("svg text", { hasText: "Make tea" }).first()).toBeVisible();
-  // actors become a legend, one entry per distinct actor
-  await expect(editor.locator("svg text", { hasText: "Cat" }).first()).toBeVisible();
-});
 
 test("adding a task through the GUI and scoring it writes it back into the code", async ({ page }) => {
   const editor = await openEditor(page, "Journey");

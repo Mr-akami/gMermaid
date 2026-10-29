@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clickPathMiddle, element, expectCode, openEditor, setCode } from "./helpers";
+import { clickPathMiddle, element, expectCode, openEditor, setCode, switchEditor } from "./helpers";
 
 // Concurrency regions, a per-block direction, a multi-line note and a
 // self-transition — the four things the docs show that the editor used to drop.
@@ -150,14 +150,15 @@ test("a plain state becomes a composite, and each container takes its own [*]", 
     "title",
     /already has a start/,
   );
-});
 
-test("+ Child state is refused for a pseudo-state", async ({ page }) => {
-  const editor = await openEditor(page, "State");
-  await setCode(editor, "stateDiagram-v2\n  [*] --> A\n");
-  await expectCode(editor).toContain("--> A");
-  await element(editor, "state_start").click();
-  await expect(editor.getByRole("button", { name: "+ Child state" })).toBeDisabled();
+  // one page load for both: the second case starts from fresh code
+  await test.step("+ Child state is refused for a pseudo-state", async () => {
+    const editor = await switchEditor(page, "State");
+    await setCode(editor, "stateDiagram-v2\n  [*] --> A\n");
+    await expectCode(editor).toContain("--> A");
+    await element(editor, "state_start").click();
+    await expect(editor.getByRole("button", { name: "+ Child state" })).toBeDisabled();
+  });
 });
 
 // dagre never sees a self-transition, so its label used to be dropped at a

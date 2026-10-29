@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mermaidVerdict, openEditor, setCode } from "./helpers";
+import { openEditor, setCode } from "./helpers";
 
 // CONTEXT.md's Validation rule: the code pane is judged by the REAL mermaid
 // parser, not only by our hand-rolled one.
