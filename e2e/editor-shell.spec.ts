@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clipped, element, expectCode, expectInsideCanvas, openEditor, openStoredEditor, panAway, setCode } from "./helpers";
+import { clipped, element, expectCode, expectInsideCanvas, openEditor, openStoredEditor, panAway, setCode, switchEditor } from "./helpers";
 
 // The behaviour every editor owes the user, checked where it can be driven
 // for real: the keys that act on the selection, and the camera.
@@ -17,16 +17,17 @@ test("Delete removes the selected node, Escape drops the selection", async ({ pa
   await page.keyboard.press("Delete");
   await expectCode(editor).not.toContain('B["End"]');
   await expect(element(editor, "B")).toHaveCount(0);
-});
 
-test("Backspace removes the selected class", async ({ page }) => {
-  const editor = await openEditor(page, "Class");
-  await setCode(editor, "classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog\n");
+  // one page load for both: the second case starts from fresh code
+  await test.step("Backspace removes the selected class", async () => {
+    const editor = await switchEditor(page, "Class");
+    await setCode(editor, "classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog\n");
 
-  await element(editor, "Dog").click();
-  await page.keyboard.press("Backspace");
-  await expectCode(editor).not.toContain("Dog");
-  await expectCode(editor).toContain("Animal");
+    await element(editor, "Dog").click();
+    await page.keyboard.press("Backspace");
+    await expectCode(editor).not.toContain("Dog");
+    await expectCode(editor).toContain("Animal");
+  });
 });
 
 test("a Delete the editor refuses says why, as the button would", async ({ page }) => {

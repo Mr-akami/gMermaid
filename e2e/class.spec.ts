@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clickPathMiddle, element, expectCode, openEditor, setCode } from "./helpers";
+import { clickPathMiddle, element, expectCode, openEditor, setCode, switchEditor } from "./helpers";
 
 // Reversed and two-way relation tokens, a display label, both member
 // classifiers, a note and a namespace — the depth the editor used to drop.
@@ -60,29 +60,30 @@ test("the property window swaps a relation's start head, changing the token", as
   // dropping the start head too leaves the bare link token
   await editor.getByLabel("Head (start)").selectOption("none");
   await expectCode(editor).toContain("Animal -- Dog");
-});
 
-// A relation's two classes were the one thing the property window never named
-// — and re-pointing it meant redrawing it, losing the heads, label and both
-// cardinalities.
-test("a relation names its ends by display label, re-points one and swaps in one action", async ({ page }) => {
-  const editor = await openEditor(page, "Class");
-  await setCode(editor, DEEP_SAMPLE);
+  // one page load for both: the second case starts from fresh code
+  await test.step("a relation names its ends by display label, re-points one and swaps in one action", async () => {
+    // A relation's two classes were the one thing the property window never named
+    // — and re-pointing it meant redrawing it, losing the heads, label and both
+    // cardinalities.
+    const editor = await switchEditor(page, "Class");
+    await setCode(editor, DEEP_SAMPLE);
 
-  await clickPathMiddle(page, editor, "relation-1");
-  await expect(editor.getByRole("heading", { name: "Relation" })).toBeVisible();
-  // `class Dog["A dog!"]` is drawn as "A dog!", so that is what the end is called
-  await expect(editor.getByLabel("From", { exact: true })).toHaveValue("Animal");
-  await expect(editor.getByLabel("To", { exact: true }).locator("option:checked")).toHaveText("A dog!");
+    await clickPathMiddle(page, editor, "relation-1");
+    await expect(editor.getByRole("heading", { name: "Relation" })).toBeVisible();
+    // `class Dog["A dog!"]` is drawn as "A dog!", so that is what the end is called
+    await expect(editor.getByLabel("From", { exact: true })).toHaveValue("Animal");
+    await expect(editor.getByLabel("To", { exact: true }).locator("option:checked")).toHaveText("A dog!");
 
-  // the inheritance head rides along instead of being redrawn
-  await editor.getByLabel("To", { exact: true }).selectOption({ label: "Cat" });
-  await expectCode(editor).toContain("Animal <|-- Cat");
-  await expectCode(editor).not.toContain("Animal <|-- Dog");
+    // the inheritance head rides along instead of being redrawn
+    await editor.getByLabel("To", { exact: true }).selectOption({ label: "Cat" });
+    await expectCode(editor).toContain("Animal <|-- Cat");
+    await expectCode(editor).not.toContain("Animal <|-- Dog");
 
-  // and swapping reverses the relation, head and all
-  await editor.getByRole("button", { name: "⇄ Swap ends" }).click();
-  await expectCode(editor).toContain("Cat <|-- Animal");
+    // and swapping reverses the relation, head and all
+    await editor.getByRole("button", { name: "⇄ Swap ends" }).click();
+    await expectCode(editor).toContain("Cat <|-- Animal");
+  });
 });
 
 test("+ Note attaches a note to the selected class", async ({ page }) => {
@@ -101,18 +102,20 @@ test("+ Note attaches a note to the selected class", async ({ page }) => {
   await text.fill("barks a lot");
   await text.blur();
   await expectCode(editor).toContain('note for Animal "barks a lot"');
+
+  // one page load for both: the second case starts from fresh code
+  await test.step("+ Namespace wraps the selected class and the class window can move it out", async () => {
+    const editor = await switchEditor(page, "Class");
+    await setCode(editor, "classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog\n");
+    await element(editor, "Dog").locator("rect").first().click();
+    await editor.getByRole("button", { name: "+ Namespace" }).click();
+    await expectCode(editor).toMatch(/namespace Namespace1 \{[\s\S]*class Dog[\s\S]*\}/);
+
+    await element(editor, "Dog").locator("rect").first().click();
+    await expect(editor.getByLabel("Namespace")).not.toHaveValue("");
+    await editor.getByLabel("Namespace").selectOption("");
+    // the last member leaving prunes the namespace: mermaid has no empty one
+    await expectCode(editor).not.toContain("namespace");
+  });
 });
 
-test("+ Namespace wraps the selected class and the class window can move it out", async ({ page }) => {
-  const editor = await openEditor(page, "Class");
-  await setCode(editor, "classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog\n");
-  await element(editor, "Dog").locator("rect").first().click();
-  await editor.getByRole("button", { name: "+ Namespace" }).click();
-  await expectCode(editor).toMatch(/namespace Namespace1 \{[\s\S]*class Dog[\s\S]*\}/);
-
-  await element(editor, "Dog").locator("rect").first().click();
-  await expect(editor.getByLabel("Namespace")).not.toHaveValue("");
-  await editor.getByLabel("Namespace").selectOption("");
-  // the last member leaving prunes the namespace: mermaid has no empty one
-  await expectCode(editor).not.toContain("namespace");
-});

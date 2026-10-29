@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { codeTab, codeText, element, expectCode, openEditor, setCode } from "./helpers";
+import { codeTab, codeText, element, expectCode, openEditor, setCode, switchEditor } from "./helpers";
 
 // The State editor holds ONE diagram and shows it as two texts. Whichever one
 // you type in, the canvas and the other text follow — and a GUI action moves
@@ -42,6 +42,19 @@ test("typing an XState machine drives the canvas and the mermaid text", async ({
   await expectCode(editor).toContain("loading --> idle : after 2000ms");
   await expectCode(editor).toContain("loading --> loading : REJECT [canRetry]");
   await expectCode(editor).toContain("loading --> [*] : RESOLVE");
+
+  // one page load for both: the second case starts from fresh code
+  await test.step("a machine the reader cannot accept says why, and leaves the diagram alone", async () => {
+    const editor = await switchEditor(page, "State");
+    await codeTab(editor, "XState");
+    await setCode(editor, MACHINE);
+    await expect(element(editor, "idle")).toBeVisible();
+
+    await setCode(editor, `createMachine({ initial: "a", states: { a: { on: { GO: { cond: "ok", target: "a" } } } } })`);
+    await expect(editor.locator(".code-errors")).toContainText("XState v4");
+    // the diagram is untouched while the draft is broken
+    await expect(element(editor, "idle")).toBeVisible();
+  });
 });
 
 test("editing the mermaid text moves the XState text, keeping what mermaid cannot spell", async ({ page }) => {
@@ -71,18 +84,6 @@ test("a toolbar action moves both texts at once", async ({ page }) => {
   await expectCode(editor).toContain(`states: {`);
   await codeTab(editor, "Mermaid");
   await expectCode(editor).toMatch(/state failed \{/);
-});
-
-test("a machine the reader cannot accept says why, and leaves the diagram alone", async ({ page }) => {
-  const editor = await openEditor(page, "State");
-  await codeTab(editor, "XState");
-  await setCode(editor, MACHINE);
-  await expect(element(editor, "idle")).toBeVisible();
-
-  await setCode(editor, `createMachine({ initial: "a", states: { a: { on: { GO: { cond: "ok", target: "a" } } } } })`);
-  await expect(editor.locator(".code-errors")).toContainText("XState v4");
-  // the diagram is untouched while the draft is broken
-  await expect(element(editor, "idle")).toBeVisible();
 });
 
 test("the XState tab says what the machine cannot hold", async ({ page }) => {

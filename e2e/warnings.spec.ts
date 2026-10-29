@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { element, expectCode, openEditor, setCode } from "./helpers";
+import { element, expectCode, openEditor, setCode, switchEditor } from "./helpers";
 
 // Styling has no IR (ADR 0001), so it is dropped on import — but silently
 // dropping it is how a user loses their `classDef` without ever being told.
@@ -21,13 +21,15 @@ test("a dropped styling statement is reported and the diagram still renders", as
   await expect(element(editor, "b")).toBeVisible();
   await expectCode(editor).toContain("a[One] --> b[Two]");
   await expectCode(editor).not.toContain("classDef");
+
+  // one page load for both: the second case starts from fresh code
+  await test.step("editing again clears the warning", async () => {
+    const editor = await switchEditor(page, "Flowchart");
+    await setCode(editor, "flowchart TB\n  a[One] --> b[Two]\n  classDef hot fill:#f00\n");
+    await expect(editor.locator(".code-warnings")).toBeVisible();
+
+    await setCode(editor, "flowchart TB\n  a[One] --> b[Two]\n");
+    await expect(editor.locator(".code-warnings")).toHaveCount(0);
+  });
 });
 
-test("editing again clears the warning", async ({ page }) => {
-  const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, "flowchart TB\n  a[One] --> b[Two]\n  classDef hot fill:#f00\n");
-  await expect(editor.locator(".code-warnings")).toBeVisible();
-
-  await setCode(editor, "flowchart TB\n  a[One] --> b[Two]\n");
-  await expect(editor.locator(".code-warnings")).toHaveCount(0);
-});

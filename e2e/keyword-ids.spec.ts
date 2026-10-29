@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { codeText, element, expectCode, openEditor, setCode } from "./helpers";
+import { codeText, element, expectCode, openEditor } from "./helpers";
 
 // The bug this guards: every id the GUI mints lands in the mermaid text, and
 // `subgraph-<hex>` made mermaid's lexer stop at the keyword. mermaid.js is

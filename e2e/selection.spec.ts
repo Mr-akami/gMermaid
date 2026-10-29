@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { codeText, element, expectCode, openEditor, setCode } from "./helpers";
+import { codeText, element, expectCode, openEditor, setCode, switchEditor } from "./helpers";
 
 // Range selection, the context menu and the clipboard, checked where they
 // can be driven for real: a rubber band is a pointer gesture, a long press
@@ -103,17 +103,18 @@ test("Ctrl+C then Ctrl+V duplicates the selection without colliding ids", async 
   await expect(editor.getByRole("heading", { name: "Node" })).toBeVisible();
   await page.keyboard.press("Delete");
   await countInCode(editor, '"Start"').toBe(1);
-});
 
-test("what is copied is mermaid text, so it pastes into the code pane too", async ({ page }) => {
-  const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, TWO_NODES);
+  // one page load for both: the second case starts from fresh code
+  await test.step("what is copied is mermaid text, so it pastes into the code pane too", async () => {
+    const editor = await switchEditor(page, "Flowchart");
+    await setCode(editor, TWO_NODES);
 
-  await element(editor, "A").click();
-  await page.keyboard.press("ControlOrMeta+c");
-  const copied = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copied).toContain("flowchart");
-  expect(copied).toContain('"Start"');
+    await element(editor, "A").click();
+    await page.keyboard.press("ControlOrMeta+c");
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain("flowchart");
+    expect(copied).toContain('"Start"');
+  });
 });
 
 test("Ctrl+X removes the selection and Ctrl+V puts it back", async ({ page }) => {
@@ -149,16 +150,17 @@ test("right click and a long press both open the menu; Escape closes it", async 
   // an outside click closes it as well
   await editor.locator(".canvas").click({ position: { x: 4, y: 4 } });
   await expect(editor.getByRole("menu")).toBeHidden();
-});
 
-test("the menu's Delete removes the element it was opened on", async ({ page }) => {
-  const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, TWO_NODES);
+  // one page load for both: the second case starts from fresh code
+  await test.step("the menu's Delete removes the element it was opened on", async () => {
+    const editor = await switchEditor(page, "Flowchart");
+    await setCode(editor, TWO_NODES);
 
-  await element(editor, "B").click({ button: "right" });
-  await editor.getByRole("menuitem", { name: "削除" }).click();
-  await expectCode(editor).not.toContain('"End"');
-  await expect(element(editor, "B")).toHaveCount(0);
+    await element(editor, "B").click({ button: "right" });
+    await editor.getByRole("menuitem", { name: "削除" }).click();
+    await expectCode(editor).not.toContain('"End"');
+    await expect(element(editor, "B")).toHaveCount(0);
+  });
 });
 
 test("the menu offers Move only where the diagram kind has one", async ({ page }) => {
@@ -195,16 +197,17 @@ test("text from another diagram kind is refused, with the reason", async ({ page
   await page.keyboard.press("ControlOrMeta+v");
   await expect(editor.getByText("cannot paste a sequence diagram", { exact: false })).toBeVisible();
   await expect(editor.locator("svg [data-element-id]")).toHaveCount(3);
-});
 
-test("text that is no diagram at all is refused too", async ({ page }) => {
-  const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, TWO_NODES);
-  await setClipboard(page, "just some notes I had in my clipboard");
+  // one page load for both: the second case starts from fresh code
+  await test.step("text that is no diagram at all is refused too", async () => {
+    const editor = await switchEditor(page, "Flowchart");
+    await setCode(editor, TWO_NODES);
+    await setClipboard(page, "just some notes I had in my clipboard");
 
-  await editor.locator(".canvas").click({ position: { x: 4, y: 4 } });
-  await page.keyboard.press("ControlOrMeta+v");
-  await expect(editor.getByText("does not hold a mermaid diagram", { exact: false })).toBeVisible();
+    await editor.locator(".canvas").click({ position: { x: 4, y: 4 } });
+    await page.keyboard.press("ControlOrMeta+v");
+    await expect(editor.getByText("does not hold a mermaid diagram", { exact: false })).toBeVisible();
+  });
 });
 
 test("copy and paste inside a property field stay the user's own", async ({ page }) => {
@@ -221,20 +224,22 @@ test("copy and paste inside a property field stay the user's own", async ({ page
   // the field took the text; the canvas gained nothing
   await expectCode(editor).toContain('"Renamed"');
   await expect(editor.locator("svg [data-element-id]")).toHaveCount(3);
+
+  // one page load for both: the second case starts from fresh code
+  await test.step("copy and paste inside the code pane stay the user's own", async () => {
+    const editor = await switchEditor(page, "Flowchart");
+    await setCode(editor, TWO_NODES);
+    await setClipboard(page, '  C["Third"]\n');
+
+    const code = editor.locator(".cm-content");
+    await code.click();
+    await page.keyboard.press("ControlOrMeta+v");
+    // the pane took it as TEXT — one new node, written by the user's own
+    // paste. Had the shell taken the key as well it would have refused the
+    // fragment out loud, and a second paste would have doubled the diagram.
+    await expect(editor.locator("svg [data-element-id]")).toHaveCount(4);
+    await countInCode(editor, '"Third"').toBe(1);
+    await expect(editor.getByText("読めない", { exact: false })).toHaveCount(0);
+  });
 });
 
-test("copy and paste inside the code pane stay the user's own", async ({ page }) => {
-  const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, TWO_NODES);
-  await setClipboard(page, '  C["Third"]\n');
-
-  const code = editor.locator(".cm-content");
-  await code.click();
-  await page.keyboard.press("ControlOrMeta+v");
-  // the pane took it as TEXT — one new node, written by the user's own
-  // paste. Had the shell taken the key as well it would have refused the
-  // fragment out loud, and a second paste would have doubled the diagram.
-  await expect(editor.locator("svg [data-element-id]")).toHaveCount(4);
-  await countInCode(editor, '"Third"').toBe(1);
-  await expect(editor.getByText("読めない", { exact: false })).toHaveCount(0);
-});

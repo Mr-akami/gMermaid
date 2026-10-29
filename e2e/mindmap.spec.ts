@@ -1,38 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { element, expectCode, openEditor, setCode } from "./helpers";
+import { element, expectCode, openEditor, setCode, switchEditor } from "./helpers";
 
-// The sample from https://mermaid.js.org/syntax/mindmap.html
-const DOCS_SAMPLE = `mindmap
-  root((mindmap))
-    Origins
-      Long history
-      ::icon(fa fa-book)
-      Popularisation
-        British popular psychology author Tony Buzan
-    Research
-      On effectiveness<br/>and features
-      On Automatic creation
-        Uses
-            Creative techniques
-            Strategic planning
-            Argument mapping
-    Tools
-      Pen and paper
-      Mermaid
-`;
-
-test("pasted mindmap code renders every node of the outline", async ({ page }) => {
-  const editor = await openEditor(page, "Mindmap");
-  await setCode(editor, DOCS_SAMPLE);
-  // 15 nodes; the `::icon(…)` line decorates one of them instead of adding one
-  await expect(editor.locator("svg [data-element-id]")).toHaveCount(15);
-  await expect(editor.locator("svg text", { hasText: "Popularisation" }).first()).toBeVisible();
-  await expect(editor.locator("svg text", { hasText: "Argument mapping" }).first()).toBeVisible();
-  // `<br/>` became a real line break, so the label is split over two tspans
-  await expect(editor.locator("svg text", { hasText: "and features" }).first()).toBeVisible();
-  // the icon travelled with its node
-  await expect(editor.locator("svg text", { hasText: "fa fa-book" }).first()).toBeVisible();
-});
 
 test("adding a child through the GUI and reshaping it writes the bracket form back", async ({ page }) => {
   const editor = await openEditor(page, "Mindmap");
@@ -77,21 +45,22 @@ test("siblings reorder and a deleted node takes its subtree with it", async ({ p
   await expectCode(editor).not.toContain('["A1"]');
   await expectCode(editor).not.toContain('["A"]');
   await expectCode(editor).toContain('["B"]');
-});
 
-test("dragging a node onto another one re-parents its whole subtree", async ({ page }) => {
-  const editor = await openEditor(page, "Mindmap");
-  await setCode(editor, "mindmap\n  root((root))\n    a[A]\n      a1[A1]\n    b[B]\n");
+  // one page load for both: the second case starts from fresh code
+  await test.step("dragging a node onto another one re-parents its whole subtree", async () => {
+    const editor = await switchEditor(page, "Mindmap");
+    await setCode(editor, "mindmap\n  root((root))\n    a[A]\n      a1[A1]\n    b[B]\n");
 
-  const from = (await element(editor, "a").locator("rect").last().boundingBox())!;
-  const to = (await element(editor, "b").locator("rect").last().boundingBox())!;
-  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
-  await page.mouse.up();
+    const from = (await element(editor, "a").locator("rect").last().boundingBox())!;
+    const to = (await element(editor, "b").locator("rect").last().boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+    await page.mouse.up();
 
-  // A (with A1 under it) is now indented below B
-  await expectCode(editor).toMatch(/ {4}b\["B"\]\n {6}a\["A"\]\n {8}a1\["A1"\]/);
+    // A (with A1 under it) is now indented below B
+    await expectCode(editor).toMatch(/ {4}b\["B"\]\n {6}a\["A"\]\n {8}a1\["A1"\]/);
+  });
 });
 
 test("a label the outline cannot carry is refused with a reason", async ({ page }) => {

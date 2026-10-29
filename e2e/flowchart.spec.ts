@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clickPathMiddle, element, expectCode, openEditor, setCode } from "./helpers";
+import { clickPathMiddle, element, expectCode, openEditor, setCode, switchEditor } from "./helpers";
 
 // The three things the edge model, the shape registry and the id-less
 // subgraph form add on top of the old `-->`-only flowchart.
@@ -73,6 +73,48 @@ test("the property window edits an edge's heads, line style and length", async (
 
   await editor.getByLabel("Edge length").fill("3");
   await expectCode(editor).toContain("A o====o B");
+
+  // one page load for both: the second case starts from fresh code
+  await test.step("the head selects are coupled to what mermaid can spell", async () => {
+    const editor = await switchEditor(page, "Flowchart");
+    await setCode(editor, 'flowchart TB\n  A["Start"] --> B["End"]\n');
+
+    await element(editor, "edge-1").locator("path").first().click({ force: true });
+    await expect(editor.getByRole("heading", { name: "Edge" })).toBeVisible();
+
+    await editor.getByLabel("Edge end head").selectOption("cross");
+    await expectCode(editor).toContain("A --x B");
+
+    // mermaid has no token for a mismatched pair, so the end follows the start
+    await editor.getByLabel("Edge start head").selectOption("circle");
+    await expectCode(editor).toContain("A o--o B");
+    await expect(editor.getByLabel("Edge start head")).toHaveValue("circle");
+    await expect(editor.getByLabel("Edge end head")).toHaveValue("circle");
+
+    // an invisible link has no head slots at all
+    await editor.getByLabel("Edge line").selectOption("invisible");
+    await expectCode(editor).toContain("A ~~~ B");
+    await expect(editor.getByLabel("Edge start head")).toBeDisabled();
+    await expect(editor.getByLabel("Edge end head")).toBeDisabled();
+    await expect(editor.getByLabel("Edge start head")).toHaveValue("none");
+    await expect(editor.getByLabel("Edge end head")).toHaveValue("none");
+  });
+
+  // one page load for both: the second case starts from fresh code
+  await test.step("an invisible link visibly gives up its label", async () => {
+    const editor = await switchEditor(page, "Flowchart");
+    await setCode(editor, 'flowchart TB\n  A["Start"] -->|"go"| B["End"]\n');
+
+    await element(editor, "edge-1").locator("path").first().click({ force: true });
+    await expect(editor.getByLabel("Edge label")).toHaveValue("go");
+
+    // `~~~` has no label slot, so the field empties and locks rather than
+    // letting the label vanish only once the text is saved
+    await editor.getByLabel("Edge line").selectOption("invisible");
+    await expectCode(editor).toContain("A ~~~ B");
+    await expect(editor.getByLabel("Edge label")).toBeDisabled();
+    await expect(editor.getByLabel("Edge label")).toHaveValue("");
+  });
 });
 
 // An edge's ends were the one thing the property window never named, and a
@@ -122,42 +164,3 @@ test("a subgraph's direction is editable from the property window", async ({ pag
   await expectCode(editor).not.toContain("direction LR");
 });
 
-test("the head selects are coupled to what mermaid can spell", async ({ page }) => {
-  const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, 'flowchart TB\n  A["Start"] --> B["End"]\n');
-
-  await element(editor, "edge-1").locator("path").first().click({ force: true });
-  await expect(editor.getByRole("heading", { name: "Edge" })).toBeVisible();
-
-  await editor.getByLabel("Edge end head").selectOption("cross");
-  await expectCode(editor).toContain("A --x B");
-
-  // mermaid has no token for a mismatched pair, so the end follows the start
-  await editor.getByLabel("Edge start head").selectOption("circle");
-  await expectCode(editor).toContain("A o--o B");
-  await expect(editor.getByLabel("Edge start head")).toHaveValue("circle");
-  await expect(editor.getByLabel("Edge end head")).toHaveValue("circle");
-
-  // an invisible link has no head slots at all
-  await editor.getByLabel("Edge line").selectOption("invisible");
-  await expectCode(editor).toContain("A ~~~ B");
-  await expect(editor.getByLabel("Edge start head")).toBeDisabled();
-  await expect(editor.getByLabel("Edge end head")).toBeDisabled();
-  await expect(editor.getByLabel("Edge start head")).toHaveValue("none");
-  await expect(editor.getByLabel("Edge end head")).toHaveValue("none");
-});
-
-test("an invisible link visibly gives up its label", async ({ page }) => {
-  const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, 'flowchart TB\n  A["Start"] -->|"go"| B["End"]\n');
-
-  await element(editor, "edge-1").locator("path").first().click({ force: true });
-  await expect(editor.getByLabel("Edge label")).toHaveValue("go");
-
-  // `~~~` has no label slot, so the field empties and locks rather than
-  // letting the label vanish only once the text is saved
-  await editor.getByLabel("Edge line").selectOption("invisible");
-  await expectCode(editor).toContain("A ~~~ B");
-  await expect(editor.getByLabel("Edge label")).toBeDisabled();
-  await expect(editor.getByLabel("Edge label")).toHaveValue("");
-});

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { element, expectCode, openEditor, setCode } from "./helpers";
+import { element, expectCode, openEditor, setCode, switchEditor } from "./helpers";
 
 // Everything the sequence editor used to drop on import: activation (both
 // spellings), a participant box, a `rect` band, create/destroy and a typed
@@ -96,23 +96,24 @@ test("the property window puts a lifeline into a new box and wraps a message in 
   await editor.getByRole("button", { name: "rect", exact: true }).click();
   await expectCode(editor).toContain("rect rgb(220,235,255)");
   await expect(editor.locator("svg [data-rect-fill]")).toHaveCount(1);
-});
 
-test("autonumber start and step fields reach the code", async ({ page }) => {
-  const editor = await openEditor(page, "Sequence");
-  await setCode(editor, `sequenceDiagram\n  participant a\n  participant b\n  a->>b: call\n`);
+  // one page load for both: the second case starts from fresh code
+  await test.step("autonumber start and step fields reach the code", async () => {
+    const editor = await switchEditor(page, "Sequence");
+    await setCode(editor, `sequenceDiagram\n  participant a\n  participant b\n  a->>b: call\n`);
 
-  await editor.getByLabel("autonumber").check();
-  await expectCode(editor).toContain("autonumber");
-  const start = editor.getByLabel("autonumber start");
-  await start.fill("10");
-  await start.blur();
-  const step = editor.getByLabel("autonumber step");
-  await step.fill("5");
-  await step.blur();
-  await expectCode(editor).toContain("autonumber 10 5");
-  // numbering shows up on the rendered row
-  await expect(editor.locator("svg text", { hasText: "10: call" })).toHaveCount(1);
+    await editor.getByLabel("autonumber").check();
+    await expectCode(editor).toContain("autonumber");
+    const start = editor.getByLabel("autonumber start");
+    await start.fill("10");
+    await start.blur();
+    const step = editor.getByLabel("autonumber step");
+    await step.fill("5");
+    await step.blur();
+    await expectCode(editor).toContain("autonumber 10 5");
+    // numbering shows up on the rendered row
+    await expect(editor.locator("svg text", { hasText: "10: call" })).toHaveCount(1);
+  });
 });
 
 // A note is attached to a lifeline in the text, so the GUI has to let you

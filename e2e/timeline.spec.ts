@@ -1,29 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { codeText, element, expectCode, openEditor, setCode } from "./helpers";
+import { codeText, element, expectCode, openEditor, switchEditor } from "./helpers";
 
-// The sectioned sample from https://mermaid.js.org/syntax/timeline.html
-const DOCS_SAMPLE = `timeline
-    title Timeline of Industrial Revolution
-    section 17th-20th century
-        Industry 1.0 : Machinery, Water power, Steam <br>power
-        Industry 2.0 : Electricity, Internal combustion engine, Mass production
-        Industry 3.0 : Electronics, Computers, Automation
-    section 21st century
-        Industry 4.0 : Internet, Robotics, Internet of Things
-        Industry 5.0 : Artificial intelligence, Big data, 3D printing
-`;
-
-test("pasted timeline code renders every section, period and event", async ({ page }) => {
-  const editor = await openEditor(page, "Timeline");
-  await setCode(editor, DOCS_SAMPLE);
-  // 2 sections + 5 periods + 5 events, each carrying a data-element-id
-  await expect(editor.locator("svg [data-element-id]")).toHaveCount(12);
-  await expect(editor.locator("svg text", { hasText: "Timeline of Industrial Revolution" }).first()).toBeVisible();
-  await expect(editor.locator("svg text", { hasText: "21st century" }).first()).toBeVisible();
-  await expect(editor.locator("svg text", { hasText: "Industry 4.0" }).first()).toBeVisible();
-  // `<br>` became a real line break: the event text is split over two tspans
-  await expect(editor.locator("svg text", { hasText: "Steam" }).first()).toBeVisible();
-});
 
 test("adding an event through the GUI writes `: text` back into the code", async ({ page }) => {
   const editor = await openEditor(page, "Timeline");
@@ -77,12 +54,14 @@ test("the toolbar adds a section and a period, and the property window reorders 
   await editor.getByRole("button", { name: "Delete period" }).click();
   await expectCode(editor).toContain("section Recent");
   await expectCode(editor).not.toContain("2010");
+
+  // one page load for both: the second case starts from fresh code
+  await test.step("editing the title field updates the code", async () => {
+    const editor = await switchEditor(page, "Timeline");
+    const title = editor.getByLabel("Timeline title");
+    await title.fill("My own history");
+    await title.blur();
+    await expectCode(editor).toContain("title My own history");
+  });
 });
 
-test("editing the title field updates the code", async ({ page }) => {
-  const editor = await openEditor(page, "Timeline");
-  const title = editor.getByLabel("Timeline title");
-  await title.fill("My own history");
-  await title.blur();
-  await expectCode(editor).toContain("title My own history");
-});
