@@ -59,6 +59,12 @@ the browser's local storage.
 
 ## Use from an LLM
 
+Coding agents with a shell (Claude Code, Codex, …) can use the CLI instead of
+MCP: `npx -y @mr-akami/gmermaid install-skill` installs a skill that has the
+agent write a diagram to a file, `gmermaid open` it for you, and `gmermaid wait`
+for you to edit it and hand it back with a comment. See the
+[package README](packages/mcp/README.md#use-it-from-a-coding-agent-cli--skill).
+
 Install the local STDIO server in Codex, ChatGPT desktop, or another MCP client:
 
 ```sh
