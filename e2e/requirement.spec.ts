@@ -102,6 +102,8 @@ test("the toolbar and property windows update the code text", async ({ page }) =
   await props.getByLabel("Risk").selectOption("High");
   await props.getByLabel("Verify method").selectOption("Demonstration");
 
+  // wait for the last field to land; the pane trails a GUI edit for a moment
+  await expectCode(editor).toContain("verifymethod: demonstration");
   let code = await codeText(editor);
   expect(code).toContain("physicalRequirement new_req1 {");
   expect(code).toContain('id: "2.1"');
@@ -113,20 +115,21 @@ test("the toolbar and property windows update the code text", async ({ page }) =
 
   // renaming goes through the same property window
   await props.getByLabel("Name").fill("gui_req");
-  expect(await codeText(editor)).toContain("physicalRequirement gui_req {");
+  await expectCode(editor).toContain("physicalRequirement gui_req {");
 
   // elements get their own fields
   await editor.getByRole("button", { name: "+ Element" }).click();
   await expect(props.getByRole("heading", { name: "Element" })).toBeVisible();
   await props.getByLabel("Type").fill("word doc");
   await props.getByLabel("Doc ref").fill("docs/new");
+  await expectCode(editor).toContain('docref: "docs/new"');
   code = await codeText(editor);
   expect(code).toContain("element new_element1 {");
   expect(code).toContain('docref: "docs/new"');
 
   // …and the toolbar's Delete removes the selected one again
   await editor.getByRole("button", { name: "Delete", exact: true }).click();
-  expect(await codeText(editor)).not.toContain("new_element1");
+  await expectCode(editor).not.toContain("new_element1");
 });
 
 test("dragging between two nodes creates a relation the property window can retype", async ({ page }) => {
@@ -146,9 +149,9 @@ test("dragging between two nodes creates a relation the property window can rety
   await page.mouse.up();
 
   await expect(props.getByRole("heading", { name: "Relation" })).toBeVisible();
-  expect(await codeText(editor)).toContain("- satisfies -> ");
+  await expectCode(editor).toContain("- satisfies -> ");
   await props.getByLabel("Type").selectOption("derives");
-  expect(await codeText(editor)).toContain("- derives -> ");
+  await expectCode(editor).toContain("- derives -> ");
 });
 
 // A relation whose only other property is its type is indistinguishable from

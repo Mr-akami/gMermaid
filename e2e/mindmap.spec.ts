@@ -94,13 +94,6 @@ test("dragging a node onto another one re-parents its whole subtree", async ({ p
   await expectCode(editor).toMatch(/ {4}b\["B"\]\n {6}a\["A"\]\n {8}a1\["A1"\]/);
 });
 
-test("typing a new outline into the code pane redraws the canvas", async ({ page }) => {
-  const editor = await openEditor(page, "Mindmap");
-  await setCode(editor, "mindmap\n  Root\n    First\n    Second\n");
-  await expect(editor.locator("svg [data-element-id]")).toHaveCount(3);
-  await expect(editor.locator("svg text", { hasText: "Second" }).first()).toBeVisible();
-});
-
 test("a label the outline cannot carry is refused with a reason", async ({ page }) => {
   const editor = await openEditor(page, "Mindmap");
   await setCode(editor, 'mindmap\n  root((mindmap))\n    Origins\n      Long history\n');

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { codeText, element, openEditor, setCode } from "./helpers";
+import { codeText, element, expectCode, openEditor, setCode } from "./helpers";
 
 // The sample from https://mermaid.js.org/syntax/userJourney.html
 const DOCS_SAMPLE = `journey
@@ -43,8 +43,8 @@ test("adding a task through the GUI and scoring it writes it back into the code"
   await editor.getByLabel("Task actors").blur();
   await editor.getByLabel("Task score").selectOption("4");
 
+  await expectCode(editor).toContain("Share it: 4: User, Support");
   const code = await codeText(editor);
-  expect(code).toContain("Share it: 4: User, Support");
   // it landed in the section it was added to, after that section's own tasks
   expect(code.indexOf("Share it")).toBeGreaterThan(code.indexOf("Create a diagram"));
   // one more task box on the canvas than before
@@ -58,16 +58,15 @@ test("the toolbar adds a section and the property window renames and reorders it
   await expect(nameField).toHaveValue("Section 4");
   await nameField.fill("Evening");
   await nameField.blur();
-  expect(await codeText(editor)).toContain("section Evening");
+  await expectCode(editor).toContain("section Evening");
 
   // reorder: the new section moves ahead of "First use"
   await editor.getByRole("button", { name: "Move earlier" }).click();
-  const code = await codeText(editor);
-  expect(code.indexOf("section Evening")).toBeLessThan(code.indexOf("section First use"));
+  await expectCode(editor).toMatch(/section Evening[\s\S]*section First use/);
 
   await page.getByRole("button", { name: "Undo" }).click();
-  expect(await codeText(editor)).toMatch(/section First use[\s\S]*section Evening/);
+  await expectCode(editor).toMatch(/section First use[\s\S]*section Evening/);
 
   await editor.getByRole("button", { name: "Delete", exact: true }).click();
-  expect(await codeText(editor)).not.toContain("section Evening");
+  await expectCode(editor).not.toContain("section Evening");
 });

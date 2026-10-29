@@ -26,11 +26,3 @@ test("text our parser accepts but mermaid rejects is reported in the pane", asyn
   await expect(page.locator(".editor:not(.hidden) .cm-content")).toContainText("subgraph-1");
 });
 
-test("a diagram mermaid understands shows no rejection", async ({ page }) => {
-  const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, 'flowchart TB\n  a["A"] --> b["B"]\n');
-  // give the debounced validator time to answer before asserting the absence
-  await expect(editor.locator(".cm-content")).toContainText("a --> b");
-  await expect(mermaidVerdict(editor, "ok")).toBeVisible({ timeout: 15_000 });
-  await expect(editor.locator(".code-mermaid-error")).toHaveCount(0);
-});

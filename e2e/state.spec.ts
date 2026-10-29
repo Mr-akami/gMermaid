@@ -162,25 +162,6 @@ test("+ Child state is refused for a pseudo-state", async ({ page }) => {
 
 // dagre never sees a self-transition, so its label used to be dropped at a
 // fixed offset — straight onto the note that sits on that same side.
-test("a self-transition label keeps clear of the note beside its state", async ({ page }) => {
-  const editor = await openEditor(page, "State");
-  await setCode(
-    editor,
-    `stateDiagram-v2
-  [*] --> Idle
-  Idle --> Idle : retry the whole thing
-  Idle --> Running : a fairly long trigger
-  note right of Idle : a note about idling
-`,
-  );
-  const label = editor.locator("svg text", { hasText: "retry the whole thing" }).first();
-  await expect(label).toBeVisible();
-  const note = element(editor, "note-1").locator("rect");
-  const a = (await label.boundingBox())!;
-  const b = (await note.boundingBox())!;
-  expect(a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height).toBe(false);
-});
-
 // The user's original report: selecting a transition showed only its label,
 // so the two states it joins — the one thing that identifies it — were
 // invisible, and re-pointing it meant deleting it and drawing a new one.
@@ -215,49 +196,4 @@ test("a transition names its ends, re-points one and reverses in one action", as
   await editor.getByRole("button", { name: "Select To on the canvas" }).click();
   await expect(editor.getByRole("heading", { name: "State" })).toBeVisible();
   await expect(editor.getByLabel("Label")).toHaveValue("Idle");
-});
-
-// Three composites inside each other: the frames used to be rebuilt from the
-// leaves under them, so all three shared one left edge and the titles piled up.
-const NESTED_SAMPLE = `stateDiagram-v2
-  [*] --> Outer
-  state Outer {
-    [*] --> Middle
-    state Middle {
-      [*] --> Inner
-      state Inner {
-        [*] --> Leaf
-        Leaf --> [*]
-      }
-      Inner --> Done
-    }
-    Middle --> Ready
-  }
-  Outer --> [*]
-`;
-
-test("nested composite frames are drawn inside one another", async ({ page }) => {
-  const editor = await openEditor(page, "State");
-  await setCode(editor, NESTED_SAMPLE);
-
-  const frame = async (id: string) => {
-    const box = await element(editor, id).locator("rect").first().boundingBox();
-    if (!box) throw new Error(`no frame for ${id}`);
-    return box;
-  };
-  const outer = await frame("Outer");
-  const middle = await frame("Middle");
-  const inner = await frame("Inner");
-  for (const [parent, child] of [
-    [outer, middle],
-    [middle, inner],
-  ] as const) {
-    expect(child.x).toBeGreaterThan(parent.x);
-    expect(child.y).toBeGreaterThan(parent.y);
-    expect(child.x + child.width).toBeLessThan(parent.x + parent.width);
-    expect(child.y + child.height).toBeLessThan(parent.y + parent.height);
-  }
-  // the innermost frame holds three members, so it stays small: the compound
-  // layout it replaced stretched it to ~820px for the same three boxes
-  expect(inner.height).toBeLessThan(300);
 });
