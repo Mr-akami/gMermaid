@@ -28,8 +28,8 @@ Share a diagram file with the user (for agents):
                                The file is shared both ways: edits to it show
                                in the editor, the user's edits are saved to it
   gmermaid wait <file> [--timeout SEC] [--json]
-                               Wait until the user hands the diagram back
-                               (default 540s); prints their comment and the
+                               Wait until the user sends the diagram back
+                               (default 540s); prints their note and the
                                diagram. Exit 3: not yet, run again
   gmermaid close <file>        Stop sharing the file
   gmermaid status              List shared files

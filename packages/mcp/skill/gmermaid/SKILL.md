@@ -1,6 +1,6 @@
 ---
 name: gmermaid
-description: Show a design to the user as a Mermaid diagram they can edit in a GUI (gMermaid), and take their edits and comments back. Use when designing or explaining architecture, flows, sequences, states, classes, requirements or plans and a picture would help the user check it; when the user asks to "draw", "diagram", "visualize" or "show" a design; or when they want to edit a diagram themselves. Also validates Mermaid files.
+description: Show a design to the user as a Mermaid diagram they can edit in a GUI (gMermaid), and take their edits and notes back. Use when designing or explaining architecture, flows, sequences, states, classes, requirements or plans and a picture would help the user check it; when the user asks to "draw", "diagram", "visualize" or "show" a design; or when they want to edit a diagram themselves. Also validates Mermaid files.
 ---
 
 # gMermaid: design with the user through a shared diagram
@@ -8,8 +8,8 @@ description: Show a design to the user as a Mermaid diagram they can edit in a G
 gMermaid opens a Mermaid file in a browser editor (canvas + code side by side).
 The **file is the master copy, both ways**: when you edit the file, the editor
 updates; when the user edits in the editor, their change is saved into the
-file. When the user is done, they press **Agent に返す** (optionally with a
-comment), and `gmermaid wait` hands that to you.
+file. When the user is done, they press **Send to agent** (optionally with a
+note), and `gmermaid wait` hands that to you.
 
 Run it as `gmermaid` if installed, otherwise `npx -y @mr-akami/gmermaid`.
 
@@ -25,15 +25,15 @@ Run it as `gmermaid` if installed, otherwise `npx -y @mr-akami/gmermaid`.
    prefer to leave such statements out.
 3. **Show it**: `gmermaid open docs/design/<topic>.mmd --title "<what this is>"`.
    It returns at once. Tell the user in one or two lines what to look at and
-   that they can edit it and press **Agent に返す** when done.
-4. **Wait for the hand-back**: `gmermaid wait docs/design/<topic>.mmd`.
+   that they can edit it and press **Send to agent** when done.
+4. **Wait for the user to send it back**: `gmermaid wait docs/design/<topic>.mmd`.
    - In Claude Code, run it with `run_in_background: true` so the conversation
      stays free; you are notified when it prints.
-   - Exit 0: it printed the user's comment, whether they edited, and the
-     diagram as it now stands. Exit 3: not handed back yet (default timeout
+   - Exit 0: it printed the user's note, whether they edited, and the
+     diagram as it now stands. Exit 3: not sent back yet (default timeout
      540s) — run `wait` again. Exit 4: no session (closed); `open` again.
-5. **Act on it**: the hand-back is the user's review of the design. Read
-   their comment and compare the diagram with what you proposed — changed
+5. **Act on it**: what the user sends back is their review of the design. Read
+   their note and compare the diagram with what you proposed — changed
    nodes, edges and labels are decisions the user made. Fix or reconsider the
    design accordingly (code, plan, docs), then update the file to match; the
    editor shows your change immediately. Validate again, say briefly what you

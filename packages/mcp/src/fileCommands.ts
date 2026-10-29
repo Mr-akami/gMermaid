@@ -70,15 +70,15 @@ export async function runOpen(fileArg: string, opts: { title?: string | undefine
   console.log(`Showing ${name} in gMermaid: ${entry.url}`);
   if (!validation.ok) console.log(`Warning: the file does not open in the editor yet:\n${validation.message}`);
   console.log(`The file is shared. Edit it and the editor follows; the user's edits are saved into it.`);
-  console.log(`Run \`gmermaid wait ${name}\` to receive the diagram when the user hands it back.`);
+  console.log(`Run \`gmermaid wait ${name}\` to receive the diagram when the user sends it back.`);
   return 0;
 }
 
 export function formatHandoff(h: Handoff): string {
   const lines = [
-    `The user handed back ${h.file} (round ${h.round}).`,
+    `The user sent ${h.file} back (round ${h.round}).`,
     `Edited by the user: ${h.edited ? "yes" : "no"}`,
-    h.comment === "" ? "Comment: (none)" : `Comment:\n${h.comment.replace(/^/gm, "  ")}`,
+    h.comment === "" ? "Note: (none)" : `Note from the user:\n${h.comment.replace(/^/gm, "  ")}`,
     "Diagram as it now stands in the file:",
     "```mermaid",
     h.mermaid.trimEnd(),
@@ -109,11 +109,11 @@ export async function runWait(fileOrId: string, opts: { timeoutSec: number; json
       return 0;
     }
     if (res.status === 410) {
-      console.error("The gMermaid session was closed before the user handed the diagram back.");
+      console.error("The gMermaid session was closed before the user sent the diagram back.");
       return EXIT_NOT_RUNNING;
     }
     if (Date.now() >= deadline) {
-      console.error(`The user has not handed the diagram back yet; the editor is still open. Run \`gmermaid wait ${fileOrId}\` again.`);
+      console.error(`The user has not sent the diagram back yet; the editor is still open. Run \`gmermaid wait ${fileOrId}\` again.`);
       return EXIT_TIMEOUT;
     }
   }

@@ -4,7 +4,7 @@ import { DIAGRAMS, type DiagramKind } from "./diagrams";
 // The editor for a file an agent shared with `gmermaid open`. The file is the
 // master copy: what arrives here is the file as it stands (on open, and every
 // time the agent rewrites it), and every edit made here is saved back into
-// it. "Agent に返す" is the one explicit step — it tells the waiting agent the
+// it. "Send to agent" is the one explicit step — it tells the waiting agent the
 // person is done for now, with an optional comment on what to reconsider.
 
 export interface FileSnapshot {
@@ -124,16 +124,16 @@ export function FileSessionApp({ file, title, api }: FileSessionAppProps) {
 
   const def = doc === undefined ? undefined : DIAGRAMS.find((d) => d.kind === doc.kind);
   const status = lost
-    ? "セッションは終了しました"
+    ? "Session ended"
     : saveState === "error"
-        ? "保存できません"
+        ? "Couldn't save"
         : agentUpdated
-          ? "Agent がファイルを更新しました"
+          ? "Updated by the agent"
           : returned !== undefined
-            ? `Agent に返しました（${returned} 回目）`
+            ? `Sent to the agent (round ${returned})`
             : saveState === "saved"
-              ? "ファイルに保存しました"
-              : "編集はファイルに自動保存されます";
+              ? "Saved to file"
+              : "Edits save to the file automatically";
 
   return (
     <main className="review-app file-session">
@@ -152,24 +152,24 @@ export function FileSessionApp({ file, title, api }: FileSessionAppProps) {
             void handBack();
           }}
         >
-          {!valid && <span className="review-error">構文エラーを修正してください</span>}
+          {!valid && <span className="review-error">Fix the syntax errors first</span>}
           {saveError !== undefined && <span className="review-error">{saveError}</span>}
           <input
             className="handback-comment"
-            aria-label="Agent へのコメント"
-            placeholder="Agent へのコメント（任意）"
+            aria-label="Note for the agent"
+            placeholder="Note for the agent (optional)"
             value={comment}
             disabled={lost}
             onChange={(e) => setComment(e.target.value)}
           />
           <button type="submit" className="primary" disabled={lost || !valid || returning || doc === undefined}>
-            {returning ? "送信中…" : "Agent に返す"}
+            {returning ? "Sending…" : "Send to agent"}
           </button>
         </form>
       </header>
       {fileError !== undefined && (
         <div className="code-banner" role="alert">
-          ファイルを図として開けません。Agent の修正を待っています：{fileError}
+          The file isn't a diagram the editor can open; waiting for the agent to fix it: {fileError}
         </div>
       )}
       <section className="review-editor">
