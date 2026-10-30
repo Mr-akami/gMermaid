@@ -301,3 +301,48 @@ describe("layoutSequence multi-line text", () => {
     expect(JSON.parse(JSON.stringify(r2))).toEqual(r2);
   });
 });
+
+describe("layoutSequence overflow", () => {
+  const selfIn = (label: string, wrap: boolean): SequenceIR => {
+    const msg = { kind: "message", id: M("s1"), from: L("a"), to: L("a"), label, arrow: "solid" } as const;
+    return {
+      ...ir,
+      events: wrap
+        ? [{ kind: "fragment", id: "f1" as FragmentId, fragmentKind: "loop", branches: [{ id: "br1" as BranchId, condition: "", events: [msg] }] }]
+        : [msg],
+    };
+  };
+
+  it("a self-message label pushes the next spine clear of it", () => {
+    const r = layoutSequence(selfIn("a rather long self message label", false), fixedWidthMeasurer());
+    const [a, b] = r.lifelines;
+    const labelRight = a!.x + 44 + "a rather long self message label".length * 8;
+    expect(b!.x).toBeGreaterThan(labelRight);
+  });
+
+  it("a self-message inside a loop stays inside the frame", () => {
+    const r = layoutSequence(selfIn("a rather long self message label", true), fixedWidthMeasurer());
+    const f = r.fragments[0]!.rect;
+    expect(f.x + f.w).toBeGreaterThan(r.lifelines[0]!.x + 44 + "a rather long self message label".length * 8);
+  });
+
+  it("a self-message on the last column widens the diagram", () => {
+    const r = layoutSequence(
+      { ...ir, events: [{ kind: "message", id: M("s1"), from: L("c"), to: L("c"), label: "x".repeat(40), arrow: "solid" }] },
+      fixedWidthMeasurer(),
+    );
+    expect(r.size.w).toBeGreaterThan(r.lifelines[2]!.x + 44 + 40 * 8);
+  });
+
+  it("a multi-line lifeline name grows every head", () => {
+    const r = layoutSequence(
+      { ...ir, lifelines: ir.lifelines.map((l, i) => (i === 0 ? { ...l, name: "one\ntwo\nthree" } : l)) },
+      fixedWidthMeasurer(),
+    );
+    for (const l of r.lifelines) {
+      expect(l.headRect.h).toBeGreaterThanOrEqual(3 * 13 * 1.4);
+      expect(l.spineTop).toBe(l.headRect.y + l.headRect.h);
+    }
+    expect(r.messages.length === 0 || r.messages[0]!.y > r.lifelines[0]!.spineTop).toBe(true);
+  });
+});

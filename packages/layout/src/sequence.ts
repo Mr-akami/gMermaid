@@ -18,6 +18,7 @@ const FONT = { fontSize: 13, fontFamily: "sans-serif" } as const;
 const HEAD_H = 36;
 const HEAD_PAD_X = 14;
 const HEAD_MIN_W = 70;
+const HEAD_PAD_Y = 8;
 const TOP_MARGIN = 10;
 const SIDE_MARGIN = 20;
 const ROW_H = 38;
@@ -35,6 +36,11 @@ const FRAG_DIVIDER = 38;
 const FRAG_SIDE_PAD = 20; // frame padding around its involved lifelines
 const FRAG_NEST_PAD = 12; // extra margin a parent keeps around child frames
 const SELF_MSG_EXTRA = 14;
+// A self-message loops right of its spine and its label starts past the
+// loop (the renderer draws `h 36` and the label at +44): the column gap and
+// any enclosing frame must clear both.
+const SELF_LABEL_X = 44;
+const SELF_GAP_PAD = 12;
 // How far a message label may slide along its own arrow to clear an
 // activation bar, and how close to the arrow's ends it may get.
 const LABEL_SLIDE_STEP = 12;
@@ -76,6 +82,11 @@ function lifelinesOf(events: readonly SequenceEvent[]): Set<LifelineId> {
   return out;
 }
 
+/** The label as drawn: the renderer prefixes the autonumber. */
+function autoLabel(seq: number | undefined, label: string): string {
+  return seq !== undefined ? `${seq}: ${label}` : label;
+}
+
 export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceLayout {
   // Multi-line text (`<br/>` in the mermaid source) measures line by line:
   // the renderer draws one <tspan> per line, so height grows with the count.
@@ -93,18 +104,32 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
 
   // --- horizontal: lifeline columns -------------------------------------
   const headW = new Map<LifelineId, number>();
+  // one head height for the row: a multi-line name grows every head alike
+  let headH = HEAD_H;
   for (const l of ir.lifelines) {
-    const w = block(l.name).w + HEAD_PAD_X * 2;
-    headW.set(l.id, Math.max(HEAD_MIN_W, w));
+    const m = block(l.name);
+    headW.set(l.id, Math.max(HEAD_MIN_W, m.w + HEAD_PAD_X * 2));
+    headH = Math.max(headH, m.h + HEAD_PAD_Y * 2);
   }
+  // how far right of its spine a self-message reaches (label included)
+  const selfReach = (label: string): number => SELF_LABEL_X + (label === "" ? 0 : block(label).w);
 
   // required gap between adjacent columns: widest message label crossing it
   const index = new Map<LifelineId, number>(ir.lifelines.map((l, i) => [l.id, i]));
   const gaps: number[] = Array.from({ length: Math.max(0, ir.lifelines.length - 1) }, () => MIN_GAP);
+  let gapSeq = 0;
   eachMessage(ir.events, (m) => {
+    const seq = ir.autonumber !== undefined ? ir.autonumber.start + gapSeq++ * ir.autonumber.step : undefined;
     const a = index.get(m.from);
     const b = index.get(m.to);
-    if (a === undefined || b === undefined || a === b) return;
+    if (a === undefined || b === undefined) return;
+    if (a === b) {
+      if (a + 1 >= ir.lifelines.length) return; // the diagram width covers the last column
+      const need =
+        selfReach(autoLabel(seq, m.label)) + SELF_GAP_PAD - headW.get(m.from)! / 2 - headW.get(ir.lifelines[a + 1]!.id)! / 2;
+      gaps[a] = Math.max(gaps[a]!, need);
+      return;
+    }
     const [lo, hi] = a < b ? [a, b] : [b, a];
     const span = hi - lo;
     const need = (block(m.label).w + 24) / span;
@@ -138,7 +163,10 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
   const openBars = new Map<LifelineId, number[]>();
   const createdAt = new Map<LifelineId, number>();
   const destroyedAt = new Map<LifelineId, number>();
-  let y = headTop + HEAD_H + FIRST_ROW_GAP;
+  // right edge of each self-message, parallel to `messages`; frames and the
+  // diagram width must enclose it
+  const msgRight: number[] = [];
+  let y = headTop + headH + FIRST_ROW_GAP;
   let msgCount = 0; // autonumber walks messages in document order
 
   const pushBar = (id: LifelineId, at: number): void => {
@@ -178,6 +206,8 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
         const lineH = label.h / label.lines;
         const extra = (label.lines - 1) * lineH; // extra lines grow upwards
         if (e.activate === "start") pushBar(e.to, y);
+        const seq = ir.autonumber !== undefined ? ir.autonumber.start + msgCount++ * ir.autonumber.step : undefined;
+        msgRight.push(e.from === e.to ? fromX + selfReach(autoLabel(seq, e.label)) : Math.max(fromX, toX));
         messages.push({
           id: e.id,
           fromX,
@@ -186,7 +216,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
           label: e.label,
           labelPos: { x: (fromX + toX) / 2, y: y - 8 - extra },
           arrow: e.arrow,
-          ...(ir.autonumber !== undefined ? { seq: ir.autonumber.start + msgCount++ * ir.autonumber.step } : {}),
+          ...(seq !== undefined ? { seq } : {}),
         });
         if (e.activate === "end") popBar(e.from, y);
         y += ROW_H + (e.from === e.to ? SELF_MSG_EXTRA : 0) + extra;
@@ -205,7 +235,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
       if (e.kind === "create") {
         // the head is drawn at this row; the rows below must clear it
         createdAt.set(e.lifeline, y);
-        y += HEAD_H + 10;
+        y += headH + 10;
         lastMessage = null;
         continue;
       }
@@ -252,6 +282,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
       const top = y;
       y += isRect ? RECT_TOP : FRAG_TOP;
       const childStart = fragments.length;
+      const msgStart = messages.length;
       const branchMeta: { id: BranchBand["id"]; condition: string; dividerY?: number; condY: number }[] = [];
       e.branches.forEach((branch, bi) => {
         if (bi > 0) {
@@ -274,6 +305,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
             : [SIDE_MARGIN, SIDE_MARGIN + 200];
       let left = Math.min(...involvedXs) - FRAG_SIDE_PAD;
       let right = Math.max(...involvedXs) + FRAG_SIDE_PAD;
+      for (let mi = msgStart; mi < messages.length; mi++) right = Math.max(right, msgRight[mi]! + FRAG_SIDE_PAD);
       // fragments pushed while walking the branches are this frame's
       // descendants (children push before their parent)
       for (let ci = childStart; ci < fragments.length; ci++) {
@@ -348,8 +380,8 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
       name: l.name,
       kind: l.kind,
       x: cx,
-      headRect: { x: cx - w / 2, y: top, w, h: HEAD_H },
-      spineTop: top + HEAD_H,
+      headRect: { x: cx - w / 2, y: top, w, h: headH },
+      spineTop: top + headH,
       spineBottom: destroyed ?? spineBottom,
       ...(created !== undefined ? { created: true } : {}),
       ...(destroyed !== undefined ? { destroyed: true } : {}),
@@ -366,7 +398,7 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
       id: b.id,
       name: b.name,
       ...(b.color !== undefined ? { color: b.color } : {}),
-      rect: { x: left, y: TOP_MARGIN, w: right - left, h: BOX_LABEL_H + HEAD_H + BOX_PAD },
+      rect: { x: left, y: TOP_MARGIN, w: right - left, h: BOX_LABEL_H + headH + BOX_PAD },
       labelPos: { x: (left + right) / 2, y: TOP_MARGIN + BOX_LABEL_H / 2 },
     });
   }
@@ -375,9 +407,10 @@ export function layoutSequence(ir: SequenceIR, measure: TextMeasurer): SequenceL
   const fragRight = fragments.reduce((m, f) => Math.max(m, f.rect.x + f.rect.w), 0);
   const noteRight = notes.reduce((m, n) => Math.max(m, n.rect.x + n.rect.w), 0);
   const boxRight = boxes.reduce((m, b) => Math.max(m, b.rect.x + b.rect.w), 0);
+  const msgRightMax = msgRight.reduce((m, r) => Math.max(m, r), 0);
   return {
     kind: "sequence",
-    size: { w: Math.max(lastX, fragRight, noteRight, boxRight) + SIDE_MARGIN, h: spineBottom + BOTTOM_MARGIN },
+    size: { w: Math.max(lastX, fragRight, noteRight, boxRight, msgRightMax) + SIDE_MARGIN, h: spineBottom + BOTTOM_MARGIN },
     lifelines,
     boxes,
     activations,
