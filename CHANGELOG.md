@@ -1,5 +1,10 @@
 # Changelog
 
+## [v2026.1030.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1029.0...v2026.1030.0) - 2026-10-30
+
+### Other changes
+- fix(sequence): self-messages and multi-line heads stay inside their bounds by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/60
+
 ## [v2026.1029.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1021.0...v2026.1029.0) - 2026-10-29
 
 ### Other changes
