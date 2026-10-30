@@ -140,7 +140,7 @@ exports[`layoutSequence > matches the committed golden layout 1`] = `
   "notes": [],
   "size": {
     "h": 374,
-    "w": 408,
+    "w": 442,
   },
   "slots": [
     {

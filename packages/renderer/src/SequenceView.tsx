@@ -241,7 +241,8 @@ export function SequenceView({
           <TextLines
             text={l.name}
             x={l.x}
-            y={l.headRect.y + l.headRect.h / 2}
+            // centre the whole block, not just its first line
+            y={l.headRect.y + l.headRect.h / 2 - ((l.name.split("\n").length - 1) * 14) / 2}
             textAnchor="middle"
             dominantBaseline="central"
             fontSize={13}
