@@ -9,5 +9,6 @@ export * from "./requirement";
 export * from "./er";
 export * from "./usecase";
 export * from "./mindmap";
+export * from "./quadrant";
 export * from "./gantt";
 export * from "./registry";

@@ -7,6 +7,7 @@ import {
   applyJourneyAction,
   applyMindmapAction,
   applyErAction,
+  applyQuadrantAction,
   applyRequirementAction,
   applySequenceAction,
   applyStateAction,
@@ -24,6 +25,7 @@ import {
   newTaskId,
   type EventId,
   type MindmapNodeId,
+  type QuadrantPointId,
   type SectionId,
 } from "@gmermaid/ir";
 import {
@@ -31,6 +33,7 @@ import {
   parseGantt,
   parseJourney,
   parseMindmap,
+  parseQuadrant,
   parseSequence,
   parseStateDiagram,
   parseTimeline,
@@ -48,6 +51,7 @@ import { ganttToMermaid } from "./gantt";
 import { journeyToMermaid } from "./journey";
 import { mindmapToMermaid } from "./mindmap";
 import { erToMermaid } from "./er";
+import { quadrantToMermaid } from "./quadrant";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
@@ -463,6 +467,47 @@ function mindmapCases(): Cases {
   };
 }
 
+// ----------------------------------------------------------------- quadrant
+
+const QUADRANT_SAMPLE = `quadrantChart
+  title Reach and engagement of campaigns
+  x-axis Low Reach --> High Reach
+  y-axis Low Engagement --> High Engagement
+  quadrant-1 We should expand
+  Campaign A: [0.3, 0.6]
+  Campaign B: [0.45, 0.23]
+`;
+
+function quadrantCases(): Cases {
+  const parsed = parseQuadrant(QUADRANT_SAMPLE);
+  if (!parsed.ok) throw new Error("quadrant sample does not parse");
+  const sample = parsed.ir;
+
+  // mirrors addPoint() / a drag / the chart window's fields
+  let built = sample;
+  const id: QuadrantPointId = newId("quadrantPoint");
+  built = applyQuadrantAction(built, { type: "addPoint", point: { id, label: "Point 1", x: 0.5, y: 0.5 } });
+  const corner = applyQuadrantAction(built, { type: "movePoint", id, x: 0, y: 1 });
+  const dragged = applyQuadrantAction(built, { type: "movePoint", id, x: 0.37, y: 0.82 });
+  const settings = applyQuadrantAction(
+    applyQuadrantAction(sample, { type: "setAxis", axis: "x", high: "Wide" }),
+    { type: "setQuadrantLabel", index: 3, label: 'Fix: "it"' },
+  );
+  const bare = applyQuadrantAction(
+    applyQuadrantAction(sample, { type: "setTitle", title: "" }),
+    { type: "setAxis", axis: "x", low: "", high: "" },
+  );
+
+  return {
+    sample: quadrantToMermaid(sample),
+    "added point": quadrantToMermaid(built),
+    "point dragged to a corner": quadrantToMermaid(corner),
+    "dragged point": quadrantToMermaid(dragged),
+    "axis end and quadrant label typed in": quadrantToMermaid(settings),
+    "no title, no x axis": quadrantToMermaid(bare),
+  };
+}
+
 // ------------------------------------------------------------------ usecase
 
 const USECASE_SAMPLE = `usecase-beta
@@ -600,6 +645,7 @@ const CASES: Record<DiagramKind, () => Cases> = {
   mindmap: mindmapCases,
   usecase: usecaseCases,
   er: erCases,
+  quadrant: quadrantCases,
 };
 
 describe("mermaid.js accepts what the editors build", () => {

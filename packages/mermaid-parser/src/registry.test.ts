@@ -12,6 +12,7 @@ describe("detectDiagramKind", () => {
     expect(detectDiagramKind("requirementDiagram\nrequirement a {\n}")).toBe("requirement");
     expect(detectDiagramKind("timeline\n  2002 : LinkedIn")).toBe("timeline");
     expect(detectDiagramKind("erDiagram\nA ||--o{ B : x")).toBe("er");
+    expect(detectDiagramKind("quadrantChart\n  A: [0.1, 0.2]")).toBe("quadrant");
     expect(detectDiagramKind("pie\n")).toBeUndefined();
   });
   it("skips frontmatter, comments and init directives", () => {

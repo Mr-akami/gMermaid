@@ -1,0 +1,160 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutQuadrant > matches the committed golden layout 1`] = `
+{
+  "axes": [
+    {
+      "anchor": "start",
+      "pos": {
+        "x": 48,
+        "y": 502,
+      },
+      "rotated": false,
+      "text": "Low Reach",
+    },
+    {
+      "anchor": "end",
+      "pos": {
+        "x": 488,
+        "y": 502,
+      },
+      "rotated": false,
+      "text": "High Reach",
+    },
+    {
+      "anchor": "start",
+      "pos": {
+        "x": 34,
+        "y": 480,
+      },
+      "rotated": true,
+      "text": "Low Engagement",
+    },
+    {
+      "anchor": "end",
+      "pos": {
+        "x": 34,
+        "y": 40,
+      },
+      "rotated": true,
+      "text": "High Engagement",
+    },
+  ],
+  "cells": [
+    {
+      "index": 1,
+      "label": "We should expand",
+      "labelPos": {
+        "x": 378,
+        "y": 60,
+      },
+      "rect": {
+        "h": 220,
+        "w": 220,
+        "x": 268,
+        "y": 40,
+      },
+    },
+    {
+      "index": 2,
+      "label": "Need to promote",
+      "labelPos": {
+        "x": 158,
+        "y": 60,
+      },
+      "rect": {
+        "h": 220,
+        "w": 220,
+        "x": 48,
+        "y": 40,
+      },
+    },
+    {
+      "index": 3,
+      "label": "Re-evaluate",
+      "labelPos": {
+        "x": 158,
+        "y": 280,
+      },
+      "rect": {
+        "h": 220,
+        "w": 220,
+        "x": 48,
+        "y": 260,
+      },
+    },
+    {
+      "index": 4,
+      "label": "May be improved",
+      "labelPos": {
+        "x": 378,
+        "y": 280,
+      },
+      "rect": {
+        "h": 220,
+        "w": 220,
+        "x": 268,
+        "y": 260,
+      },
+    },
+  ],
+  "kind": "quadrant",
+  "plot": {
+    "h": 440,
+    "w": 440,
+    "x": 48,
+    "y": 40,
+  },
+  "points": [
+    {
+      "center": {
+        "x": 180,
+        "y": 216,
+      },
+      "id": "a",
+      "label": "Campaign A",
+      "labelPos": {
+        "x": 180,
+        "y": 233.4,
+      },
+      "rect": {
+        "h": 32.8,
+        "w": 80,
+        "x": 140,
+        "y": 209,
+      },
+      "x": 0.3,
+      "y": 0.6,
+    },
+    {
+      "center": {
+        "x": 444,
+        "y": 436,
+      },
+      "id": "b",
+      "label": "Campaign B",
+      "labelPos": {
+        "x": 444,
+        "y": 453.4,
+      },
+      "rect": {
+        "h": 32.8,
+        "w": 80,
+        "x": 404,
+        "y": 429,
+      },
+      "x": 0.9,
+      "y": 0.1,
+    },
+  ],
+  "size": {
+    "h": 516,
+    "w": 488,
+  },
+  "title": "Reach and engagement",
+  "titlePos": {
+    "x": 268,
+    "y": 20,
+  },
+}
+`;

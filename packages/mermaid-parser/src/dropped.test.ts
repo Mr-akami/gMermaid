@@ -20,6 +20,7 @@ const SAMPLE: Record<DiagramKind, (stmt: string) => string> = {
   mindmap: (s) => `mindmap\n  root((r))\n    a\n${s}\n`,
   usecase: (s) => `usecase-beta\n  actor A\n  A --> Checkout\n  ${s}\n`,
   er: (s) => `erDiagram\n  A {\n    int id PK\n  }\n  A ||--o{ B : has\n  ${s}\n`,
+  quadrant: (s) => `quadrantChart\n  title T\n  A: [0.5, 0.5]\n  ${s}\n`,
 };
 
 /** One real-world spelling per shared keyword. */
@@ -37,7 +38,14 @@ const STATEMENT: Record<string, string> = {
 /** `class` is a real statement in classDiagram (it DECLARES a class) and
  * ordinary prose in a mindmap node, so those two kinds keep it — the only
  * two exceptions to the shared set, and both are deliberate. */
-const KEEPS: Partial<Record<DiagramKind, readonly string[]>> = { class: ["class"], mindmap: ["class"] };
+const KEEPS: Partial<Record<DiagramKind, readonly string[]>> = {
+  class: ["class"],
+  mindmap: ["class"],
+  // a quadrant chart has no `style` / `class` / `click` / … statement: only
+  // `classDef` and the accessibility pair. The rest is point-name prose
+  // (`style guide: [0.2, 0.7]`), which the free-text test below pins down.
+  quadrant: ["class", "click", "cssClass", "linkStyle", "style"],
+};
 
 describe("shared drop policy", () => {
   for (const kind of DIAGRAM_KINDS) {
@@ -85,6 +93,7 @@ describe("shared drop policy", () => {
       ["mindmap", "mindmap\n  root((r))\n    style guide\n", "style guide"],
       ["journey", "journey\n  section S\n    class: 5: Me\n", "class"],
       ["gantt", "gantt\n  dateFormat YYYY-MM-DD\n  section S\n  click :a1, 2024-01-01, 3d\n", "click"],
+      ["quadrant", "quadrantChart\n  style guide: [0.2, 0.7]\n  class diagram: [0.1, 0.1]\n", "style guide"],
     ];
     for (const [kind, code] of cases) {
       const result = parseDiagram(kind, code);

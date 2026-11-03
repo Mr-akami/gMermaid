@@ -7,6 +7,7 @@ import { FlowchartEditor } from "./FlowchartEditor";
 import { GanttEditor } from "./GanttEditor";
 import { JourneyEditor } from "./JourneyEditor";
 import { MindmapEditor } from "./MindmapEditor";
+import { QuadrantEditor } from "./QuadrantEditor";
 import { RequirementEditor } from "./RequirementEditor";
 import { SequenceEditor } from "./SequenceEditor";
 import { StateEditor } from "./StateEditor";
@@ -45,4 +46,5 @@ export const DIAGRAMS: readonly DiagramDef[] = [
   { kind: "mindmap", label: "Mindmap", Editor: MindmapEditor },
   { kind: "gantt", label: "Gantt", Editor: GanttEditor },
   { kind: "er", label: "ER", Editor: ErEditor },
+  { kind: "quadrant", label: "Quadrant", Editor: QuadrantEditor },
 ];
