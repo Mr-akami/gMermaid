@@ -16,6 +16,9 @@ import type {
   FlowchartIR,
   FragmentId,
   GanttIR,
+  GitBranchId,
+  GitCommitId,
+  GitGraphIR,
   JourneyIR,
   LifecycleId,
   LifelineId,
@@ -48,6 +51,8 @@ import {
   emptyErDiagram,
   emptyFlowchart,
   emptyGantt,
+  emptyGitGraph,
+  GIT_MAIN_BRANCH,
   emptyJourney,
   emptyMindmap,
   emptyQuadrant,
@@ -361,6 +366,28 @@ const quadrant: QuadrantIR = {
   ],
 };
 
+// Branches fork from branches, a merge joins two lanes, and cherry-picks name
+// commits that have no id of their own (codegen has to mint one) and a merge
+// (which needs a `parent`).
+const gitGraph: GitGraphIR = {
+  kind: "gitGraph",
+  direction: "LR",
+  steps: [
+    { type: "commit", id: id<GitCommitId>("gcm_00000001"), branch: GIT_MAIN_BRANCH, name: "init", tags: [], commitType: "NORMAL" },
+    { type: "commit", id: id<GitCommitId>("gcm_00000002"), branch: GIT_MAIN_BRANCH, name: "base", tags: ["v0.1"], commitType: "NORMAL" },
+    { type: "branch", id: id<GitBranchId>("gbr_00000001"), name: "develop", from: GIT_MAIN_BRANCH },
+    { type: "commit", id: id<GitCommitId>("gcm_00000003"), branch: id<GitBranchId>("gbr_00000001"), name: "wip", tags: [], commitType: "NORMAL" },
+    { type: "commit", id: id<GitCommitId>("gcm_00000004"), branch: id<GitBranchId>("gbr_00000001"), tags: [], commitType: "HIGHLIGHT" },
+    { type: "branch", id: id<GitBranchId>("gbr_00000002"), name: "feature/x y", from: id<GitBranchId>("gbr_00000001"), order: 5 },
+    { type: "commit", id: id<GitCommitId>("gcm_00000005"), branch: id<GitBranchId>("gbr_00000002"), message: "add x", tags: ["a", "b c"], commitType: "REVERSE" },
+    { type: "merge", id: id<GitCommitId>("gcm_00000006"), branch: id<GitBranchId>("gbr_00000001"), from: id<GitBranchId>("gbr_00000002"), name: "m-feat", tags: [], commitType: "NORMAL" },
+    { type: "commit", id: id<GitCommitId>("gcm_00000007"), branch: GIT_MAIN_BRANCH, tags: [], commitType: "NORMAL" },
+    { type: "merge", id: id<GitCommitId>("gcm_00000008"), branch: GIT_MAIN_BRANCH, from: id<GitBranchId>("gbr_00000001"), name: "release", tags: ["v1.0"], commitType: "HIGHLIGHT" },
+    { type: "cherryPick", id: id<GitCommitId>("gcm_00000009"), branch: id<GitBranchId>("gbr_00000002"), source: id<GitCommitId>("gcm_00000007"), tags: [] },
+    { type: "cherryPick", id: id<GitCommitId>("gcm_0000000a"), branch: GIT_MAIN_BRANCH, source: id<GitCommitId>("gcm_00000006"), parent: id<GitCommitId>("gcm_00000004"), tags: ["picked"] },
+  ],
+};
+
 export interface Fixture {
   readonly name: string;
   readonly ir: DiagramIR;
@@ -498,6 +525,20 @@ export const FIXTURES: readonly Fixture[] = [
       ["a task with a dependency", ["tsk_00000003"]],
       ["a task with no id", ["tsk_00000004"]],
       ["a named section", ["sct_00000002"]],
+    ],
+  },
+  {
+    name: "gitGraph",
+    ir: gitGraph,
+    empty: emptyGitGraph(),
+    selections: [
+      ["everything", gitGraph.steps.map((s) => s.id)],
+      ["one commit", ["gcm_00000002"]],
+      ["a branch with the lane it forked from", ["gbr_00000002"]],
+      ["a merge commit", ["gcm_00000008"]],
+      ["a cherry-pick", ["gcm_00000009"]],
+      ["a cherry-pick of a merge, via its parent", ["gcm_0000000a"]],
+      ["the main branch", [GIT_MAIN_BRANCH]],
     ],
   },
   {

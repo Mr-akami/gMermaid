@@ -5,6 +5,7 @@ import { ErEditor } from "./ErEditor";
 import type { EditorRuntimeProps } from "./editorRuntime";
 import { FlowchartEditor } from "./FlowchartEditor";
 import { GanttEditor } from "./GanttEditor";
+import { GitGraphEditor } from "./GitGraphEditor";
 import { JourneyEditor } from "./JourneyEditor";
 import { MindmapEditor } from "./MindmapEditor";
 import { QuadrantEditor } from "./QuadrantEditor";
@@ -47,4 +48,5 @@ export const DIAGRAMS: readonly DiagramDef[] = [
   { kind: "gantt", label: "Gantt", Editor: GanttEditor },
   { kind: "er", label: "ER", Editor: ErEditor },
   { kind: "quadrant", label: "Quadrant", Editor: QuadrantEditor },
+  { kind: "gitGraph", label: "Git graph", Editor: GitGraphEditor },
 ];

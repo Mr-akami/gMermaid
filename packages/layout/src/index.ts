@@ -15,4 +15,5 @@ export * from "./mindmap";
 export * from "./quadrant";
 export * from "./ganttTime";
 export * from "./gantt";
+export * from "./gitgraph";
 export * from "./marquee";

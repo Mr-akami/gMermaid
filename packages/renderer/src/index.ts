@@ -3,6 +3,7 @@ export * from "./SequenceView";
 export * from "./ClassView";
 export * from "./StateView";
 export * from "./TimelineView";
+export * from "./GitGraphView";
 export * from "./JourneyView";
 export * from "./usePointerGestures";
 export * from "./RequirementView";

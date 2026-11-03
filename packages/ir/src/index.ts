@@ -28,6 +28,8 @@ export * from "./er";
 export * from "./erActions";
 export * from "./quadrant";
 export * from "./quadrantActions";
+export * from "./gitgraph";
+export * from "./gitgraphActions";
 
 import type { ClassIR } from "./classdiagram";
 import type { FlowchartIR } from "./flowchart";
@@ -44,6 +46,7 @@ import type { GanttIR } from "./gantt";
 
 import type { ErIR } from "./er";
 import type { QuadrantIR } from "./quadrant";
+import type { GitGraphIR } from "./gitgraph";
 
 export type DiagramIR =
   | FlowchartIR
@@ -57,5 +60,6 @@ export type DiagramIR =
   | MindmapIR
   | UsecaseIR
   | ErIR
-  | QuadrantIR;
+  | QuadrantIR
+  | GitGraphIR;
 

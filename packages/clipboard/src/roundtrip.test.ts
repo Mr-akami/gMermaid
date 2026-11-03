@@ -7,6 +7,7 @@ import {
   erToMermaid,
   flowchartToMermaid,
   ganttToMermaid,
+  gitGraphToMermaid,
   journeyToMermaid,
   mindmapToMermaid,
   quadrantToMermaid,
@@ -50,6 +51,8 @@ function emit(ir: DiagramIR): string {
       return usecaseToMermaid(ir);
     case "quadrant":
       return quadrantToMermaid(ir);
+    case "gitGraph":
+      return gitGraphToMermaid(ir);
   }
 }
 

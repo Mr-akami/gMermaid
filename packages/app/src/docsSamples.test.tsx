@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { fixedWidthMeasurer, layoutGantt, layoutJourney, layoutMindmap, layoutQuadrant, layoutRequirementDiagram, layoutTimeline } from "@gmermaid/layout";
-import { parseGantt, parseJourney, parseMindmap, parseQuadrant, parseRequirementDiagram, parseTimeline, type ParseResult } from "@gmermaid/mermaid-parser";
-import { GanttView, JourneyView, MindmapView, QuadrantView, RequirementView, TimelineView } from "@gmermaid/renderer";
+import { fixedWidthMeasurer, layoutGantt, layoutGitGraph, layoutJourney, layoutMindmap, layoutQuadrant, layoutRequirementDiagram, layoutTimeline } from "@gmermaid/layout";
+import { parseGantt, parseGitGraph, parseJourney, parseMindmap, parseQuadrant, parseRequirementDiagram, parseTimeline, type ParseResult } from "@gmermaid/mermaid-parser";
+import { GanttView, GitGraphView, JourneyView, MindmapView, QuadrantView, RequirementView, TimelineView } from "@gmermaid/renderer";
 
 // The samples from mermaid's own docs, pasted in whole, reach the canvas:
 // parse → layout → the view's SVG. What the e2e suite used to check with a
@@ -48,6 +48,16 @@ describe("mermaid docs samples render", () => {
     expect(hasText(root, "My working day")).toBe(true);
     expect(hasText(root, "Make tea")).toBe(true);
     expect(hasText(root, "Cat")).toBe(true);
+  });
+
+  it("git graph: a node per commit, a label per branch, tags and ids as text", () => {
+    const root = draw(<GitGraphView layout={layoutGitGraph(ok(parseGitGraph(GITGRAPH)), measure)} viewState={{}} />);
+    // 2 branches (main + develop) + 4 commits, the merge among them
+    expect(ids(root)).toBe(6);
+    expect(hasText(root, "develop")).toBe(true);
+    expect(hasText(root, "main")).toBe(true);
+    expect(hasText(root, "release")).toBe(true);
+    expect(hasText(root, "v1.0")).toBe(true);
   });
 
   it("timeline: every section, period and event, with <br> as a line break", () => {
@@ -121,6 +131,15 @@ const JOURNEY = `journey
     section Go home
       Go downstairs: 5: Me
       Sit down: 5: Me
+`;
+
+const GITGRAPH = `gitGraph
+  commit
+  branch develop
+  commit
+  checkout main
+  commit
+  merge develop id: "release" tag: "v1.0"
 `;
 
 const TIMELINE = `timeline

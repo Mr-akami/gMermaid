@@ -1,9 +1,10 @@
-import type { ClassIR, ErIR, FlowchartIR, GanttIR, JourneyIR, MindmapIR, QuadrantIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
+import type { ClassIR, ErIR, FlowchartIR, GanttIR, GitGraphIR, JourneyIR, MindmapIR, QuadrantIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
 import { parseClassDiagram } from "./classdiagram";
 import { firstStatement, type ParseResult } from "./common";
 import { parseErDiagram } from "./er";
 import { parseFlowchart } from "./flowchart";
 import { parseGantt } from "./gantt";
+import { parseGitGraph } from "./gitgraph";
 import { parseJourney } from "./journey";
 import { parseMindmap } from "./mindmap";
 import { parseQuadrant } from "./quadrant";
@@ -16,7 +17,7 @@ import { parseUsecase } from "./usecase";
 // One place that knows every diagram kind gMermaid supports. Adding a
 // diagram = add it here, then register its editor in packages/app.
 
-export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "gantt", "mindmap", "usecase", "er", "quadrant"] as const;
+export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "gantt", "mindmap", "usecase", "er", "quadrant", "gitGraph"] as const;
 export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
 
 export type AnyIR =
@@ -31,7 +32,8 @@ export type AnyIR =
   | MindmapIR
   | UsecaseIR
   | ErIR
-  | QuadrantIR;
+  | QuadrantIR
+  | GitGraphIR;
 
 
 /** Header keyword(s) that open each diagram kind, in mermaid text. */
@@ -50,6 +52,7 @@ const HEADERS: Record<DiagramKind, readonly string[]> = {
   er: ["erDiagram"],
   gantt: ["gantt"],
   quadrant: ["quadrantChart"],
+  gitGraph: ["gitGraph"],
 };
 
 export function detectDiagramKind(code: string): DiagramKind | undefined {
@@ -86,5 +89,7 @@ export function parseDiagram(kind: DiagramKind, code: string): ParseResult<AnyIR
       return parseGantt(code);
     case "quadrant":
       return parseQuadrant(code);
+    case "gitGraph":
+      return parseGitGraph(code);
   }
 }

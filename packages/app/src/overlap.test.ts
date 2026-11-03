@@ -3,6 +3,7 @@ import {
   parseClassDiagram,
   parseFlowchart,
   parseGantt,
+  parseGitGraph,
   parseJourney,
   parseMindmap,
   parseRequirementDiagram,
@@ -17,6 +18,7 @@ import {
   layoutClassDiagram,
   layoutFlowchart,
   layoutGantt,
+  layoutGitGraph,
   layoutJourney,
   layoutMindmap,
   layoutRequirementDiagram,
@@ -433,6 +435,36 @@ note for Checkout "validates the cart"
         ...l.sections.map((s) => frameTitle(s.name, s.rect, `section title ${s.name}`, 14)),
       ]),
     ).toEqual([]);
+  });
+
+  it("git graph: nodes, labels, tag pills and branch labels, in every orientation", () => {
+    const body = `
+  commit id: "initial commit with a long id" tag: "v1.0.0-rc.1"
+  commit id: "b" tag: "a" tag: "b"
+  branch feature/with-a-long-name
+  commit id: "feature work" type: HIGHLIGHT
+  commit id: "more"
+  branch "another long branch" order: 5
+  commit id: "x" tag: "t"
+  checkout main
+  merge feature/with-a-long-name id: "merged it" tag: "release"
+  commit
+  cherry-pick id: "x" tag: "picked"
+`;
+    for (const head of ["gitGraph", "gitGraph TB:", "gitGraph BT:"]) {
+      const l = layoutGitGraph(parsed(parseGitGraph(head + body), "git graph"), measure);
+      expect(
+        collisions([
+          ...l.commits.flatMap((c) => [
+            { ...c.rect, what: `commit ${c.id}` },
+            ...(c.label === "" ? [] : [textBox(c.label, c.labelPos, `label ${c.label}`, { fontSize: 11, anchor: c.labelAnchor, central: true })]),
+            ...(c.tagRect ? [{ ...c.tagRect, what: `tags ${c.tags}` }] : []),
+          ]),
+          ...l.lanes.map((b) => ({ ...b.rect, what: `branch ${b.name}` })),
+        ]),
+        head,
+      ).toEqual([]);
+    }
   });
 
   it("mindmap: both sides of the root, and a deep subtree", () => {
