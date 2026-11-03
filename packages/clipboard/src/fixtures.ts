@@ -26,6 +26,8 @@ import type {
   NodeId,
   NoteId,
   PeriodId,
+  QuadrantIR,
+  QuadrantPointId,
   RelationId,
   RequirementId,
   RequirementIR,
@@ -48,6 +50,7 @@ import {
   emptyGantt,
   emptyJourney,
   emptyMindmap,
+  emptyQuadrant,
   emptyRequirementDiagram,
   emptySequence,
   emptyStateDiagram,
@@ -341,6 +344,23 @@ const mindmap: MindmapIR = {
   ],
 };
 
+const QUADRANT_SETTINGS = {
+  xAxis: { low: "Low reach", high: "High reach" },
+  yAxis: { low: "", high: "High engagement" },
+  quadrants: ["Expand", "Promote", "", "Improve"],
+} as const satisfies Pick<QuadrantIR, "xAxis" | "yAxis" | "quadrants">;
+
+const quadrant: QuadrantIR = {
+  kind: "quadrant",
+  title: "Campaigns",
+  ...QUADRANT_SETTINGS,
+  points: [
+    { id: id<QuadrantPointId>("qpt_00000001"), label: "Campaign A", x: 0.3, y: 0.6 },
+    { id: id<QuadrantPointId>("qpt_00000002"), label: 'Odd: "name" [1]', x: 0, y: 1 },
+    { id: id<QuadrantPointId>("qpt_00000003"), label: "日本語", x: 0.1234, y: 0.05 },
+  ],
+};
+
 export interface Fixture {
   readonly name: string;
   readonly ir: DiagramIR;
@@ -501,6 +521,15 @@ export const FIXTURES: readonly Fixture[] = [
       ["an entity with no attributes", ["ent_00000003"]],
       ["a relationship alone", ["rln_00000002"]],
       ["a self relationship", ["rln_00000003"]],
+    name: "quadrant",
+    ir: quadrant,
+    // the axes and quadrant labels are diagram-level: paste leaves them alone
+    empty: { ...emptyQuadrant(), ...QUADRANT_SETTINGS },
+    selections: [
+      ["everything", quadrant.points.map((p) => p.id)],
+      ["one point", ["qpt_00000001"]],
+      ["a point on the corner with awkward text", ["qpt_00000002"]],
+      ["two points", ["qpt_00000001", "qpt_00000003"]],
     ],
   },
 ];

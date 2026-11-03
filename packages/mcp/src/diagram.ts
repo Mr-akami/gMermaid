@@ -1,4 +1,4 @@
-import type { ClassIR, ErIR, FlowchartIR, GanttIR, JourneyIR, MindmapIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
+import type { ClassIR, ErIR, FlowchartIR, GanttIR, JourneyIR, MindmapIR, QuadrantIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
 import {
   classToMermaid,
   erToMermaid,
@@ -6,6 +6,7 @@ import {
   ganttToMermaid,
   journeyToMermaid,
   mindmapToMermaid,
+  quadrantToMermaid,
   requirementToMermaid,
   sequenceToMermaid,
   stateToMermaid,
@@ -75,5 +76,7 @@ export function canonicalMermaid(mermaid: string): string | undefined {
       return erToMermaid(ir as ErIR);
     case "usecase":
       return usecaseToMermaid(ir as UsecaseIR);
+    case "quadrant":
+      return quadrantToMermaid(ir as QuadrantIR);
   }
 }

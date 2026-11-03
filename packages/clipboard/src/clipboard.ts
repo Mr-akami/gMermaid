@@ -6,6 +6,7 @@ import {
   ganttToMermaid,
   journeyToMermaid,
   mindmapToMermaid,
+  quadrantToMermaid,
   requirementToMermaid,
   sequenceToMermaid,
   stateToMermaid,
@@ -20,6 +21,7 @@ import { flowchartClipboard } from "./flowchart";
 import { ganttClipboard } from "./gantt";
 import { journeyClipboard } from "./journey";
 import { mindmapClipboard } from "./mindmap";
+import { quadrantClipboard } from "./quadrant";
 import { requirementClipboard } from "./requirement";
 import { sequenceClipboard } from "./sequence";
 import { stateClipboard } from "./state";
@@ -111,6 +113,11 @@ import { usecaseClipboard } from "./usecase";
  *   module refuses with `undefined`, rather than inventing a root to hang
  *   them from.
  *
+ * - **quadrant** — only points are selectable, so the slice is exactly the
+ *   selected points; the axes and quadrant labels ride along for the text and
+ *   are never pasted. Pasted points keep their coordinates (they are the
+ *   data), so a paste lands exactly on top of the original.
+ *
  * ## What paste guarantees
  *
  * - **Fresh ids, always** — every element is re-minted through `newId`, and
@@ -190,6 +197,10 @@ export function copySelection(ir: DiagramIR, ids: readonly string[]): string | u
       const s = usecaseClipboard.slice(ir, set);
       return s && usecaseToMermaid(s);
     }
+    case "quadrant": {
+      const s = quadrantClipboard.slice(ir, set);
+      return s && quadrantToMermaid(s);
+    }
   }
 }
 
@@ -234,6 +245,7 @@ const CLIPBOARDS = {
   mindmap: mindmapClipboard,
   usecase: usecaseClipboard,
   er: erClipboard,
+  quadrant: quadrantClipboard,
 } as const;
 
 const KIND_LABEL = {
@@ -248,4 +260,5 @@ const KIND_LABEL = {
   mindmap: "mindmap",
   usecase: "use case diagram",
   er: "ER diagram",
+  quadrant: "quadrant chart",
 } as const;
