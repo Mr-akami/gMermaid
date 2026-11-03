@@ -10,6 +10,7 @@ import {
   ganttToMermaid,
   journeyToMermaid,
   mindmapToMermaid,
+  quadrantToMermaid,
   requirementToMermaid,
   sequenceToMermaid,
   stateToMermaid,
@@ -48,6 +49,8 @@ function emit(ir: DiagramIR): string {
       return erToMermaid(ir);
     case "usecase":
       return usecaseToMermaid(ir);
+    case "quadrant":
+      return quadrantToMermaid(ir);
     case "architecture":
       return architectureToMermaid(ir);
   }

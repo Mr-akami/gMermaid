@@ -1,4 +1,4 @@
-import type { ClassIR, ErIR, FlowchartIR, GanttIR, JourneyIR, MindmapIR, ArchitectureIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
+import type { ArchitectureIR, ClassIR, ErIR, FlowchartIR, GanttIR, JourneyIR, MindmapIR, QuadrantIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
 import { parseClassDiagram } from "./classdiagram";
 import { firstStatement, type ParseResult } from "./common";
 import { parseErDiagram } from "./er";
@@ -6,6 +6,7 @@ import { parseFlowchart } from "./flowchart";
 import { parseGantt } from "./gantt";
 import { parseJourney } from "./journey";
 import { parseMindmap } from "./mindmap";
+import { parseQuadrant } from "./quadrant";
 import { parseRequirementDiagram } from "./requirement";
 import { parseSequence } from "./sequence";
 import { parseStateDiagram } from "./statediagram";
@@ -16,7 +17,7 @@ import { parseArchitecture } from "./architecture";
 // One place that knows every diagram kind gMermaid supports. Adding a
 // diagram = add it here, then register its editor in packages/app.
 
-export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "gantt", "mindmap", "usecase", "er", "architecture"] as const;
+export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "gantt", "mindmap", "usecase", "er", "quadrant", "architecture"] as const;
 export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
 
 export type AnyIR =
@@ -31,6 +32,7 @@ export type AnyIR =
   | MindmapIR
   | UsecaseIR
   | ErIR
+  | QuadrantIR
   | ArchitectureIR;
 
 
@@ -50,6 +52,7 @@ const HEADERS: Record<DiagramKind, readonly string[]> = {
   er: ["erDiagram"],
   architecture: ["architecture-beta"],
   gantt: ["gantt"],
+  quadrant: ["quadrantChart"],
 };
 
 export function detectDiagramKind(code: string): DiagramKind | undefined {
@@ -86,5 +89,7 @@ export function parseDiagram(kind: DiagramKind, code: string): ParseResult<AnyIR
       return parseErDiagram(code);
     case "gantt":
       return parseGantt(code);
+    case "quadrant":
+      return parseQuadrant(code);
   }
 }

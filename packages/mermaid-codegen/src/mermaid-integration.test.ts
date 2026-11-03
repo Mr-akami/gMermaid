@@ -20,6 +20,8 @@ import type {
   NamespaceId,
   NodeId,
   NoteId,
+  QuadrantIR,
+  QuadrantPointId,
   RelationId,
   SectionId,
   RequirementIR,
@@ -40,6 +42,7 @@ import { ganttToMermaid } from "./gantt";
 import { journeyToMermaid } from "./journey";
 import { mindmapToMermaid } from "./mindmap";
 import { erToMermaid } from "./er";
+import { quadrantToMermaid } from "./quadrant";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
@@ -645,6 +648,36 @@ describe("mermaid.js accepts generated mindmaps", () => {
     await expectMermaidAccepts(
       mindmapToMermaid({ kind: "mindmap", nodes: [{ id: MM("only"), label: "only idea", shape: "default" }] }),
     );
+  });
+});
+
+const QP = (s: string) => s as QuadrantPointId;
+
+describe("mermaid.js accepts generated quadrant charts", () => {
+  it("parses every field, awkward text and the extreme coordinates", async () => {
+    const ir: QuadrantIR = {
+      kind: "quadrant",
+      title: 'Reach, engagement (2024) #1 : "quoted"',
+      xAxis: { low: "Low --> not an arrow", high: "High: really" },
+      yAxis: { low: "", high: "Only the top end" },
+      quadrants: ["a: b", "Need to promote", "Re-evaluate (maybe)", "50% off & <b>bold</b>"],
+      points: [
+        { id: QP("p1"), label: "Campaign A", x: 0.3, y: 0.6 },
+        { id: QP("p2"), label: "Corner: [0, 1]", x: 0, y: 1 },
+        { id: QP("p3"), label: "日本語 & #hash", x: 1, y: 0 },
+        { id: QP("p4"), label: "tiny", x: 0.00001, y: 0.1234 },
+        { id: QP("p5"), label: "Campaign A", x: 0.3, y: 0.6 },
+      ],
+    };
+    await expectMermaidAccepts(quadrantToMermaid(ir));
+  });
+
+  it("parses a bare chart, a title-only chart and a one-ended axis", async () => {
+    const empty: QuadrantIR = { kind: "quadrant", xAxis: { low: "", high: "" }, yAxis: { low: "", high: "" }, quadrants: ["", "", "", ""], points: [] };
+    await expectMermaidAccepts(quadrantToMermaid(empty));
+    await expectMermaidAccepts(quadrantToMermaid({ ...empty, title: "Just a title" }));
+    await expectMermaidAccepts(quadrantToMermaid({ ...empty, xAxis: { low: "", high: "High" } }));
+    await expectMermaidAccepts(quadrantToMermaid({ ...empty, xAxis: { low: "Low", high: "" } }));
   });
 });
 

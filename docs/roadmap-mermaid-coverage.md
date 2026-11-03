@@ -1,6 +1,6 @@
 # Mermaid coverage roadmap (2026-09-21)
 
-**All phases below are merged.** gMermaid supports twelve diagram kinds; the
+**All phases below are merged.** gMermaid supports thirteen diagram kinds; the
 README table is the user-facing summary, this file keeps the per-kind
 decisions and the deliberate gaps.
 
@@ -165,6 +165,33 @@ window, registry entry, mermaid.js integration test, e2e spec.
   and the config is never executed), `params` given as a function, a parallel
   machine root and root-level transitions (mermaid has nowhere to draw them).
 
+## Phase 6 — Quadrant chart (done)
+Kind `quadrant`, header `quadrantChart`. Same vertical slice as the others
+(IR + actions, parser, codegen, layout, renderer, clipboard, editor + property
+windows, registry, mermaid.js integration test, e2e spec).
+- **The one exception to "no manual coordinates"** (`CONTEXT.md`): a point's
+  `x`/`y` (0..1) are DATA, so they live in the IR and the GUI edits them
+  directly — drag a point, or type the numbers in its property window. The
+  layout still decides nothing: it is a fixed square plot and a linear map
+  (`quadrantToPlot` / `plotToQuadrant`, tested as inverses). A drag shows the
+  point live through ViewState and writes ONE `movePoint` on release (one undo
+  step); coordinates are clamped to 0..1 and rounded (2 decimals on drag, 4
+  in the IR) so the text never reads `1e-7`, which mermaid cannot lex.
+- Chart-level fields (axes, `quadrant-1..4` labels) are edited in a "Chart"
+  window shown while nothing is selected; the title sits in the toolbar.
+- Codegen quotes every piece of text. Unquoted, `quadrant-1 a: b` is a parse
+  error in mermaid; quoted, only `"` is unspellable (no escape), so it becomes
+  `'`. A high-only axis is written `x-axis " " --> "High"` — mermaid rejects
+  `--> High` and `"" --> "High"` — and read back as an empty low end. Mermaid
+  only reads coordinates as `0`, `1` or `0.xxx` (`1.0` and `.5` are lexical
+  errors), which the number formatter respects.
+- Left out (tolerated on import, dropped with a `ParseWarning`): point style
+  fields (`radius`, `color`, `stroke-color`, `stroke-width`), `:::class`,
+  `classDef`, `accTitle` / `accDescr`. Only those three are statements here;
+  `style` / `class` / `click` … are point-name prose (`style guide: [0.2, 0.7]`)
+  and are kept, as `class` is in a mindmap. Point names are not unique in
+  mermaid, so points get minted ids (`point-N` on import).
+
 ## Not planned
 - Styling and interaction syntax (`classDef`, `style`, `:::`, `click`,
   `linkStyle`, `%%` comments) stays tolerated-and-dropped: it has no
@@ -174,7 +201,7 @@ window, registry entry, mermaid.js integration test, e2e spec.
   out in a graph of their own, so none of them is a dagre cluster and none
   pays the border-rank tax.
 - Diagram kinds mermaid supports that gMermaid does not draw yet: pie,
-  quadrant, git graph, block, C4, sankey, xychart, radar, packet, kanban
+  git graph, block, C4, sankey, xychart, radar, packet, kanban
   and treemap. Each would be another vertical slice; the
   registry in `packages/mermaid-parser/src/registry.ts` plus
   `packages/app/src/diagrams.tsx` is where one gets plugged in.

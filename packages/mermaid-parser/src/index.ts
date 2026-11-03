@@ -10,5 +10,6 @@ export * from "./er";
 export * from "./usecase";
 export * from "./architecture";
 export * from "./mindmap";
+export * from "./quadrant";
 export * from "./gantt";
 export * from "./registry";

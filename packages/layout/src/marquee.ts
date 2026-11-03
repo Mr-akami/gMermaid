@@ -4,6 +4,7 @@ import type { ErLayout } from "./er";
 import type { GanttLayout } from "./gantt";
 import type { JourneyLayout } from "./journey";
 import type { MindmapLayout } from "./mindmap";
+import type { QuadrantLayout } from "./quadrant";
 import type { RequirementLayout } from "./requirement";
 import type { FlowchartLayout, Point, Rect } from "./result";
 import type { SequenceLayout } from "./sequenceResult";
@@ -37,7 +38,8 @@ export type DiagramLayout =
   | ArchitectureLayout
   | MindmapLayout
   | GanttLayout
-  | ErLayout;
+  | ErLayout
+  | QuadrantLayout;
 
 /** The rectangle spanned by two corners, whichever way the drag went. */
 export function bandRect(from: Point, to: Point): Rect {
@@ -190,6 +192,9 @@ export function marqueeHits(layout: DiagramLayout, band: Rect): readonly string[
       break;
     case "mindmap":
       for (const n of layout.nodes) hits.box(n.id, n.rect);
+      break;
+    case "quadrant":
+      for (const p of layout.points) hits.box(p.id, p.rect);
       break;
     case "gantt":
       for (const s of layout.sections) hits.box(s.id, s.rect);

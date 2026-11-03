@@ -26,6 +26,8 @@ export * from "./gantt";
 export * from "./ganttActions";
 export * from "./er";
 export * from "./erActions";
+export * from "./quadrant";
+export * from "./quadrantActions";
 export * from "./architecture";
 export * from "./architectureActions";
 
@@ -44,6 +46,7 @@ import type { GanttIR } from "./gantt";
 import type { ArchitectureIR } from "./architecture";
 
 import type { ErIR } from "./er";
+import type { QuadrantIR } from "./quadrant";
 
 export type DiagramIR =
   | FlowchartIR
@@ -57,5 +60,6 @@ export type DiagramIR =
   | MindmapIR
   | UsecaseIR
   | ErIR
+  | QuadrantIR
   | ArchitectureIR;
 

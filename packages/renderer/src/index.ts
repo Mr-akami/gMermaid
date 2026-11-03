@@ -10,6 +10,7 @@ export * from "./ErView";
 export * from "./UsecaseView";
 export * from "./ArchitectureView";
 export * from "./MindmapView";
+export * from "./QuadrantView";
 export * from "./GanttView";
 export * from "./edgePath";
 export * from "./Marquee";

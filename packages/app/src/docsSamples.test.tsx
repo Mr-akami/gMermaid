@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { fixedWidthMeasurer, layoutArchitecture, layoutGantt, layoutJourney, layoutMindmap, layoutRequirementDiagram, layoutTimeline } from "@gmermaid/layout";
-import { parseArchitecture, parseGantt, parseJourney, parseMindmap, parseRequirementDiagram, parseTimeline, type ParseResult } from "@gmermaid/mermaid-parser";
-import { ArchitectureView, GanttView, JourneyView, MindmapView, RequirementView, TimelineView } from "@gmermaid/renderer";
+import { fixedWidthMeasurer, layoutArchitecture, layoutGantt, layoutJourney, layoutMindmap, layoutQuadrant, layoutRequirementDiagram, layoutTimeline } from "@gmermaid/layout";
+import { parseArchitecture, parseGantt, parseJourney, parseMindmap, parseQuadrant, parseRequirementDiagram, parseTimeline, type ParseResult } from "@gmermaid/mermaid-parser";
+import { ArchitectureView, GanttView, JourneyView, MindmapView, QuadrantView, RequirementView, TimelineView } from "@gmermaid/renderer";
 
 // The samples from mermaid's own docs, pasted in whole, reach the canvas:
 // parse → layout → the view's SVG. What the e2e suite used to check with a
@@ -64,7 +64,18 @@ describe("mermaid docs samples render", () => {
     expect(texts(root).some((t) => t.includes("<br"))).toBe(false);
   });
 
-  it("mindmap: every node, <br/> split over lines, the icon kept with its node", () => {
+  it("quadrant: a dot per point, the four quadrant labels, both axes and the title", () => {
+    const root = draw(<QuadrantView layout={layoutQuadrant(ok(parseQuadrant(QUADRANT)), measure)} viewState={{}} />);
+    // points are the only elements
+    expect(ids(root)).toBe(3);
+    expect(root.querySelectorAll("[data-element-id] circle").length).toBe(3);
+    for (const t of ["Reach and engagement of campaigns", "We should expand", "Need to promote", "Re-evaluate", "May be improved"]) {
+      expect(hasText(root, t), t).toBe(true);
+    }
+    for (const t of ["Low Reach", "High Reach", "Low Engagement", "High Engagement", "Campaign B"]) expect(hasText(root, t), t).toBe(true);
+  });
+
+  it("mindmap: every node,<br/> split over lines, the icon kept with its node", () => {
     const root = draw(<MindmapView layout={layoutMindmap(ok(parseMindmap(MINDMAP)), measure)} viewState={{}} />);
     // 15 nodes; the `::icon(…)` line decorates one of them instead of adding one
     expect(ids(root)).toBe(15);
@@ -131,6 +142,19 @@ const TIMELINE = `timeline
     section 21st century
         Industry 4.0 : Internet, Robotics, Internet of Things
         Industry 5.0 : Artificial intelligence, Big data, 3D printing
+`;
+
+const QUADRANT = `quadrantChart
+    title Reach and engagement of campaigns
+    x-axis Low Reach --> High Reach
+    y-axis Low Engagement --> High Engagement
+    quadrant-1 We should expand
+    quadrant-2 Need to promote
+    quadrant-3 Re-evaluate
+    quadrant-4 May be improved
+    Campaign A: [0.3, 0.6]
+    Campaign B: [0.45, 0.23]
+    Campaign C: [0.57, 0.69] radius: 20, color: #ff0000
 `;
 
 const MINDMAP = `mindmap

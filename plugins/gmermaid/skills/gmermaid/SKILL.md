@@ -18,7 +18,7 @@ Run it as `gmermaid` if installed, otherwise `npx -y @mr-akami/gmermaid`.
 1. **Write the diagram to a file**, e.g. `docs/design/<topic>.mmd`. One diagram
    per file. Pick the kind that fits: `flowchart`, `sequenceDiagram`,
    `classDiagram`, `stateDiagram-v2`, `requirementDiagram`, `journey`,
-   `timeline`, `gantt`, `mindmap`, `usecase-beta`, `erDiagram`, `architecture-beta`.
+   `timeline`, `gantt`, `mindmap`, `usecase-beta`, `erDiagram`, `quadrantChart`, `architecture-beta`.
 2. **Validate**: `gmermaid validate docs/design/<topic>.mmd`. Fix every
    `error` line (it names the line). A `warning` means the editor will drop
    that statement when the user edits (styling such as `classDef`/`style`) —

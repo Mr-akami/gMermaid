@@ -32,6 +32,7 @@ export type UsecaseRelationId = Id<"usecaseRelation">;
 export type MindmapNodeId = Id<"mindmapNode">;
 export type EntityId = Id<"entity">;
 export type AttributeId = Id<"attribute">;
+export type QuadrantPointId = Id<"quadrantPoint">;
 export type ArchGroupId = Id<"archGroup">;
 export type ArchServiceId = Id<"archService">;
 export type ArchJunctionId = Id<"archJunction">;
@@ -67,6 +68,7 @@ export type AnyId =
   | MindmapNodeId
   | EntityId
   | AttributeId
+  | QuadrantPointId
   | ArchGroupId
   | ArchServiceId
   | ArchJunctionId
@@ -103,6 +105,7 @@ export type IdKind =
   | "mindmapNode"
   | "entity"
   | "attribute"
+  | "quadrantPoint"
   | "archGroup"
   | "archService"
   | "archJunction"
@@ -150,6 +153,7 @@ export const ID_PREFIX = {
   mindmapNode: "mmn",
   entity: "ent",
   attribute: "atb",
+  quadrantPoint: "qpt",
   archGroup: "agp",
   archService: "asv",
   archJunction: "ajn",
