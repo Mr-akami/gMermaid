@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 import type { EditorShell } from "./useEditorShell";
+import { setCodePaneWidth, useCodePaneOpen, useCodePaneShortcut } from "./codePaneOpen";
 
 // Every editor's chrome, in three layers so the ten editors cannot drift
 // apart again:
@@ -49,6 +50,8 @@ export interface EditorToolbarProps {
 
 export function EditorToolbar({ shell, history, file, tools, settings, modes, selectionActions, prompt, notice, tip }: EditorToolbarProps) {
   const slots = useContext(AppBarContext);
+  const [codeOpen, setCodeOpen] = useCodePaneOpen();
+  useCodePaneShortcut(slots === null || slots.active);
   const fileButtons = file && (
     <>
       <button className="btn" onClick={file.open} aria-label="Open…" title="Open a .mmd file">
@@ -100,8 +103,35 @@ export function EditorToolbar({ shell, history, file, tools, settings, modes, se
           <button className="btn icon-only" aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
             <Icon name="fit" />
           </button>
+          <button
+            className="btn icon-only"
+            aria-label="Mermaid code pane"
+            aria-pressed={codeOpen}
+            title={codeOpen ? "Hide the Mermaid code pane (Ctrl+\\)" : "Show the Mermaid code pane (Ctrl+\\)"}
+            onClick={() => setCodeOpen(!codeOpen)}
+          >
+            <Icon name="sidebar" />
+          </button>
         </div>
       </div>
+      {codeOpen && (
+        <div
+          className="code-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize code pane"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            const move = (ev: PointerEvent) => setCodePaneWidth(window.innerWidth - ev.clientX);
+            const up = () => {
+              window.removeEventListener("pointermove", move);
+              window.removeEventListener("pointerup", up);
+            };
+            window.addEventListener("pointermove", move);
+            window.addEventListener("pointerup", up);
+          }}
+        />
+      )}
       <div className="canvas-float">
         {tip !== undefined && prompt === undefined && notice === undefined && <div className="float-tip">{tip}</div>}
         {prompt !== undefined && (

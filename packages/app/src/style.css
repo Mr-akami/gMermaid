@@ -200,11 +200,20 @@ kbd {
   grid-template-columns: minmax(0, 1fr) var(--code-w);
 }
 .editor.hidden { display: none; }
+:root[data-code-closed] .editor,
+:root[data-code-closed] .review-editor { grid-template-columns: minmax(0, 1fr) 0; }
+:root[data-code-closed] .editor > .code-pane, :root[data-code-closed] .editor > .code-tabs,
+:root[data-code-closed] .review-editor > .code-pane, :root[data-code-closed] .review-editor > .code-tabs { visibility: hidden; overflow: hidden; border-left: 0; }
 .editor > .toolbar, .review-editor > .toolbar { grid-area: 1 / 1; }
 .editor > .canvas, .review-editor > .canvas { grid-area: 2 / 1; }
 .editor > .canvas-float, .review-editor > .canvas-float { grid-area: 2 / 1; }
 .editor > .code-pane, .editor > .code-tabs,
 .review-editor > .code-pane, .review-editor > .code-tabs { grid-area: 1 / 2 / 3 / 3; }
+
+.editor > .code-resizer, .review-editor > .code-resizer {
+  grid-area: 1 / 2 / 3 / 3; justify-self: start; width: 8px; margin-left: -4px; z-index: 5; cursor: col-resize;
+}
+.code-resizer:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }
 
 .toolbar {
   display: flex;
