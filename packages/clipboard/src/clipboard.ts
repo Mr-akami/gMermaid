@@ -1,5 +1,6 @@
 import type { DiagramIR } from "@gmermaid/ir";
 import {
+  architectureToMermaid,
   classToMermaid,
   erToMermaid,
   flowchartToMermaid,
@@ -14,6 +15,7 @@ import {
 } from "@gmermaid/mermaid-codegen";
 import { detectDiagramKind, parseDiagram } from "@gmermaid/mermaid-parser";
 import type { KindClipboard } from "./kind";
+import { architectureClipboard } from "./architecture";
 import { classClipboard } from "./class";
 import { erClipboard } from "./er";
 import { flowchartClipboard } from "./flowchart";
@@ -97,6 +99,10 @@ import { usecaseClipboard } from "./usecase";
  *   induced relations come along. A selected usecase boundary pulls its
  *   members; a member whose boundary is not selected leaves it behind. Notes
  *   travel with their target.
+ * - **architecture** — a selected group pulls its sub-groups and members; a
+ *   selected edge pulls both ends. A member whose group is not selected leaves
+ *   the group behind (it lands at the top level); `{group}` edge flags that no
+ *   longer cross a border are settled away. Names share one name space.
  * - **journey** / **timeline** / **gantt** — the *opposite* containment rule
  *   to the graph kinds: a selected task/period/event keeps its `section`,
  *   pruned to the selected members. A section is these kinds' spine, and only
@@ -190,6 +196,10 @@ export function copySelection(ir: DiagramIR, ids: readonly string[]): string | u
       const s = usecaseClipboard.slice(ir, set);
       return s && usecaseToMermaid(s);
     }
+    case "architecture": {
+      const s = architectureClipboard.slice(ir, set);
+      return s && architectureToMermaid(s);
+    }
   }
 }
 
@@ -234,6 +244,7 @@ const CLIPBOARDS = {
   mindmap: mindmapClipboard,
   usecase: usecaseClipboard,
   er: erClipboard,
+  architecture: architectureClipboard,
 } as const;
 
 const KIND_LABEL = {
@@ -248,4 +259,5 @@ const KIND_LABEL = {
   mindmap: "mindmap",
   usecase: "use case diagram",
   er: "ER diagram",
+  architecture: "architecture diagram",
 } as const;

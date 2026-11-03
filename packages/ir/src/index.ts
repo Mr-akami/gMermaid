@@ -26,6 +26,8 @@ export * from "./gantt";
 export * from "./ganttActions";
 export * from "./er";
 export * from "./erActions";
+export * from "./architecture";
+export * from "./architectureActions";
 
 import type { ClassIR } from "./classdiagram";
 import type { FlowchartIR } from "./flowchart";
@@ -39,6 +41,7 @@ import type { UsecaseIR } from "./usecase";
 import type { MindmapIR } from "./mindmap";
 
 import type { GanttIR } from "./gantt";
+import type { ArchitectureIR } from "./architecture";
 
 import type { ErIR } from "./er";
 
@@ -53,5 +56,6 @@ export type DiagramIR =
   | GanttIR
   | MindmapIR
   | UsecaseIR
-  | ErIR;
+  | ErIR
+  | ArchitectureIR;
 

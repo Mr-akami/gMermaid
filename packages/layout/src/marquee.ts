@@ -10,6 +10,7 @@ import type { SequenceLayout } from "./sequenceResult";
 import type { StateLayout } from "./statediagram";
 import type { TimelineLayout } from "./timeline";
 import type { UsecaseLayout } from "./usecase";
+import type { ArchitectureLayout } from "./architecture";
 
 // Rubber-band selection. The band is a rectangle in DIAGRAM space, and the
 // answer is "every element it touches" — which the DOM cannot give us (an
@@ -33,6 +34,7 @@ export type DiagramLayout =
   | JourneyLayout
   | RequirementLayout
   | UsecaseLayout
+  | ArchitectureLayout
   | MindmapLayout
   | GanttLayout
   | ErLayout;
@@ -179,6 +181,12 @@ export function marqueeHits(layout: DiagramLayout, band: Rect): readonly string[
     case "er":
       for (const e of layout.edges) hits.path(e.id, e.points);
       for (const b of layout.boxes) hits.box(b.id, b.rect);
+      break;
+    case "architecture":
+      for (const g of layout.groups) hits.box(g.id, g.rect);
+      for (const e of layout.edges) hits.path(e.id, e.points);
+      for (const j of layout.junctions) hits.box(j.id, j.rect);
+      for (const s of layout.services) hits.box(s.id, s.rect);
       break;
     case "mindmap":
       for (const n of layout.nodes) hits.box(n.id, n.rect);

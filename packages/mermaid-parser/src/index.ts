@@ -8,6 +8,7 @@ export * from "./journey";
 export * from "./requirement";
 export * from "./er";
 export * from "./usecase";
+export * from "./architecture";
 export * from "./mindmap";
 export * from "./gantt";
 export * from "./registry";

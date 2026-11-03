@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { DIAGRAM_KINDS, type DiagramKind } from "@gmermaid/mermaid-parser";
+import { ArchitectureEditor } from "./ArchitectureEditor";
 import { ClassEditor } from "./ClassEditor";
 import { ErEditor } from "./ErEditor";
 import type { EditorRuntimeProps } from "./editorRuntime";
@@ -42,6 +43,7 @@ export const DIAGRAMS: readonly DiagramDef[] = [
   { kind: "journey", label: "Journey", Editor: JourneyEditor },
   { kind: "requirement", label: "Requirement", Editor: RequirementEditor },
   { kind: "usecase", label: "Usecase", Editor: UsecaseEditor },
+  { kind: "architecture", label: "Architecture", Editor: ArchitectureEditor },
   { kind: "mindmap", label: "Mindmap", Editor: MindmapEditor },
   { kind: "gantt", label: "Gantt", Editor: GanttEditor },
   { kind: "er", label: "ER", Editor: ErEditor },

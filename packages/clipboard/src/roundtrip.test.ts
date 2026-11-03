@@ -3,6 +3,7 @@ import type { DiagramIR } from "@gmermaid/ir";
 import { ID_PREFIX } from "@gmermaid/ir";
 import { parseDiagram, type DiagramKind } from "@gmermaid/mermaid-parser";
 import {
+  architectureToMermaid,
   classToMermaid,
   erToMermaid,
   flowchartToMermaid,
@@ -47,6 +48,8 @@ function emit(ir: DiagramIR): string {
       return erToMermaid(ir);
     case "usecase":
       return usecaseToMermaid(ir);
+    case "architecture":
+      return architectureToMermaid(ir);
   }
 }
 

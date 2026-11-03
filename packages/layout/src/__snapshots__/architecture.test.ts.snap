@@ -1,0 +1,190 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutArchitecture > matches the committed golden layout 1`] = `
+{
+  "edges": [
+    {
+      "arrowFrom": false,
+      "arrowTo": false,
+      "fromSide": "L",
+      "id": "e1",
+      "points": [
+        {
+          "x": 268,
+          "y": 274,
+        },
+        {
+          "x": 154,
+          "y": 274,
+        },
+      ],
+      "toSide": "R",
+    },
+    {
+      "arrowFrom": false,
+      "arrowTo": false,
+      "fromSide": "T",
+      "id": "e2",
+      "points": [
+        {
+          "x": 300,
+          "y": 406,
+        },
+        {
+          "x": 300,
+          "y": 328,
+        },
+      ],
+      "toSide": "B",
+    },
+    {
+      "arrowFrom": false,
+      "arrowTo": false,
+      "fromSide": "T",
+      "id": "e3",
+      "points": [
+        {
+          "x": 122,
+          "y": 242,
+        },
+        {
+          "x": 122,
+          "y": 74,
+        },
+      ],
+      "toSide": "B",
+    },
+    {
+      "arrowFrom": false,
+      "arrowTo": true,
+      "fromSide": "R",
+      "id": "e4",
+      "label": "reads",
+      "labelPos": {
+        "x": 282,
+        "y": 63,
+      },
+      "points": [
+        {
+          "x": 128,
+          "y": 68,
+        },
+        {
+          "x": 446,
+          "y": 68,
+        },
+      ],
+      "toSide": "L",
+    },
+  ],
+  "groups": [
+    {
+      "icon": "cloud",
+      "id": "api",
+      "label": "API",
+      "rect": {
+        "h": 328,
+        "w": 328,
+        "x": 36,
+        "y": 182,
+      },
+    },
+    {
+      "id": "inner",
+      "label": "Inner",
+      "rect": {
+        "h": 134,
+        "w": 128,
+        "x": 58,
+        "y": 212,
+      },
+    },
+  ],
+  "junctions": [
+    {
+      "id": "fork",
+      "rect": {
+        "h": 12,
+        "w": 12,
+        "x": 116,
+        "y": 62,
+      },
+    },
+  ],
+  "kind": "architecture",
+  "services": [
+    {
+      "icon": "database",
+      "iconRect": {
+        "h": 64,
+        "w": 64,
+        "x": 268,
+        "y": 242,
+      },
+      "id": "db",
+      "label": "Database",
+      "rect": {
+        "h": 86,
+        "w": 84,
+        "x": 258,
+        "y": 242,
+      },
+    },
+    {
+      "icon": "server",
+      "iconRect": {
+        "h": 64,
+        "w": 64,
+        "x": 90,
+        "y": 242,
+      },
+      "id": "server",
+      "label": "Server",
+      "rect": {
+        "h": 86,
+        "w": 84,
+        "x": 80,
+        "y": 242,
+      },
+    },
+    {
+      "icon": "disk",
+      "iconRect": {
+        "h": 64,
+        "w": 64,
+        "x": 268,
+        "y": 406,
+      },
+      "id": "disk",
+      "label": "Storage",
+      "rect": {
+        "h": 86,
+        "w": 84,
+        "x": 258,
+        "y": 406,
+      },
+    },
+    {
+      "icon": "internet",
+      "iconRect": {
+        "h": 64,
+        "w": 64,
+        "x": 446,
+        "y": 36,
+      },
+      "id": "gw",
+      "label": "Gateway",
+      "rect": {
+        "h": 86,
+        "w": 84,
+        "x": 436,
+        "y": 36,
+      },
+    },
+  ],
+  "size": {
+    "h": 546,
+    "w": 556,
+  },
+}
+`;

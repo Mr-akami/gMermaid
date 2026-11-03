@@ -20,6 +20,7 @@ const SAMPLE: Record<DiagramKind, (stmt: string) => string> = {
   mindmap: (s) => `mindmap\n  root((r))\n    a\n${s}\n`,
   usecase: (s) => `usecase-beta\n  actor A\n  A --> Checkout\n  ${s}\n`,
   er: (s) => `erDiagram\n  A {\n    int id PK\n  }\n  A ||--o{ B : has\n  ${s}\n`,
+  architecture: (s) => `architecture-beta\n  service a(server)[A]\n  service b(server)[B]\n  a:R -- L:b\n  ${s}\n`,
 };
 
 /** One real-world spelling per shared keyword. */
