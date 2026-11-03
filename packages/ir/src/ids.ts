@@ -37,6 +37,8 @@ export type ArchGroupId = Id<"archGroup">;
 export type ArchServiceId = Id<"archService">;
 export type ArchJunctionId = Id<"archJunction">;
 export type ArchEdgeId = Id<"archEdge">;
+export type GitBranchId = Id<"gitBranch">;
+export type GitCommitId = Id<"gitCommit">;
 
 export type AnyId =
   | NodeId
@@ -72,7 +74,9 @@ export type AnyId =
   | ArchGroupId
   | ArchServiceId
   | ArchJunctionId
-  | ArchEdgeId;
+  | ArchEdgeId
+  | GitBranchId
+  | GitCommitId;
 
 /** Every element kind that mints ids. */
 export type IdKind =
@@ -109,7 +113,9 @@ export type IdKind =
   | "archGroup"
   | "archService"
   | "archJunction"
-  | "archEdge";
+  | "archEdge"
+  | "gitBranch"
+  | "gitCommit";
 
 /**
  * Text prefix per element kind. Ids are exchange identity: several kinds are
@@ -158,6 +164,8 @@ export const ID_PREFIX = {
   archService: "asv",
   archJunction: "ajn",
   archEdge: "aed",
+  gitBranch: "gbr",
+  gitCommit: "gcm",
 } as const satisfies Record<IdKind, string>;
 
 /**

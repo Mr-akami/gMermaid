@@ -4,6 +4,7 @@ import {
   applyClassAction,
   applyFlowchartAction,
   applyGanttAction,
+  applyGitGraphAction,
   applyJourneyAction,
   applyMindmapAction,
   applyErAction,
@@ -17,6 +18,7 @@ import {
   emptyClassDiagram,
   emptyFlowchart,
   emptyErDiagram,
+  GIT_MAIN_BRANCH,
   emptyRequirementDiagram,
   findEventPosition,
   mindmapRoot,
@@ -25,6 +27,8 @@ import {
   newStateId,
   newTaskId,
   type EventId,
+  type GitBranchId,
+  type GitCommitId,
   type MindmapNodeId,
   type QuadrantPointId,
   type SectionId,
@@ -32,6 +36,7 @@ import {
 import {
   parseFlowchart,
   parseGantt,
+  parseGitGraph,
   parseJourney,
   parseMindmap,
   parseQuadrant,
@@ -50,6 +55,7 @@ import mermaid from "mermaid";
 import { classToMermaid } from "./classdiagram";
 import { flowchartToMermaid } from "./flowchart";
 import { ganttToMermaid } from "./gantt";
+import { gitGraphToMermaid } from "./gitgraph";
 import { journeyToMermaid } from "./journey";
 import { mindmapToMermaid } from "./mindmap";
 import { erToMermaid } from "./er";
@@ -405,6 +411,45 @@ function timelineCases(): Cases {
   };
 }
 
+// ----------------------------------------------------------------- gitGraph
+
+const GITGRAPH_SAMPLE = `gitGraph
+  commit id: "init"
+  commit id: "base" tag: "v0.1"
+  branch develop
+  commit id: "wip"
+  commit id: "tests"
+  checkout main
+  merge develop id: "release" tag: "v1.0"
+  commit
+`;
+
+function gitGraphCases(): Cases {
+  const parsed = parseGitGraph(GITGRAPH_SAMPLE);
+  if (!parsed.ok) throw new Error("git graph sample does not parse");
+  const sample = parsed.ir;
+
+  // mirrors addBranch() / addCommit() / mergeInto() / cherryPick() in the editor
+  let built = sample;
+  const branch: GitBranchId = newId("gitBranch");
+  built = applyGitGraphAction(built, { type: "addStep", step: { type: "branch", id: branch, name: "branch1", from: GIT_MAIN_BRANCH } });
+  const commit: GitCommitId = newId("gitCommit");
+  built = applyGitGraphAction(built, { type: "addStep", step: { type: "commit", id: commit, branch, tags: [], commitType: "NORMAL" } });
+  built = applyGitGraphAction(built, { type: "addStep", step: { type: "merge", id: newId("gitCommit"), branch: GIT_MAIN_BRANCH, from: branch, tags: [], commitType: "NORMAL" } });
+  const picked = applyGitGraphAction(built, {
+    type: "addStep",
+    step: { type: "cherryPick", id: newId("gitCommit"), branch, source: "commit-6" as GitCommitId, tags: [] },
+  });
+  const direction = applyGitGraphAction(sample, { type: "setDirection", direction: "TB" });
+
+  return {
+    sample: gitGraphToMermaid(sample),
+    "branch, commit and merge from the toolbar": gitGraphToMermaid(built),
+    "a cherry-pick of a commit with no id of its own": gitGraphToMermaid(picked),
+    "top to bottom": gitGraphToMermaid(direction),
+  };
+}
+
 // -------------------------------------------------------------------- gantt
 
 const GANTT_SAMPLE = `gantt
@@ -695,6 +740,7 @@ const CASES: Record<DiagramKind, () => Cases> = {
   er: erCases,
   quadrant: quadrantCases,
   architecture: architectureCases,
+  gitGraph: gitGraphCases,
 };
 
 describe("mermaid.js accepts what the editors build", () => {

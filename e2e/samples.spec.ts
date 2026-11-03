@@ -20,6 +20,7 @@ const KINDS: ReadonlyArray<readonly [Kind, RegExp]> = [
   ["Gantt", /^gantt/],
   ["ER", /^erDiagram/],
   ["Quadrant", /^quadrantChart/],
+  ["Git graph", /^gitGraph/],
 ];
 
 for (const [kind, head] of KINDS) {

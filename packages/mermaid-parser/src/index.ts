@@ -12,4 +12,5 @@ export * from "./architecture";
 export * from "./mindmap";
 export * from "./quadrant";
 export * from "./gantt";
+export * from "./gitgraph";
 export * from "./registry";

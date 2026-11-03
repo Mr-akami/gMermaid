@@ -22,6 +22,7 @@ const SAMPLE: Record<DiagramKind, (stmt: string) => string> = {
   er: (s) => `erDiagram\n  A {\n    int id PK\n  }\n  A ||--o{ B : has\n  ${s}\n`,
   quadrant: (s) => `quadrantChart\n  title T\n  A: [0.5, 0.5]\n  ${s}\n`,
   architecture: (s) => `architecture-beta\n  service a(server)[A]\n  service b(server)[B]\n  a:R -- L:b\n  ${s}\n`,
+  gitGraph: (s) => `gitGraph\n  commit\n  branch dev\n  commit\n  ${s}\n`,
 };
 
 /** One real-world spelling per shared keyword. */
