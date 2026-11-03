@@ -1,6 +1,6 @@
 # Mermaid coverage roadmap (2026-09-21)
 
-**All phases below are merged.** gMermaid supports nine diagram kinds; the
+**All phases below are merged.** gMermaid supports thirteen diagram kinds; the
 README table is the user-facing summary, this file keeps the per-kind
 decisions and the deliberate gaps.
 
@@ -116,6 +116,34 @@ window, registry entry, mermaid.js integration test, e2e spec.
   cardinalities (`one or more`, `only one`, `1+`, …) and attribute types
   containing spaces or commas (`decimal(10,2)`).
 
+### Git graph (done)
+- `gitGraph` with `commit` (`id`, `msg`, `tag`s, `type: NORMAL | REVERSE |
+  HIGHLIGHT`), `branch` (`order`), `checkout` / `switch`, `merge` (`id`,
+  `tag`, `type`), `cherry-pick` (`id`, `parent`, `tag`), and the `LR` / `TB` /
+  `BT` header.
+- Mermaid's text is a script run against a "current branch". The IR keeps the
+  script's order as a step list, but every step names its branch, and codegen
+  derives the `checkout` lines (so `switch` / redundant `checkout` normalize
+  on save). `resolveGitGraph` in `packages/ir` is the one simulator: it
+  mirrors mermaid's own checks (merge into itself, same head, cherry-pick
+  from the branch you are on, a merge source needs a `parent`, …) and is
+  used by the reducer (an edit that leaves an unrunnable script is refused,
+  with the reason), the parser (the error carries the offending line),
+  layout (parents, lanes) and clipboard. A test holds the simulator against
+  mermaid's own diagram database (parents, branch, commit type, lane order)
+  and checks both refuse the same scripts.
+- Lanes sort by `order` (none = 0) then declaration, as mermaid does. Layout
+  is arithmetic: one slot per commit along the time axis, one lane per branch.
+- Left out (tolerated on import, dropped with a warning): `title`,
+  `accTitle` / `accDescr`, styling statements. Config in frontmatter /
+  `%%{init}%%` (`mainBranchName`, `showBranches`, `parallelCommits`, themes)
+  is skipped like for every kind, so a renamed main branch is not honored.
+  A cherry-pick has no id in mermaid, so it cannot itself be cherry-picked;
+  commit ids must be unique (mermaid silently overwrites a duplicate). Text
+  holding both `"` and `'` cannot be quoted and is refused.
+- A commit a cherry-pick names but that carries no `id` is given a minted
+  `c<n>` on save, since mermaid can only address a commit by id.
+
 ## Phase 4 — polish (done)
 - README coverage table; the MCP tool description is generated from
   `DIAGRAM_KINDS` so a new kind no longer needs a prose edit.
@@ -172,7 +200,7 @@ windows, registry, mermaid.js integration test, e2e spec).
   out in a graph of their own, so none of them is a dagre cluster and none
   pays the border-rank tax.
 - Diagram kinds mermaid supports that gMermaid does not draw yet: ER, pie,
-  git graph, block, C4, sankey, xychart, radar, packet, kanban,
+  block, C4, sankey, xychart, radar, packet, kanban,
   architecture and treemap. Each would be another vertical slice; the
   registry in `packages/mermaid-parser/src/registry.ts` plus
   `packages/app/src/diagrams.tsx` is where one gets plugged in.

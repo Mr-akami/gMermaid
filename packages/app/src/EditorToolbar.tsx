@@ -167,21 +167,33 @@ export function DeleteButton({ onClick, label = "Delete" }: { readonly onClick: 
 }
 
 /** The direction select four editors share. */
+const ALL_DIRECTIONS = ["TB", "LR", "BT", "RL"] as const;
+const DIRECTION_LABEL = {
+  TB: "Top → Bottom",
+  LR: "Left → Right",
+  BT: "Bottom → Top",
+  RL: "Right → Left",
+} as const;
+
 export function DirectionSelect<D extends "TB" | "LR" | "BT" | "RL">({
   value,
   onChange,
+  options,
 }: {
   readonly value: D;
   readonly onChange: (d: D) => void;
+  /** A diagram that cannot flow every way (git graph has no RL) lists its own. */
+  readonly options?: readonly D[];
 }) {
   return (
     <label className="toolbar-field">
       <span>Direction</span>
       <select aria-label="Direction" value={value} onChange={(e) => onChange(e.target.value as D)}>
-        <option value="TB">Top → Bottom</option>
-        <option value="LR">Left → Right</option>
-        <option value="BT">Bottom → Top</option>
-        <option value="RL">Right → Left</option>
+        {((options ?? ALL_DIRECTIONS) as readonly D[]).map((d) => (
+          <option key={d} value={d}>
+            {DIRECTION_LABEL[d]}
+          </option>
+        ))}
       </select>
     </label>
   );

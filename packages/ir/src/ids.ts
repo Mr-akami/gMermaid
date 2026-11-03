@@ -33,6 +33,8 @@ export type MindmapNodeId = Id<"mindmapNode">;
 export type EntityId = Id<"entity">;
 export type AttributeId = Id<"attribute">;
 export type QuadrantPointId = Id<"quadrantPoint">;
+export type GitBranchId = Id<"gitBranch">;
+export type GitCommitId = Id<"gitCommit">;
 
 export type AnyId =
   | NodeId
@@ -64,7 +66,9 @@ export type AnyId =
   | MindmapNodeId
   | EntityId
   | AttributeId
-  | QuadrantPointId;
+  | QuadrantPointId
+  | GitBranchId
+  | GitCommitId;
 
 /** Every element kind that mints ids. */
 export type IdKind =
@@ -97,7 +101,9 @@ export type IdKind =
   | "mindmapNode"
   | "entity"
   | "attribute"
-  | "quadrantPoint";
+  | "quadrantPoint"
+  | "gitBranch"
+  | "gitCommit";
 
 /**
  * Text prefix per element kind. Ids are exchange identity: several kinds are
@@ -142,6 +148,8 @@ export const ID_PREFIX = {
   entity: "ent",
   attribute: "atb",
   quadrantPoint: "qpt",
+  gitBranch: "gbr",
+  gitCommit: "gcm",
 } as const satisfies Record<IdKind, string>;
 
 /**

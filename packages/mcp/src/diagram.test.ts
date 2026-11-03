@@ -12,6 +12,7 @@ describe("validateDiagram", () => {
     ["timeline", "timeline\n  2002 : LinkedIn"],
     ["quadrant", "quadrantChart\n  \"A\": [0.3, 0.6]"],
     ["gantt", "gantt\n  section S\n  A task :a1, 2014-01-01, 30d"],
+    ["gitGraph", "gitGraph\n  commit\n  branch dev\n  commit"],
   ] as const)("accepts a supported %s", (kind, code) => {
     expect(validateDiagram(code)).toEqual({ ok: true, kind });
   });

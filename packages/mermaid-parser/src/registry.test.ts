@@ -13,6 +13,8 @@ describe("detectDiagramKind", () => {
     expect(detectDiagramKind("timeline\n  2002 : LinkedIn")).toBe("timeline");
     expect(detectDiagramKind("erDiagram\nA ||--o{ B : x")).toBe("er");
     expect(detectDiagramKind("quadrantChart\n  A: [0.1, 0.2]")).toBe("quadrant");
+    expect(detectDiagramKind("gitGraph\n commit")).toBe("gitGraph");
+    expect(detectDiagramKind("gitGraph TB:\n commit")).toBe("gitGraph");
     expect(detectDiagramKind("pie\n")).toBeUndefined();
   });
   it("skips frontmatter, comments and init directives", () => {

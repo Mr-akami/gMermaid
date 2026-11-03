@@ -4,6 +4,7 @@ import {
   erToMermaid,
   flowchartToMermaid,
   ganttToMermaid,
+  gitGraphToMermaid,
   journeyToMermaid,
   mindmapToMermaid,
   quadrantToMermaid,
@@ -19,6 +20,7 @@ import { classClipboard } from "./class";
 import { erClipboard } from "./er";
 import { flowchartClipboard } from "./flowchart";
 import { ganttClipboard } from "./gantt";
+import { gitGraphClipboard } from "./gitgraph";
 import { journeyClipboard } from "./journey";
 import { mindmapClipboard } from "./mindmap";
 import { quadrantClipboard } from "./quadrant";
@@ -107,6 +109,12 @@ import { usecaseClipboard } from "./usecase";
  *   members. Gantt additionally closes over dependencies: `after a b` /
  *   `until a b` name other tasks, so those tasks (and their sections) are
  *   pulled in transitively — a gantt dependency is an edge like any other.
+ * - **gitGraph** — a git graph is a script mermaid runs, so a slice must
+ *   still run: a selected commit pulls the `branch` line that makes its
+ *   branch, a merge the heads it joins, a cherry-pick its source; a selected
+ *   branch pulls its lane. A closure mermaid would still refuse is answered
+ *   with `undefined`. Paste appends after the existing history (the
+ *   incoming `main` is the target's `main`).
  * - **mindmap** — a selected node pulls its whole subtree. A mindmap is a
  *   *single rooted tree*, so a selection that closes to two or more disjoint
  *   subtrees cannot be expressed at all: that is the one selection this
@@ -201,6 +209,10 @@ export function copySelection(ir: DiagramIR, ids: readonly string[]): string | u
       const s = quadrantClipboard.slice(ir, set);
       return s && quadrantToMermaid(s);
     }
+    case "gitGraph": {
+      const s = gitGraphClipboard.slice(ir, set);
+      return s && gitGraphToMermaid(s);
+    }
   }
 }
 
@@ -246,6 +258,7 @@ const CLIPBOARDS = {
   usecase: usecaseClipboard,
   er: erClipboard,
   quadrant: quadrantClipboard,
+  gitGraph: gitGraphClipboard,
 } as const;
 
 const KIND_LABEL = {
@@ -261,4 +274,5 @@ const KIND_LABEL = {
   usecase: "use case diagram",
   er: "ER diagram",
   quadrant: "quadrant chart",
+  gitGraph: "git graph",
 } as const;

@@ -11,4 +11,5 @@ export * from "./usecase";
 export * from "./mindmap";
 export * from "./quadrant";
 export * from "./gantt";
+export * from "./gitgraph";
 export * from "./registry";

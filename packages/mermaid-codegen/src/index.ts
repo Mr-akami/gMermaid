@@ -10,3 +10,4 @@ export * from "./usecase";
 export * from "./mindmap";
 export * from "./gantt";
 export * from "./quadrant";
+export * from "./gitgraph";
