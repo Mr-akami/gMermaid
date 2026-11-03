@@ -1,4 +1,4 @@
-import type { ClassIR, ErIR, FlowchartIR, GanttIR, GitGraphIR, JourneyIR, MindmapIR, QuadrantIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
+import type { ArchitectureIR, ClassIR, ErIR, FlowchartIR, GanttIR, GitGraphIR, JourneyIR, MindmapIR, QuadrantIR, RequirementIR, SequenceIR, StateIR, TimelineIR, UsecaseIR } from "@gmermaid/ir";
 import { parseClassDiagram } from "./classdiagram";
 import { firstStatement, type ParseResult } from "./common";
 import { parseErDiagram } from "./er";
@@ -13,11 +13,12 @@ import { parseSequence } from "./sequence";
 import { parseStateDiagram } from "./statediagram";
 import { parseTimeline } from "./timeline";
 import { parseUsecase } from "./usecase";
+import { parseArchitecture } from "./architecture";
 
 // One place that knows every diagram kind gMermaid supports. Adding a
 // diagram = add it here, then register its editor in packages/app.
 
-export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "gantt", "mindmap", "usecase", "er", "quadrant", "gitGraph"] as const;
+export const DIAGRAM_KINDS = ["flowchart", "sequence", "class", "state", "requirement", "journey", "timeline", "gantt", "mindmap", "usecase", "er", "quadrant", "gitGraph", "architecture"] as const;
 export type DiagramKind = (typeof DIAGRAM_KINDS)[number];
 
 export type AnyIR =
@@ -33,6 +34,7 @@ export type AnyIR =
   | UsecaseIR
   | ErIR
   | QuadrantIR
+  | ArchitectureIR
   | GitGraphIR;
 
 
@@ -50,6 +52,7 @@ const HEADERS: Record<DiagramKind, readonly string[]> = {
   usecase: ["usecase-beta", "usecase"],
   mindmap: ["mindmap"],
   er: ["erDiagram"],
+  architecture: ["architecture-beta"],
   gantt: ["gantt"],
   quadrant: ["quadrantChart"],
   gitGraph: ["gitGraph"],
@@ -79,6 +82,8 @@ export function parseDiagram(kind: DiagramKind, code: string): ParseResult<AnyIR
       return parseJourney(code);
     case "requirement":
       return parseRequirementDiagram(code);
+    case "architecture":
+      return parseArchitecture(code);
     case "usecase":
       return parseUsecase(code);
     case "mindmap":

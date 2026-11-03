@@ -1,6 +1,6 @@
 # Mermaid coverage roadmap (2026-09-21)
 
-**All phases below are merged.** gMermaid supports thirteen diagram kinds; the
+**All phases below are merged.** gMermaid supports fourteen diagram kinds; the
 README table is the user-facing summary, this file keeps the per-kind
 decisions and the deliberate gaps.
 
@@ -80,6 +80,8 @@ shared by every kind (`STYLING_STATEMENTS`) and every drop is reported as a
 Wave 1: Gantt, Requirement, User Journey.
 Wave 2: Mindmap, Timeline, Usecase (`usecase-beta`, needs mermaid ≥ 12 for
 validation — the dev dependency was bumped to 12.0.0).
+Wave 3: ER, Architecture (`architecture-beta`; the mermaid 12.0.0 already in
+the repo ships it, so no dependency bump).
 Each: IR + actions, parser, codegen, layout, renderer, editor + property
 window, registry entry, mermaid.js integration test, e2e spec.
 
@@ -115,6 +117,33 @@ window, registry entry, mermaid.js integration test, e2e spec.
   `class` / `style` / `click` / `:::`. Not parsed: the spelled-out
   cardinalities (`one or more`, `only one`, `1+`, …) and attribute types
   containing spaces or commas (`decimal(10,2)`).
+### Architecture (done)
+- Groups (nested through `in`), services with `(icon)` and `[title]`,
+  junctions, and edges `a:R -- L:b` with a port side (T/B/L/R) at each end,
+  `<` / `>` arrowheads, `-[title]-` edge titles and the `{group}` modifier
+  (the edge ends on the border of the node's group).
+- Port sides are IR data (`fromSide` / `toSide`); coordinates are not. The
+  layout is mermaid's own idea: a grid in which an edge's sides say which
+  neighbouring cell the target takes (`R`/`L` one cell right, `R`/`T` one
+  right and one down). Each group is laid out as a grid of its own and enters
+  its parent as one cell, so edges between groups constrain the groups.
+  Columns and rows line up on the point an edge meets, so a node in a group
+  and one outside it are level when joined. Conflicting constraints (two
+  edges asking for the same cell) fall back to the nearest free cell, so a
+  side is honoured wherever the grid has room, not always.
+- What mermaid refuses, the reducer refuses too: one name space for groups,
+  services and junctions, a parent group declared first (codegen orders
+  groups parent-first whatever the stored order), no edge to a group id
+  (mermaid's own db crashes on it; use `member{group}`), no self edge, and
+  `{group}` only where the two ends sit in different groups (the reducer and
+  the parser drop a flag that would not cross a border).
+- The round trip is checked against mermaid's own architecture db (groups,
+  nodes, parents, icons, each end's side / arrow / group flag), not only its
+  parser.
+- Left out (tolerated on import, dropped with a warning): `title`,
+  `accTitle` / `accDescr`, and `align row|column ...` layout hints. Icons from
+  an icon pack (`logos:aws`) are carried but drawn as a plain tile, since the
+  editor has no pack loaded.
 
 ### Git graph (done)
 - `gitGraph` with `commit` (`id`, `msg`, `tag`s, `type: NORMAL | REVERSE |
@@ -199,8 +228,8 @@ windows, registry, mermaid.js integration test, e2e spec).
   composites, class namespaces and usecase system boundaries are each laid
   out in a graph of their own, so none of them is a dagre cluster and none
   pays the border-rank tax.
-- Diagram kinds mermaid supports that gMermaid does not draw yet: ER, pie,
-  block, C4, sankey, xychart, radar, packet, kanban,
-  architecture and treemap. Each would be another vertical slice; the
+- Diagram kinds mermaid supports that gMermaid does not draw yet: pie,
+  block, C4, sankey, xychart, radar, packet, kanban
+  and treemap. Each would be another vertical slice; the
   registry in `packages/mermaid-parser/src/registry.ts` plus
   `packages/app/src/diagrams.tsx` is where one gets plugged in.

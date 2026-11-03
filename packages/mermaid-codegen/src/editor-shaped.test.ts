@@ -14,6 +14,7 @@ import {
   applyStateAction,
   applyTimelineAction,
   applyUsecaseAction,
+  applyArchitectureAction,
   emptyClassDiagram,
   emptyFlowchart,
   emptyErDiagram,
@@ -43,6 +44,7 @@ import {
   parseStateDiagram,
   parseTimeline,
   parseUsecase,
+  parseArchitecture,
   DIAGRAM_KINDS,
   FLOWCHART_RESERVED_IDS,
   SEQUENCE_RESERVED_IDS,
@@ -63,6 +65,7 @@ import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
 import { timelineToMermaid } from "./timeline";
 import { usecaseToMermaid } from "./usecase";
+import { architectureToMermaid } from "./architecture";
 
 // C4, one layer below mermaid-integration.test.ts: that file proves hand
 // written IRs (friendly ids like `a`, `t1`) survive mermaid.js. Nothing
@@ -597,6 +600,51 @@ function usecaseCases(): Cases {
   };
 }
 
+// ------------------------------------------------------------ architecture
+
+const ARCHITECTURE_SAMPLE = `architecture-beta
+  group api(cloud)["API"]
+  service db(database)["Database"] in api
+  service server(server)["Server"] in api
+  service gateway(internet)["Gateway"]
+  junction fork
+  db:L -- R:server
+  server:T -- B:fork
+  fork:R -["reads"]-> L:gateway
+`;
+
+function architectureCases(): Cases {
+  const parsed = parseArchitecture(ARCHITECTURE_SAMPLE);
+  if (!parsed.ok) throw new Error("architecture sample does not parse");
+  const sample = parsed.ir;
+
+  // mirrors addService() / addGroup() / addJunction() / connect()
+  let built = sample;
+  const service = newId("archService");
+  const junction = newId("archJunction");
+  const group = newId("archGroup");
+  built = applyArchitectureAction(built, { type: "addService", service: { id: service, name: "service1", icon: "server" } });
+  built = applyArchitectureAction(built, { type: "addJunction", junction: { id: junction, name: "junction1" } });
+  built = applyArchitectureAction(built, {
+    type: "addEdge",
+    edge: { id: newId("archEdge"), from: service, to: junction, fromSide: "R", toSide: "L", arrowFrom: false, arrowTo: true },
+  });
+  built = applyArchitectureAction(built, { type: "addGroup", group: { id: group, name: "group1", label: "Group", icon: "cloud" } });
+
+  // a member moves into the new group and an edge then crosses its border
+  let crossing = built;
+  crossing = applyArchitectureAction(crossing, { type: "setNodeGroup", id: service, group });
+  crossing = applyArchitectureAction(crossing, { type: "setGroupParent", id: group, parent: sample.groups[0]!.id });
+  const edge = crossing.edges.find((e) => e.from === service)!;
+  crossing = applyArchitectureAction(crossing, { type: "updateEdge", id: edge.id, groupFrom: true, label: "to the border" });
+
+  return {
+    sample: architectureToMermaid(sample),
+    "toolbar adds + edge": architectureToMermaid(built),
+    "nested group, edge to its border": architectureToMermaid(crossing),
+  };
+}
+
 // A flowchart saved before ID_PREFIX existed: our own parser reads these ids
 // happily, so the editor opens the file — and then emits text mermaid cannot
 // read. Importing repairs it, so re-saving fixes the file for good.
@@ -691,6 +739,7 @@ const CASES: Record<DiagramKind, () => Cases> = {
   usecase: usecaseCases,
   er: erCases,
   quadrant: quadrantCases,
+  architecture: architectureCases,
   gitGraph: gitGraphCases,
 };
 

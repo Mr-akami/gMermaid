@@ -33,6 +33,10 @@ export type MindmapNodeId = Id<"mindmapNode">;
 export type EntityId = Id<"entity">;
 export type AttributeId = Id<"attribute">;
 export type QuadrantPointId = Id<"quadrantPoint">;
+export type ArchGroupId = Id<"archGroup">;
+export type ArchServiceId = Id<"archService">;
+export type ArchJunctionId = Id<"archJunction">;
+export type ArchEdgeId = Id<"archEdge">;
 export type GitBranchId = Id<"gitBranch">;
 export type GitCommitId = Id<"gitCommit">;
 
@@ -67,6 +71,10 @@ export type AnyId =
   | EntityId
   | AttributeId
   | QuadrantPointId
+  | ArchGroupId
+  | ArchServiceId
+  | ArchJunctionId
+  | ArchEdgeId
   | GitBranchId
   | GitCommitId;
 
@@ -102,6 +110,10 @@ export type IdKind =
   | "entity"
   | "attribute"
   | "quadrantPoint"
+  | "archGroup"
+  | "archService"
+  | "archJunction"
+  | "archEdge"
   | "gitBranch"
   | "gitCommit";
 
@@ -148,6 +160,10 @@ export const ID_PREFIX = {
   entity: "ent",
   attribute: "atb",
   quadrantPoint: "qpt",
+  archGroup: "agp",
+  archService: "asv",
+  archJunction: "ajn",
+  archEdge: "aed",
   gitBranch: "gbr",
   gitCommit: "gcm",
 } as const satisfies Record<IdKind, string>;

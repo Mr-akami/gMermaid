@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { fixedWidthMeasurer, layoutGantt, layoutGitGraph, layoutJourney, layoutMindmap, layoutQuadrant, layoutRequirementDiagram, layoutTimeline } from "@gmermaid/layout";
-import { parseGantt, parseGitGraph, parseJourney, parseMindmap, parseQuadrant, parseRequirementDiagram, parseTimeline, type ParseResult } from "@gmermaid/mermaid-parser";
-import { GanttView, GitGraphView, JourneyView, MindmapView, QuadrantView, RequirementView, TimelineView } from "@gmermaid/renderer";
+import { fixedWidthMeasurer, layoutArchitecture, layoutGantt, layoutGitGraph, layoutJourney, layoutMindmap, layoutQuadrant, layoutRequirementDiagram, layoutTimeline } from "@gmermaid/layout";
+import { parseArchitecture, parseGantt, parseGitGraph, parseJourney, parseMindmap, parseQuadrant, parseRequirementDiagram, parseTimeline, type ParseResult } from "@gmermaid/mermaid-parser";
+import { ArchitectureView, GanttView, GitGraphView, JourneyView, MindmapView, QuadrantView, RequirementView, TimelineView } from "@gmermaid/renderer";
 
 // The samples from mermaid's own docs, pasted in whole, reach the canvas:
 // parse → layout → the view's SVG. What the e2e suite used to check with a
@@ -108,6 +108,16 @@ describe("mermaid docs samples render", () => {
     expect(box("relation-1")).toContain("«satisfies»");
     // the mirrored `test_req <- copies - test_entity2` becomes an ordinary edge
     expect(box("relation-8")).toContain("«copies»");
+  });
+
+  it("architecture: the group, a service per icon, an edge per line, drawn with its title and captions", () => {
+    const root = draw(<ArchitectureView layout={layoutArchitecture(ok(parseArchitecture(ARCHITECTURE)), measure)} viewState={{}} />);
+    // 1 group + 4 services + 3 edges
+    expect(ids(root)).toBe(8);
+    expect(ids(root, "g[data-drag='connect']")).toBe(4);
+    expect(hasText(root, "API")).toBe(true);
+    expect(hasText(root, "Database")).toBe(true);
+    expect(texts(root).filter((t) => t === "Storage")).toHaveLength(2);
   });
 });
 
@@ -251,4 +261,17 @@ test_req4 - derives -> test_req5
 test_req5 - refines -> test_req6
 test_entity3 - verifies -> test_req5
 test_req <- copies - test_entity2
+`;
+
+const ARCHITECTURE = `architecture-beta
+    group api(cloud)[API]
+
+    service db(database)[Database] in api
+    service disk1(disk)[Storage] in api
+    service disk2(disk)[Storage] in api
+    service server(server)[Server] in api
+
+    db:L -- R:server
+    disk1:T -- B:server
+    disk2:T -- B:db
 `;

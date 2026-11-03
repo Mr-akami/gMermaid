@@ -11,6 +11,7 @@ import {
   parseStateDiagram,
   parseTimeline,
   parseUsecase,
+  parseArchitecture,
   type ParseResult,
 } from "@gmermaid/mermaid-parser";
 import {
@@ -26,6 +27,7 @@ import {
   layoutStateDiagram,
   layoutTimeline,
   layoutUsecase,
+  layoutArchitecture,
   segmentHitsRect,
   type Point,
   type Rect,
@@ -347,6 +349,33 @@ note for Checkout "validates the cart"
         ...l.usecases.map((u) => ({ ...u.rect, what: `usecase ${u.label}` })),
         ...l.notes.map((n) => ({ ...n.rect, what: `note "${n.text}"` })),
         ...l.boundaries.map((b) => frameTitle(b.label, b.rect, `boundary title ${b.label}`, 13)),
+        ...l.edges.flatMap((e) =>
+          e.label !== undefined && e.labelPos !== undefined ? [lbl(e.label, e.labelPos, `edge "${e.label}"`, 11)] : [],
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("architecture: long edge labels, group titles and service captions", () => {
+    const src = `architecture-beta
+  group cloud(cloud)["The production cloud"]
+  group vpc["Private network"] in cloud
+  service api(server)["Order API"] in vpc
+  service db(database)["Primary database"] in cloud
+  service cache(disk)["Cache"] in vpc
+  service cdn(internet)["Content delivery"]
+  junction fork
+  api:R -["reads and writes orders"]-> L:db
+  api:B -- T:cache
+  cdn:L -["serves static assets"]- R:fork
+  fork:L -- R:db
+`;
+    const l = layoutArchitecture(parsed(parseArchitecture(src), "architecture"), measure);
+    expect(
+      collisions([
+        ...l.services.map((s) => ({ ...s.rect, what: `service ${s.label}` })),
+        ...l.junctions.map((j) => ({ ...j.rect, what: "junction" })),
+        ...l.groups.map((g) => frameTitle(g.label, g.rect, `group title ${g.label}`, 12)),
         ...l.edges.flatMap((e) =>
           e.label !== undefined && e.labelPos !== undefined ? [lbl(e.label, e.labelPos, `edge "${e.label}"`, 11)] : [],
         ),

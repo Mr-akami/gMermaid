@@ -32,6 +32,7 @@ import type {
   TimelineIR,
   TransitionId,
   UsecaseIR,
+  ArchitectureIR,
 } from "@gmermaid/ir";
 import { FLOWCHART_SHAPES } from "@gmermaid/ir";
 import mermaid from "mermaid";
@@ -47,6 +48,7 @@ import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
 import { timelineToMermaid } from "./timeline";
 import { usecaseToMermaid } from "./usecase";
+import { architectureToMermaid } from "./architecture";
 
 // C4: our codegen output must be accepted by the REAL mermaid.js parser —
 // the in-repo parser round trips prove self-consistency, not dialect
@@ -829,6 +831,93 @@ describe("mermaid.js accepts generated ER diagrams", () => {
     await expectMermaidAccepts(erToMermaid({ kind: "er", entities: [], relationships: [] }));
     await expectMermaidAccepts(
       erToMermaid({ kind: "er", entities: [{ id: E("a"), name: "A", attributes: [] }, { id: E("b"), name: "B", alias: "Bee", attributes: [] }], relationships: [] }),
+    );
+  });
+});
+
+const AG = (s: string) => s as import("@gmermaid/ir").ArchGroupId;
+const AS = (s: string) => s as import("@gmermaid/ir").ArchServiceId;
+const AJ = (s: string) => s as import("@gmermaid/ir").ArchJunctionId;
+const AE = (s: string) => s as import("@gmermaid/ir").ArchEdgeId;
+
+/** What mermaid's own architecture db made of the text. */
+async function architectureDb(code: string) {
+  const d = await mermaid.mermaidAPI.getDiagramFromText(code);
+  const db = d.db as unknown as {
+    getGroups(): { id: string; title?: string; icon?: string; in?: string }[];
+    getNodes(): { id: string; type: string; title?: string; icon?: string; in?: string }[];
+    getEdges(): {
+      lhsId: string;
+      lhsDir: string;
+      lhsInto: boolean;
+      lhsGroup: boolean;
+      rhsId: string;
+      rhsDir: string;
+      rhsInto: boolean;
+      rhsGroup: boolean;
+      title?: string;
+    }[];
+  };
+  return { groups: db.getGroups(), nodes: db.getNodes(), edges: db.getEdges() };
+}
+
+describe("mermaid.js accepts generated architecture diagrams", () => {
+  const ir: ArchitectureIR = {
+    kind: "architecture",
+    // stored child-first on purpose: codegen has to declare the parent first
+    groups: [
+      { id: AG("vpc"), name: "vpc", label: 'VPC <private> & "quoted" #1', parent: AG("cloud_a") },
+      { id: AG("cloud_a"), name: "cloud_a", label: "Cloud A", icon: "cloud" },
+      { id: AG("edge"), name: "edge" },
+    ],
+    services: [
+      { id: AS("api"), name: "api", label: "API ] server", icon: "server", group: AG("vpc") },
+      { id: AS("db"), name: "db", label: "Database", icon: "database", group: AG("cloud_a") },
+      { id: AS("cdn"), name: "cdn", icon: "internet", group: AG("edge") },
+      { id: AS("logs"), name: "logs", label: "Logs", icon: "logos:aws" },
+      { id: AS("my-bare"), name: "my-bare" },
+    ],
+    junctions: [{ id: AJ("hub"), name: "hub", group: AG("edge") }],
+    edges: [
+      { id: AE("e1"), from: AS("api"), to: AS("db"), fromSide: "R", toSide: "L", arrowFrom: false, arrowTo: true },
+      { id: AE("e2"), from: AJ("hub"), to: AS("api"), fromSide: "B", toSide: "T", arrowFrom: true, arrowTo: true, groupFrom: true, groupTo: true, label: 'says "hi" > there' },
+      { id: AE("e3"), from: AS("logs"), to: AS("cdn"), fromSide: "T", toSide: "L", arrowFrom: true, arrowTo: false },
+      { id: AE("e4"), from: AS("db"), to: AS("my-bare"), fromSide: "B", toSide: "T", arrowFrom: false, arrowTo: false },
+    ],
+  };
+
+  it("parses groups, nested groups, icons, junctions, every side and arrow", async () => {
+    await expectMermaidAccepts(architectureToMermaid(ir));
+  });
+
+  it("reads back, in mermaid's own db, what the IR holds", async () => {
+    const { groups, nodes, edges } = await architectureDb(architectureToMermaid(ir));
+    expect(groups.map((g) => [g.id, g.icon, g.in])).toEqual([
+      ["cloud_a", "cloud", undefined],
+      ["vpc", undefined, "cloud_a"],
+      ["edge", undefined, undefined],
+    ]);
+    expect(nodes.map((n) => [n.id, n.type, n.icon, n.in])).toEqual([
+      ["api", "service", "server", "vpc"],
+      ["db", "service", "database", "cloud_a"],
+      ["cdn", "service", "internet", "edge"],
+      ["logs", "service", "logos:aws", undefined],
+      ["my-bare", "service", undefined, undefined],
+      ["hub", "junction", undefined, "edge"],
+    ]);
+    // the port side of every edge end is what the IR says
+    expect(edges.map((e) => [e.lhsId, e.lhsDir, e.lhsInto, e.lhsGroup, e.rhsId, e.rhsDir, e.rhsInto, e.rhsGroup, e.title])).toEqual([
+      ["api", "R", false, false, "db", "L", true, false, undefined],
+      ["hub", "B", true, true, "api", "T", true, true, expect.stringContaining("says")],
+      ["logs", "T", true, false, "cdn", "L", false, false, undefined],
+      ["db", "B", false, false, "my-bare", "T", false, false, undefined],
+    ]);
+  });
+
+  it("parses an empty diagram and a lone group", async () => {
+    await expectMermaidAccepts(architectureToMermaid({ kind: "architecture", groups: [], services: [], junctions: [], edges: [] }));
+    await expectMermaidAccepts(
+      architectureToMermaid({ kind: "architecture", groups: [{ id: AG("g"), name: "g", label: "Only" }], services: [], junctions: [], edges: [] }),
     );
   });
 });

@@ -43,6 +43,11 @@ import type {
   TimelineIR,
   TransitionId,
   UseCaseId,
+  ArchEdgeId,
+  ArchGroupId,
+  ArchJunctionId,
+  ArchServiceId,
+  ArchitectureIR,
   UsecaseIR,
   UsecaseRelationId,
 } from "@gmermaid/ir";
@@ -61,6 +66,7 @@ import {
   emptyStateDiagram,
   emptyTimeline,
   emptyUsecaseDiagram,
+  emptyArchitectureDiagram,
 } from "@gmermaid/ir";
 
 // One deliberately awkward diagram per kind — containers, references across
@@ -267,6 +273,27 @@ const usecase: UsecaseIR = {
     { id: id<UsecaseRelationId>("ucr_00000002"), from: id<UseCaseId>("ucs_00000001"), to: id<UseCaseId>("ucs_00000002"), line: "dashed", headFrom: "none", headTo: "none", kind: "include" },
   ],
   notes: [{ id: id<NoteId>("nte_00000001"), target: id<UseCaseId>("ucs_00000002"), text: "card only" }],
+};
+
+const architecture: ArchitectureIR = {
+  kind: "architecture",
+  groups: [
+    { id: id<ArchGroupId>("agp_00000001"), name: "cloud_a", label: "Cloud A", icon: "cloud" },
+    { id: id<ArchGroupId>("agp_00000002"), name: "vpc", label: "VPC", parent: id<ArchGroupId>("agp_00000001") },
+    { id: id<ArchGroupId>("agp_00000003"), name: "edge" },
+  ],
+  services: [
+    { id: id<ArchServiceId>("asv_00000001"), name: "api", label: "API", icon: "server", group: id<ArchGroupId>("agp_00000002") },
+    { id: id<ArchServiceId>("asv_00000002"), name: "db", label: "Database", icon: "database", group: id<ArchGroupId>("agp_00000001") },
+    { id: id<ArchServiceId>("asv_00000003"), name: "cdn", icon: "internet", group: id<ArchGroupId>("agp_00000003") },
+    { id: id<ArchServiceId>("asv_00000004"), name: "disk1", label: "Logs" },
+  ],
+  junctions: [{ id: id<ArchJunctionId>("ajn_00000001"), name: "hub", group: id<ArchGroupId>("agp_00000003") }],
+  edges: [
+    { id: id<ArchEdgeId>("aed_00000001"), from: id<ArchServiceId>("asv_00000001"), to: id<ArchServiceId>("asv_00000002"), fromSide: "R", toSide: "L", arrowFrom: false, arrowTo: true },
+    { id: id<ArchEdgeId>("aed_00000002"), from: id<ArchJunctionId>("ajn_00000001"), to: id<ArchServiceId>("asv_00000001"), fromSide: "B", toSide: "T", arrowFrom: false, arrowTo: false, groupFrom: true, groupTo: true, label: "calls" },
+    { id: id<ArchEdgeId>("aed_00000003"), from: id<ArchServiceId>("asv_00000004"), to: id<ArchServiceId>("asv_00000003"), fromSide: "T", toSide: "L", arrowFrom: true, arrowTo: true },
+  ],
 };
 
 const journey: JourneyIR = {
@@ -491,6 +518,19 @@ export const FIXTURES: readonly Fixture[] = [
       ["a relation alone", ["ucr_00000001"]],
       ["an include relation", ["ucr_00000002"]],
       ["a note", ["nte_00000001"]],
+    ],
+  },
+  {
+    name: "architecture",
+    ir: architecture,
+    empty: emptyArchitectureDiagram(),
+    selections: [
+      ["everything", [...architecture.groups.map((g) => g.id), ...architecture.services.map((s) => s.id), ...architecture.junctions.map((j) => j.id), ...architecture.edges.map((e) => e.id)]],
+      ["one service", ["asv_00000002"]],
+      ["the outer group", ["agp_00000001"]],
+      ["a nested member alone", ["asv_00000001"]],
+      ["an edge alone", ["aed_00000002"]],
+      ["an edge between groups", ["aed_00000001"]],
     ],
   },
   {
