@@ -521,6 +521,9 @@ export const FIXTURES: readonly Fixture[] = [
       ["an entity with no attributes", ["ent_00000003"]],
       ["a relationship alone", ["rln_00000002"]],
       ["a self relationship", ["rln_00000003"]],
+    ],
+  },
+  {
     name: "quadrant",
     ir: quadrant,
     // the axes and quadrant labels are diagram-level: paste leaves them alone
