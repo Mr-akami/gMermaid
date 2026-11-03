@@ -8,7 +8,7 @@
 - **自動レイアウト (Auto Layout)** — ノード・フラグメント等の座標は常にレイアウトエンジンが計算する。手動座標は保持しない（例外は象限図、下記）。位置の変更は IR の構造変更（順序・所属の変更）→ 再レイアウトとして表現される。
 - **レイアウトエンジン (Layout Engine)** — IR から座標付きレイアウトを計算する独立パッケージ。
 - **コード検証 (Validation)** — コードペインの入力は Mermaid.js のパーサで検証する。不正な間は IR を更新せず、エラーを表示する。
-- **対象図種 (Diagram Kinds)** — アクティビティ図（flowchart）、クラス図、シーケンス図の3種。
+- **対象図種 (Diagram Kinds)** — 14種。flowchart、sequence、state、class、gantt、requirement、journey、mindmap、timeline、usecase、er、gitGraph、quadrantChart、architecture。
 - **Codegen** — IR → Mermaid コード生成。第1弾から対象。
 - **Parser** — Mermaid コード → IR。図種ごとに後追いで実装（第1弾は Mermaid.js による検証のみ）。
 - **プロパティウインドウ (Property Window)** — 要素クリックで開くフローティングウインドウ。矢印種別などの要素属性を編集する。

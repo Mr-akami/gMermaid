@@ -47,7 +47,8 @@ test("clicking a parse error selects its line in the code pane", async ({ page }
   await expect(entry).toContainText("line 62");
   await entry.click();
   await expect(editor.locator(".cm-content:visible")).toBeFocused();
-  const sel = await page.evaluate(() => window.getSelection()?.toString());
-  expect(sel).toContain("this is not a statement");
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+    .toContain("this is not a statement");
   await expect(editor.locator(".cm-line", { hasText: "this is not a statement" })).toBeInViewport();
 });

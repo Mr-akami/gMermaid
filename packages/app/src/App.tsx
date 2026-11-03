@@ -32,6 +32,7 @@ export function App() {
               key={d.kind}
               className="kind-tab"
               aria-current={kind === d.kind ? "page" : undefined}
+              ref={kind === d.kind ? (el) => el?.scrollIntoView({ inline: "nearest", block: "nearest" }) : undefined}
               onClick={() => setKind(d.kind)}
             >
               {d.label}
