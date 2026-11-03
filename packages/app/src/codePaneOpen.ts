@@ -9,10 +9,13 @@ const listeners = new Set<() => void>();
 
 function read(): boolean {
   try {
-    return localStorage.getItem(KEY) !== "0";
+    const stored = localStorage.getItem(KEY);
+    if (stored !== null) return stored !== "0";
   } catch {
-    return true;
+    /* no stored preference */
   }
+  // narrow screens show the pane as a drawer over the canvas: closed until asked for
+  return !(typeof window !== "undefined" && window.matchMedia?.("(max-width: 900px)").matches);
 }
 
 let open = read();

@@ -15,6 +15,28 @@ test("the code pane keeps mirroring the diagram after a code edit", async ({ pag
   await expectCode(editor).toContain("Node");
 });
 
+// Narrow screens: the pane is a drawer over the canvas, closed by default,
+// instead of a squeezed second column.
+test("on a narrow screen the code pane is a closed overlay drawer", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 700 });
+  const editor = await openEditor(page, "Flowchart");
+  const pane = editor.locator(".code-pane");
+  await expect(pane).toBeHidden();
+  const canvasBefore = await editor.locator(".canvas").boundingBox();
+
+  await editor.getByRole("button", { name: "Mermaid code pane" }).click();
+  await expect(pane).toBeVisible();
+  const canvasAfter = await editor.locator(".canvas").boundingBox();
+  const paneBox = await pane.boundingBox();
+  // the canvas keeps its full width; the pane sits on top of it
+  expect(canvasAfter?.width).toBe(canvasBefore?.width);
+  expect(paneBox!.x + paneBox!.width).toBeLessThanOrEqual(canvasAfter!.x + canvasAfter!.width + 1);
+  expect(paneBox!.x).toBeGreaterThan(canvasAfter!.x);
+
+  await editor.getByRole("button", { name: "Mermaid code pane" }).click();
+  await expect(pane).toBeHidden();
+});
+
 // An error entry is a jump target: it selects its line, scrolls it into view
 // and gives the pane the focus back.
 test("clicking a parse error selects its line in the code pane", async ({ page }) => {
