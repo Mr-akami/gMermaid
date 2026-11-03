@@ -2,8 +2,9 @@
 import { expect, it } from "vitest";
 import { buildExportSvg, inlineCssVars } from "./exportDiagram";
 
+const r = (n: string) => (n === "--gm-stroke" ? "#111" : undefined);
+
 it("resolves vars, falls back, handles nested parens", () => {
-  const r = (n: string) => (n === "--gm-stroke" ? "#111" : undefined);
   expect(inlineCssVars('stroke="var(--gm-stroke, #333)"', r)).toBe('stroke="#111"');
   expect(inlineCssVars('fill="var(--gm-frag-fill, rgba(1,2,3,0.5))"', r)).toBe('fill="rgba(1,2,3,0.5)"');
   expect(inlineCssVars("var(--a, var(--gm-stroke, red))", r)).toBe("#111");
