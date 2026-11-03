@@ -215,6 +215,22 @@ kbd {
 }
 .code-resizer:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }
 
+/* narrow screens: no room for a second column, so the code pane is a drawer
+   over the canvas (the toolbar row, with its toggle, stays uncovered) */
+@media (max-width: 900px) {
+  .editor, .review-editor,
+  :root[data-code-closed] .editor, :root[data-code-closed] .review-editor { grid-template-columns: minmax(0, 1fr); }
+  .editor > .code-pane, .editor > .code-tabs,
+  .review-editor > .code-pane, .review-editor > .code-tabs {
+    grid-area: 2 / 1;
+    justify-self: end;
+    width: min(var(--code-w), 92vw);
+    z-index: 20;
+    box-shadow: var(--shadow-pop);
+  }
+  .editor > .code-resizer, .review-editor > .code-resizer { display: none; }
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -380,6 +396,19 @@ kbd {
   background: var(--danger-soft);
   color: #8f2420;
 }
+.code-error-entry {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.code-error-entry:hover { text-decoration: underline; }
 /* dropped statements: informational, never blocking — calmer than an error */
 .code-warnings {
   border-top: 1px solid var(--warn-line);

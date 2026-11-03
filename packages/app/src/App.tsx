@@ -4,6 +4,7 @@ import { AppBarContext } from "./EditorToolbar";
 import { FilesPanel } from "./FilesPanel";
 import { Icon } from "./icons";
 import { DOC_PREFIX } from "./persistence";
+import { exportPng, exportSvg } from "./exportDiagram";
 
 export type { LoadRequest };
 
@@ -39,6 +40,16 @@ export function App() {
         </nav>
         <div className="appbar-actions">
           <div className="tool-group" ref={setFileSlot} />
+          <div className="tool-group">
+            <button className="btn" onClick={() => exportSvg(kind)} aria-label="Export SVG" title="Download the diagram as SVG">
+              <Icon name="image" />
+              <span className="btn-label">SVG</span>
+            </button>
+            <button className="btn" onClick={() => void exportPng(kind)} aria-label="Export PNG" title="Download the diagram as PNG (2x)">
+              <Icon name="image" />
+              <span className="btn-label">PNG</span>
+            </button>
+          </div>
           <button className="btn" onClick={() => setFilesOpen(true)} aria-label="Files" title="Diagrams kept in this browser">
             <Icon name="files" />
             <span className="btn-label">Files</span>

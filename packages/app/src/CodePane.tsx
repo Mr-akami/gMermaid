@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror, { ExternalChange } from "@uiw/react-codemirror";
-import type { ViewUpdate } from "@codemirror/view";
+import { EditorView, type ViewUpdate } from "@codemirror/view";
 import type { ParseError, ParseResult, ParseWarning } from "@gmermaid/mermaid-parser";
 import { useMermaidVerdict } from "./mermaidValidator";
 
@@ -131,6 +131,16 @@ export function CodePane<T>({
     }
   }, []);
 
+  // Error entry -> its line: select it, scroll it into view, focus the pane.
+  const viewRef = useRef<EditorView | null>(null);
+  function jumpToLine(line: number) {
+    const view = viewRef.current;
+    if (view === null) return;
+    const l = view.state.doc.line(Math.min(Math.max(1, line), view.state.doc.lines));
+    view.dispatch({ selection: { anchor: l.from, head: l.to }, effects: EditorView.scrollIntoView(l.from, { y: "center" }) });
+    view.focus();
+  }
+
   function discardDraft() {
     setDraft(null);
     setErrors([]);
@@ -166,6 +176,9 @@ export function CodePane<T>({
         height="100%"
         style={{ flex: 1, overflow: "auto" }}
         onChange={handleChange}
+        onCreateEditor={(view) => {
+          viewRef.current = view;
+        }}
         onFocus={() => {
           setFocused(true);
           onEditStart();
@@ -186,9 +199,17 @@ export function CodePane<T>({
       {active !== null && errors.length > 0 && (
         <div className="code-errors">
           {errors.map((e, i) => (
-            <div key={i}>
+            <button
+              key={i}
+              type="button"
+              className="code-error-entry"
+              title="Jump to this line"
+              // keep the pane's focus/draft state undisturbed by the click
+              onMouseDown={(ev) => ev.preventDefault()}
+              onClick={() => jumpToLine(e.line)}
+            >
               line {e.line}: {e.message}
-            </div>
+            </button>
           ))}
         </div>
       )}
