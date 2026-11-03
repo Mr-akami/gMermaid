@@ -1,6 +1,7 @@
 import type { DiagramIR } from "@gmermaid/ir";
 import {
   classToMermaid,
+  erToMermaid,
   flowchartToMermaid,
   ganttToMermaid,
   journeyToMermaid,
@@ -14,6 +15,7 @@ import {
 import { detectDiagramKind, parseDiagram } from "@gmermaid/mermaid-parser";
 import type { KindClipboard } from "./kind";
 import { classClipboard } from "./class";
+import { erClipboard } from "./er";
 import { flowchartClipboard } from "./flowchart";
 import { ganttClipboard } from "./gantt";
 import { journeyClipboard } from "./journey";
@@ -91,7 +93,7 @@ import { usecaseClipboard } from "./usecase";
  *   activation is re-balanced, so an `activate` with no `deactivate`, or a
  *   `->>-` whose `->>+` stayed behind, is dropped. Without either, the
  *   copied text would not parse at all.
- * - **requirement** / **usecase** — a selected relation pulls both ends;
+ * - **requirement** / **usecase** / **er** — a selected relation pulls both ends;
  *   induced relations come along. A selected usecase boundary pulls its
  *   members; a member whose boundary is not selected leaves it behind. Notes
  *   travel with their target.
@@ -180,6 +182,10 @@ export function copySelection(ir: DiagramIR, ids: readonly string[]): string | u
       const s = mindmapClipboard.slice(ir, set);
       return s && mindmapToMermaid(s);
     }
+    case "er": {
+      const s = erClipboard.slice(ir, set);
+      return s && erToMermaid(s);
+    }
     case "usecase": {
       const s = usecaseClipboard.slice(ir, set);
       return s && usecaseToMermaid(s);
@@ -227,6 +233,7 @@ const CLIPBOARDS = {
   gantt: ganttClipboard,
   mindmap: mindmapClipboard,
   usecase: usecaseClipboard,
+  er: erClipboard,
 } as const;
 
 const KIND_LABEL = {
@@ -240,4 +247,5 @@ const KIND_LABEL = {
   gantt: "gantt chart",
   mindmap: "mindmap",
   usecase: "use case diagram",
+  er: "ER diagram",
 } as const;

@@ -11,6 +11,7 @@ describe("detectDiagramKind", () => {
     expect(detectDiagramKind("journey\n  title x")).toBe("journey");
     expect(detectDiagramKind("requirementDiagram\nrequirement a {\n}")).toBe("requirement");
     expect(detectDiagramKind("timeline\n  2002 : LinkedIn")).toBe("timeline");
+    expect(detectDiagramKind("erDiagram\nA ||--o{ B : x")).toBe("er");
     expect(detectDiagramKind("pie\n")).toBeUndefined();
   });
   it("skips frontmatter, comments and init directives", () => {

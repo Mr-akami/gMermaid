@@ -22,6 +22,7 @@ mermaid.js itself in the test suite.
 | Timeline | `timeline` | sections, periods, multiple events per period |
 | Gantt | `gantt` | date formats, durations, `after`/`until` dependencies, milestones, excludes |
 | Mindmap | `mindmap` | indentation hierarchy, 7 node shapes, icons, drag to re-parent |
+| ER | `erDiagram` | entities with typed attributes (`PK`/`FK`/`UK`, comments, aliases), all 4 cardinalities per end, identifying and non-identifying relationships, labels |
 
 ### State diagrams are also XState machines
 

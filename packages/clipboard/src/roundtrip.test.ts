@@ -4,6 +4,7 @@ import { ID_PREFIX } from "@gmermaid/ir";
 import { parseDiagram, type DiagramKind } from "@gmermaid/mermaid-parser";
 import {
   classToMermaid,
+  erToMermaid,
   flowchartToMermaid,
   ganttToMermaid,
   journeyToMermaid,
@@ -42,6 +43,8 @@ function emit(ir: DiagramIR): string {
       return ganttToMermaid(ir);
     case "mindmap":
       return mindmapToMermaid(ir);
+    case "er":
+      return erToMermaid(ir);
     case "usecase":
       return usecaseToMermaid(ir);
   }

@@ -8,6 +8,7 @@ describe("validateDiagram", () => {
     ["class", "classDiagram\n  class Animal"],
     ["state", "stateDiagram-v2\n  A --> B"],
     ["requirement", "requirementDiagram\n  requirement a {\n  }"],
+    ["er", "erDiagram\n  A ||--o{ B : has"],
     ["timeline", "timeline\n  2002 : LinkedIn"],
     ["gantt", "gantt\n  section S\n  A task :a1, 2014-01-01, 30d"],
   ] as const)("accepts a supported %s", (kind, code) => {
@@ -15,7 +16,7 @@ describe("validateDiagram", () => {
   });
 
   it("rejects unsupported and malformed Mermaid", () => {
-    expect(validateDiagram("erDiagram\n  A ||--o{ B : has")).toMatchObject({ ok: false });
+    expect(validateDiagram('pie\n  "a" : 1')).toMatchObject({ ok: false });
     expect(validateDiagram("flowchart TB\n  A --")).toMatchObject({ ok: false });
   });
 

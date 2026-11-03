@@ -30,6 +30,8 @@ export type UseCaseId = Id<"usecase">;
 export type BoundaryId = Id<"boundary">;
 export type UsecaseRelationId = Id<"usecaseRelation">;
 export type MindmapNodeId = Id<"mindmapNode">;
+export type EntityId = Id<"entity">;
+export type AttributeId = Id<"attribute">;
 
 export type AnyId =
   | NodeId
@@ -58,7 +60,9 @@ export type AnyId =
   | UseCaseId
   | BoundaryId
   | UsecaseRelationId
-  | MindmapNodeId;
+  | MindmapNodeId
+  | EntityId
+  | AttributeId;
 
 /** Every element kind that mints ids. */
 export type IdKind =
@@ -88,7 +92,9 @@ export type IdKind =
   | "usecase"
   | "usecaseRelation"
   | "boundary"
-  | "mindmapNode";
+  | "mindmapNode"
+  | "entity"
+  | "attribute";
 
 /**
  * Text prefix per element kind. Ids are exchange identity: several kinds are
@@ -130,6 +136,8 @@ export const ID_PREFIX = {
   usecaseRelation: "ucr",
   boundary: "bnd",
   mindmapNode: "mmn",
+  entity: "ent",
+  attribute: "atb",
 } as const satisfies Record<IdKind, string>;
 
 /**
