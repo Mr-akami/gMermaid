@@ -380,6 +380,19 @@ kbd {
   background: var(--danger-soft);
   color: #8f2420;
 }
+.code-error-entry {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.code-error-entry:hover { text-decoration: underline; }
 /* dropped statements: informational, never blocking — calmer than an error */
 .code-warnings {
   border-top: 1px solid var(--warn-line);
