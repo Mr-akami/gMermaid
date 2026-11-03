@@ -137,8 +137,21 @@ export function CodePane<T>({
     const view = viewRef.current;
     if (view === null) return;
     const l = view.state.doc.line(Math.min(Math.max(1, line), view.state.doc.lines));
-    view.dispatch({ selection: { anchor: l.from, head: l.to }, effects: EditorView.scrollIntoView(l.from, { y: "center" }) });
+    const reveal = () => EditorView.scrollIntoView(l.from, { y: "center" });
+    view.dispatch({ selection: { anchor: l.from, head: l.to }, effects: reveal() });
     view.focus();
+    // CodeMirror estimates the height of lines it has not drawn, so the first
+    // scroll can land short once the real heights are measured. Re-aim for a
+    // few frames until the line is actually inside the scroller.
+    let tries = 0;
+    const settle = () => {
+      if (viewRef.current !== view || tries++ >= 10) return;
+      const box = view.coordsAtPos(l.from);
+      const area = view.scrollDOM.getBoundingClientRect();
+      if (box === null || box.top < area.top || box.bottom > area.bottom) view.dispatch({ effects: reveal() });
+      requestAnimationFrame(settle);
+    };
+    requestAnimationFrame(settle);
   }
 
   function discardDraft() {

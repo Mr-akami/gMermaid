@@ -147,6 +147,8 @@ kbd {
   gap: 2px;
   overflow-x: auto;
   scrollbar-width: none;
+  /* the strip scrolls; fade the cut edges so a hidden tab is visible as hidden */
+  mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
 }
 .kind-tab {
   flex: none;
