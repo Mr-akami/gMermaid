@@ -17,6 +17,7 @@ const KINDS: ReadonlyArray<readonly [Kind, RegExp]> = [
   ["Usecase", /^usecase-beta/],
   ["Mindmap", /^mindmap/],
   ["Gantt", /^gantt/],
+  ["ER", /^erDiagram/],
 ];
 
 for (const [kind, head] of KINDS) {

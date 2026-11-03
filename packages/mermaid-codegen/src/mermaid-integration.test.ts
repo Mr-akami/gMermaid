@@ -23,6 +23,7 @@ import type {
   RelationId,
   SectionId,
   RequirementIR,
+  ErIR,
   SequenceIR,
   StateIR,
   TaskId,
@@ -37,6 +38,7 @@ import { classToMermaid } from "./classdiagram";
 import { ganttToMermaid } from "./gantt";
 import { journeyToMermaid } from "./journey";
 import { mindmapToMermaid } from "./mindmap";
+import { erToMermaid } from "./er";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
@@ -752,6 +754,48 @@ describe("mermaid.js accepts generated use case diagrams", () => {
         relations: [],
         notes: [],
       }),
+    );
+  });
+});
+
+const E = (s: string) => s as import("@gmermaid/ir").EntityId;
+const A = (s: string) => s as import("@gmermaid/ir").AttributeId;
+const X = (s: string) => s as RelationId;
+
+describe("mermaid.js accepts generated ER diagrams", () => {
+  it("parses attributes with keys and comments, every cardinality, both line kinds and labels", async () => {
+    const ir: ErIR = {
+      kind: "er",
+      direction: "LR",
+      entities: [
+        {
+          id: E("c"),
+          name: "CUSTOMER",
+          attributes: [
+            { id: A("a1"), type: "int", name: "id", keys: ["PK"] },
+            { id: A("a2"), type: "varchar(255)", name: "email", keys: ["UK"], comment: 'login "id", #1 <b>' },
+            { id: A("a3"), type: "string[]", name: "tags", keys: [] },
+            { id: A("a4"), type: "int", name: "parent_id", keys: ["PK", "FK", "UK"], comment: "all three" },
+          ],
+        },
+        { id: E("o"), name: "ORDER", alias: "Customer order", attributes: [{ id: A("a5"), type: "int", name: "cid", keys: ["FK"] }] },
+        { id: E("l"), name: "line item", attributes: [] },
+        { id: E("k"), name: "class", attributes: [] },
+      ],
+      relationships: [
+        { id: X("x1"), from: E("c"), to: E("o"), fromCard: "exactly-one", toCard: "zero-or-more", identifying: true, label: "places" },
+        { id: X("x2"), from: E("o"), to: E("l"), fromCard: "zero-or-one", toCard: "one-or-more", identifying: false, label: "has many #1" },
+        { id: X("x3"), from: E("l"), to: E("k"), fromCard: "one-or-more", toCard: "zero-or-one", identifying: true },
+        { id: X("x4"), from: E("c"), to: E("c"), fromCard: "zero-or-more", toCard: "exactly-one", identifying: false, label: "refers to" },
+      ],
+    };
+    await expectMermaidAccepts(erToMermaid(ir));
+  });
+
+  it("parses an empty diagram and one with only entities", async () => {
+    await expectMermaidAccepts(erToMermaid({ kind: "er", entities: [], relationships: [] }));
+    await expectMermaidAccepts(
+      erToMermaid({ kind: "er", entities: [{ id: E("a"), name: "A", attributes: [] }, { id: E("b"), name: "B", alias: "Bee", attributes: [] }], relationships: [] }),
     );
   });
 });

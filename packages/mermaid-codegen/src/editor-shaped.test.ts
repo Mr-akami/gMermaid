@@ -6,6 +6,7 @@ import {
   applyGanttAction,
   applyJourneyAction,
   applyMindmapAction,
+  applyErAction,
   applyRequirementAction,
   applySequenceAction,
   applyStateAction,
@@ -13,6 +14,7 @@ import {
   applyUsecaseAction,
   emptyClassDiagram,
   emptyFlowchart,
+  emptyErDiagram,
   emptyRequirementDiagram,
   findEventPosition,
   mindmapRoot,
@@ -45,6 +47,7 @@ import { flowchartToMermaid } from "./flowchart";
 import { ganttToMermaid } from "./gantt";
 import { journeyToMermaid } from "./journey";
 import { mindmapToMermaid } from "./mindmap";
+import { erToMermaid } from "./er";
 import { requirementToMermaid } from "./requirement";
 import { sequenceToMermaid } from "./sequence";
 import { stateToMermaid } from "./statediagram";
@@ -301,6 +304,40 @@ function requirementCases(): Cases {
     sample: requirementToMermaid(sample),
     "toolbar adds + relation": requirementToMermaid(built),
   };
+}
+
+// ----------------------------------------------------------------------- er
+
+function erCases(): Cases {
+  // mirrors ErEditor.initialIR()
+  const customer = newId("entity");
+  const order = newId("entity");
+  let sample = emptyErDiagram();
+  sample = applyErAction(sample, {
+    type: "addEntity",
+    entity: {
+      id: customer,
+      name: "CUSTOMER",
+      attributes: [{ id: newId("attribute"), type: "string", name: "custNumber", keys: ["PK"] }],
+    },
+  });
+  sample = applyErAction(sample, { type: "addEntity", entity: { id: order, name: "ORDER", attributes: [] } });
+  sample = applyErAction(sample, {
+    type: "addRelationship",
+    relationship: { id: newId("relation"), from: customer, to: order, fromCard: "exactly-one", toCard: "zero-or-more", identifying: true, label: "places" },
+  });
+
+  // mirrors addEntity() / addAttribute() / handleConnectDrop()
+  let built = sample;
+  const e2 = newId("entity");
+  built = applyErAction(built, { type: "addEntity", entity: { id: e2, name: "ENTITY1", attributes: [] } });
+  built = applyErAction(built, { type: "addAttribute", entityId: e2, attribute: { id: newId("attribute"), type: "string", name: "attr1", keys: [] } });
+  built = applyErAction(built, {
+    type: "addRelationship",
+    relationship: { id: newId("relation"), from: e2, to: customer, fromCard: "exactly-one", toCard: "zero-or-more", identifying: true },
+  });
+
+  return { sample: erToMermaid(sample), "toolbar adds + unlabelled relationship": erToMermaid(built) };
 }
 
 // ------------------------------------------------------------------ journey
@@ -562,6 +599,7 @@ const CASES: Record<DiagramKind, () => Cases> = {
   gantt: ganttCases,
   mindmap: mindmapCases,
   usecase: usecaseCases,
+  er: erCases,
 };
 
 describe("mermaid.js accepts what the editors build", () => {

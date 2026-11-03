@@ -100,6 +100,22 @@ window, registry entry, mermaid.js integration test, e2e spec.
   skipped), icon actors, explicit edge ids and their `animation` / `animate`
   metadata, extra-dash edge length, `classDef` / `class` / `style` / `:::`.
 
+### ER (done)
+- `erDiagram`: entities with `type name PK|FK|UK, … "comment"` attributes
+  (reorderable in the property window), `A["alias"]` display names, all four
+  cardinalities per end, identifying `--` and non-identifying `..` lines,
+  relationship labels, self relationships, `direction`.
+- Entities are identified by name (one name space, quoted when not a plain
+  identifier); cardinality is stored per end as a semantic value, not glyphs.
+- mermaid 12 requires the `: label` part, so a label-less relationship is
+  emitted as `: ""` and read back as no label.
+- Auto layout via dagre; crow's-foot / bar / ring end glyphs are drawn by the
+  renderer from the edge's first and last segment.
+- Left out (tolerated on import, dropped with a warning): `classDef` /
+  `class` / `style` / `click` / `:::`. Not parsed: the spelled-out
+  cardinalities (`one or more`, `only one`, `1+`, …) and attribute types
+  containing spaces or commas (`decimal(10,2)`).
+
 ## Phase 4 — polish (done)
 - README coverage table; the MCP tool description is generated from
   `DIAGRAM_KINDS` so a new kind no longer needs a prose edit.

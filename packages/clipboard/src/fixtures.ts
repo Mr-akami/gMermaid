@@ -6,7 +6,10 @@ import type {
   BranchId,
   ClassId,
   ClassIR,
+  AttributeId,
   DiagramIR,
+  EntityId,
+  ErIR,
   EdgeId,
   ElementId,
   EventId,
@@ -40,6 +43,7 @@ import type {
 } from "@gmermaid/ir";
 import {
   emptyClassDiagram,
+  emptyErDiagram,
   emptyFlowchart,
   emptyGantt,
   emptyJourney,
@@ -208,6 +212,33 @@ const requirement: RequirementIR = {
   relations: [
     { id: id<RelationId>("rln_00000001"), from: id<RequirementId>("rqm_00000001"), to: id<RequirementId>("rqm_00000002"), type: "contains" },
     { id: id<RelationId>("rln_00000002"), from: id<ElementId>("elm_00000001"), to: id<RequirementId>("rqm_00000002"), type: "verifies" },
+  ],
+};
+
+const er: ErIR = {
+  kind: "er",
+  direction: "LR",
+  entities: [
+    {
+      id: id<EntityId>("ent_00000001"),
+      name: "CUSTOMER",
+      attributes: [
+        { id: id<AttributeId>("atb_00000001"), type: "int", name: "id", keys: ["PK"] },
+        { id: id<AttributeId>("atb_00000002"), type: "string", name: "email", keys: ["UK"], comment: "login, unique" },
+      ],
+    },
+    {
+      id: id<EntityId>("ent_00000002"),
+      name: "ORDER",
+      alias: "Customer order",
+      attributes: [{ id: id<AttributeId>("atb_00000003"), type: "int", name: "customer_id", keys: ["FK", "UK"] }],
+    },
+    { id: id<EntityId>("ent_00000003"), name: "line item", attributes: [] },
+  ],
+  relationships: [
+    { id: id<RelationId>("rln_00000001"), from: id<EntityId>("ent_00000001"), to: id<EntityId>("ent_00000002"), fromCard: "exactly-one", toCard: "zero-or-more", identifying: true, label: "places" },
+    { id: id<RelationId>("rln_00000002"), from: id<EntityId>("ent_00000002"), to: id<EntityId>("ent_00000003"), fromCard: "exactly-one", toCard: "one-or-more", identifying: false },
+    { id: id<RelationId>("rln_00000003"), from: id<EntityId>("ent_00000001"), to: id<EntityId>("ent_00000001"), fromCard: "zero-or-one", toCard: "zero-or-more", identifying: false, label: "refers" },
   ],
 };
 
@@ -458,6 +489,18 @@ export const FIXTURES: readonly Fixture[] = [
       ["the root", ["mmn_00000001"]],
       ["a subtree", ["mmn_00000003"]],
       ["a leaf", ["mmn_00000004"]],
+    ],
+  },
+  {
+    name: "er",
+    ir: er,
+    empty: { ...emptyErDiagram(), direction: "LR" },
+    selections: [
+      ["everything", [...er.entities.map((e) => e.id), ...er.relationships.map((r) => r.id)]],
+      ["one entity", ["ent_00000001"]],
+      ["an entity with no attributes", ["ent_00000003"]],
+      ["a relationship alone", ["rln_00000002"]],
+      ["a self relationship", ["rln_00000003"]],
     ],
   },
 ];

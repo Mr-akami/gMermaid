@@ -19,6 +19,7 @@ const SAMPLE: Record<DiagramKind, (stmt: string) => string> = {
   gantt: (s) => `gantt\n  title T\n  dateFormat YYYY-MM-DD\n  section S\n  task1 :a1, 2024-01-01, 3d\n  ${s}\n`,
   mindmap: (s) => `mindmap\n  root((r))\n    a\n${s}\n`,
   usecase: (s) => `usecase-beta\n  actor A\n  A --> Checkout\n  ${s}\n`,
+  er: (s) => `erDiagram\n  A {\n    int id PK\n  }\n  A ||--o{ B : has\n  ${s}\n`,
 };
 
 /** One real-world spelling per shared keyword. */

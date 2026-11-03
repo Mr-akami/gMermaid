@@ -1,5 +1,6 @@
 import { rectsOverlap } from "./collision";
 import type { ClassLayout } from "./classdiagram";
+import type { ErLayout } from "./er";
 import type { GanttLayout } from "./gantt";
 import type { JourneyLayout } from "./journey";
 import type { MindmapLayout } from "./mindmap";
@@ -33,7 +34,8 @@ export type DiagramLayout =
   | RequirementLayout
   | UsecaseLayout
   | MindmapLayout
-  | GanttLayout;
+  | GanttLayout
+  | ErLayout;
 
 /** The rectangle spanned by two corners, whichever way the drag went. */
 export function bandRect(from: Point, to: Point): Rect {
@@ -173,6 +175,10 @@ export function marqueeHits(layout: DiagramLayout, band: Rect): readonly string[
       for (const u of layout.usecases) hits.box(u.id, u.rect);
       for (const a of layout.actors) hits.box(a.id, a.rect);
       for (const n of layout.notes) hits.box(n.id, n.rect);
+      break;
+    case "er":
+      for (const e of layout.edges) hits.path(e.id, e.points);
+      for (const b of layout.boxes) hits.box(b.id, b.rect);
       break;
     case "mindmap":
       for (const n of layout.nodes) hits.box(n.id, n.rect);
