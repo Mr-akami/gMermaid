@@ -42,3 +42,19 @@ describe("BrowserReviewServer", () => {
     expect(changedKind.status).toBe(400);
   });
 });
+
+describe("BrowserReviewServer presence", () => {
+  it("ends the review when the last tab goes, waking a waiting agent", async () => {
+    const sessions = new SessionStore();
+    const session = sessions.create("flowchart", "flowchart TB\n  A --> B");
+    server = new BrowserReviewServer(sessions, "<html><head></head></html>", async () => {}, 50);
+    const url = new URL(await server.open(session.id));
+    url.searchParams.set("presence", "1");
+    const abort = new AbortController();
+    const stream = await fetch(url, { signal: abort.signal });
+    expect(stream.status).toBe(200);
+    const waiting = sessions.wait(session.id);
+    abort.abort();
+    await expect(waiting).resolves.toEqual({ status: "expired", sessionId: session.id });
+  });
+});

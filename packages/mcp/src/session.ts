@@ -83,18 +83,33 @@ export class SessionStore {
     };
   }
 
-  async wait(id: string, waitMs: number): Promise<ReviewResult> {
+  /** The user's editor went away before confirming: the session is over, and
+   * anyone waiting hears "expired". A confirmed result is kept. */
+  end(id: string): void {
+    const session = this.#sessions.get(id);
+    if (session === undefined || session.confirmedMermaid !== undefined) return;
+    this.#sessions.delete(id);
+    for (const wake of this.#waiters.get(id) ?? []) wake();
+    this.#waiters.delete(id);
+  }
+
+  /** `waitMs` omitted waits until confirmed, closed or expired. */
+  async wait(id: string, waitMs: number = Infinity): Promise<ReviewResult> {
     const current = this.result(id);
     if (current.status !== "pending" || waitMs <= 0) return current;
     await new Promise<void>((resolve) => {
       const waiters = this.#waiters.get(id) ?? new Set<() => void>();
       waiters.add(resolve);
       this.#waiters.set(id, waiters);
+      // purging is lazy, so an unbounded wait still needs a wake-up at expiry
+      const expiry = this.#sessions.get(id)?.expiresAt;
+      const limit = Math.min(waitMs, expiry === undefined ? waitMs : Math.max(0, expiry - this.now()) + 5);
+      if (!Number.isFinite(limit)) return;
       const timer = setTimeout(() => {
         waiters.delete(resolve);
         if (waiters.size === 0) this.#waiters.delete(id);
         resolve();
-      }, waitMs);
+      }, limit);
       timer.unref();
     });
     return this.result(id);
