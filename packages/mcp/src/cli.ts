@@ -29,7 +29,7 @@ Share a diagram file with the user (for agents):
                                in the editor, the user's edits are saved to it
   gmermaid wait <file> [--timeout SEC] [--json]
                                Wait until the user sends the diagram back
-                               (default 540s); prints their note and the
+                               (default: until sent back or the editor is closed); prints their note and the
                                diagram. Exit 3: not yet, run again
   gmermaid close <file>        Stop sharing the file
   gmermaid status              List shared files
@@ -138,8 +138,9 @@ try {
     });
     const [file, ...extra] = positionals;
     if (file === undefined || extra.length > 0) throw new UsageError("wait: give exactly one file");
-    const timeoutSec = values.timeout === undefined ? 540 : Number(values.timeout);
-    if (!Number.isFinite(timeoutSec) || timeoutSec < 0) throw new UsageError("wait: --timeout takes seconds");
+    const given = values.timeout === undefined ? undefined : Number(values.timeout);
+    if (given !== undefined && (!Number.isFinite(given) || given < 0)) throw new UsageError("wait: --timeout takes seconds");
+    const timeoutSec = given ?? Infinity;
     process.exitCode = await runWait(file, { timeoutSec, json: values.json === true });
   } else if (command === "close") {
     const [file, ...extra] = rest;

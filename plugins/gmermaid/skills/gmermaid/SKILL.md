@@ -30,8 +30,11 @@ Run it as `gmermaid` if installed, otherwise `npx -y @mr-akami/gmermaid`.
    - In Claude Code, run it with `run_in_background: true` so the conversation
      stays free; you are notified when it prints.
    - Exit 0: it printed the user's note, whether they edited, and the
-     diagram as it now stands. Exit 3: not sent back yet (default timeout
-     540s) — run `wait` again. Exit 4: no session (closed); `open` again.
+     diagram as it now stands. It has no timeout: it waits until the user
+     sends it back, so one background `wait` costs nothing while they work.
+     Exit 4: the user closed the editor (the session ends with the last
+     tab); the file already holds their edits, `open` again if needed.
+     Exit 3 only happens if you passed `--timeout`.
 5. **Act on it**: what the user sends back is their review of the design. Read
    their note and compare the diagram with what you proposed — changed
    nodes, edges and labels are decisions the user made. Fix or reconsider the
