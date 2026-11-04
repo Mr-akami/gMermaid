@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2026.1104.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1103.0...v2026.1104.0) - 2026-11-04
+
+### Other changes
+- feat(mcp): gmermaid wait without timeout; close session with last tab by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/70
+- feat(mcp): review wait without cap; session ends with the editor tab by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/72
+
 ## [v2026.1103.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1030.0...v2026.1103.0) - 2026-11-03
 
 ### Other changes
