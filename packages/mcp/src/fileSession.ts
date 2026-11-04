@@ -41,8 +41,11 @@ export interface FileSessionOptions {
   readonly displayName: string;
   readonly title?: string | undefined;
   readonly html: string;
-  /** Close after this long with no editor connected and no agent waiting. */
+  /** Close after this long if no editor ever connected. */
   readonly idleMs?: number | undefined;
+  /** Close after this long once the last editor tab is gone. A waiting agent
+   * does not keep the session alive: it is woken with "closed" instead. */
+  readonly graceMs?: number | undefined;
   readonly onClose?: (() => void) | undefined;
 }
 
@@ -93,6 +96,7 @@ export class FileSessionServer {
   readonly #waiters = new Set<(h: Handoff | undefined) => void>();
   readonly #clients = new Set<ServerResponse>();
   #idleTimer: NodeJS.Timeout | undefined;
+  #everConnected = false;
   #debounce: NodeJS.Timeout | undefined;
   #closed = false;
 
@@ -216,8 +220,9 @@ export class FileSessionServer {
 
   #armIdle(): void {
     clearTimeout(this.#idleTimer);
-    if (this.#closed || this.#clients.size > 0 || this.#waiters.size > 0) return;
-    this.#idleTimer = setTimeout(() => this.close(), this.opts.idleMs ?? 2 * 60 * 60_000);
+    if (this.#closed || this.#clients.size > 0) return;
+    const ms = this.#everConnected ? (this.opts.graceMs ?? 30_000) : (this.opts.idleMs ?? 2 * 60 * 60_000);
+    this.#idleTimer = setTimeout(() => this.close(), ms);
     this.#idleTimer.unref();
   }
 
@@ -250,6 +255,7 @@ export class FileSessionServer {
         res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
         res.write(`event: file\ndata: ${JSON.stringify(snapshotOf(this.#text))}\n\n`);
         this.#clients.add(res);
+        this.#everConnected = true;
         this.#armIdle();
         req.on("close", () => {
           this.#clients.delete(res);

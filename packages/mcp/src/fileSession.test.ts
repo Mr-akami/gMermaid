@@ -50,6 +50,20 @@ async function nextEvent(res: Response, event: string, skip = 0): Promise<unknow
   }
 }
 
+describe("FileSessionServer lifetime", () => {
+  it("closes when the last editor tab goes, waking a waiting agent with 410", async () => {
+    server.close();
+    server = new FileSessionServer({ file, displayName: "design.mmd", html: HTML, graceMs: 50 });
+    info = await server.start();
+    const abort = new AbortController();
+    const events = await fetch(api("/api/events"), { signal: abort.signal });
+    await nextEvent(events, "file");
+    const waiting = fetch(api("/api/wait", "&waitMs=30000"));
+    abort.abort();
+    expect((await waiting).status).toBe(410);
+  });
+});
+
 describe("FileSessionServer", () => {
   it("refuses requests without the session token", async () => {
     expect((await fetch(`${info.origin}/api/ping`)).status).toBe(403);
