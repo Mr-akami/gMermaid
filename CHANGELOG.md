@@ -1,5 +1,16 @@
 # Changelog
 
+## [v2026.1103.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1030.0...v2026.1103.0) - 2026-11-03
+
+### Other changes
+- feat(app): code pane toggle, resize, shortcut by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/62
+- feat(app): SVG/PNG export, error-line jump, narrow-screen code drawer by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/64
+- feat(er): erDiagram end to end by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/65
+- feat(quadrant): quadrantChart end to end, points draggable by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/66
+- feat(gitgraph): git graph diagrams end to end by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/67
+- feat(architecture): architecture-beta diagrams end to end by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/68
+- fix(app): flaky error-jump, kind-tab overflow, stale kinds in CONTEXT by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/69
+
 ## [v2026.1030.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1029.0...v2026.1030.0) - 2026-10-30
 
 ### Other changes
