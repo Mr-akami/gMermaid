@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useState } from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App as McpApp } from "@modelcontextprotocol/ext-apps";
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
@@ -101,6 +101,14 @@ function EmbeddedReview() {
 }
 
 function BrowserReview({ bootstrap }: { readonly bootstrap: Bootstrap }) {
+  // an open stream tells the server this tab is alive; closing the tab ends the review
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("presence", "1");
+    const events = new EventSource(url);
+    events.addEventListener("error", () => events.close());
+    return () => events.close();
+  }, []);
   return (
     <ReviewApp
       {...bootstrap}

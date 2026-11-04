@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import open from "open";
 import type { SessionStore } from "./session";
 import { injectBootstrap } from "./bootstrap";
@@ -14,11 +14,14 @@ function json(res: import("node:http").ServerResponse, status: number, value: un
 export class BrowserReviewServer {
   #server: Server | undefined;
   #origin: string | undefined;
+  readonly #tabs = new Map<string, Set<ServerResponse>>();
+  readonly #graceTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly sessions: SessionStore,
     private readonly html: string,
     private readonly openUrl: (url: string) => Promise<unknown> = (url) => open(url, { wait: false }),
+    private readonly graceMs = 30_000,
   ) {}
 
   async open(sessionId: string): Promise<string> {
@@ -36,6 +39,9 @@ export class BrowserReviewServer {
   }
 
   close(): void {
+    for (const t of this.#graceTimers.values()) clearTimeout(t);
+    this.#graceTimers.clear();
+    this.#server?.closeAllConnections();
     this.#server?.close();
     this.#server = undefined;
     this.#origin = undefined;
@@ -54,6 +60,28 @@ export class BrowserReviewServer {
     return this.#origin;
   }
 
+  /** An open tab holds this stream. When the last one drops (after a grace
+   * for reloads) the user has left: end the session so a waiting agent hears it. */
+  #trackTab(id: string, req: import("node:http").IncomingMessage, res: ServerResponse): void {
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
+    res.write(": open\n\n");
+    const tabs = this.#tabs.get(id) ?? new Set<ServerResponse>();
+    tabs.add(res);
+    this.#tabs.set(id, tabs);
+    clearTimeout(this.#graceTimers.get(id));
+    req.on("close", () => {
+      tabs.delete(res);
+      if (tabs.size > 0) return;
+      this.#tabs.delete(id);
+      const timer = setTimeout(() => {
+        this.#graceTimers.delete(id);
+        this.sessions.end(id);
+      }, this.graceMs);
+      timer.unref();
+      this.#graceTimers.set(id, timer);
+    });
+  }
+
   async #handle(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse): Promise<void> {
     try {
       const origin = this.#origin ?? "http://127.0.0.1";
@@ -64,6 +92,11 @@ export class BrowserReviewServer {
       const token = url.searchParams.get("token") ?? undefined;
       const session = this.sessions.getSession(id, token);
       if (session === undefined) return json(res, 404, { error: "Unknown or expired review session" });
+
+      if (req.method === "GET" && url.searchParams.get("presence") === "1") {
+        this.#trackTab(id, req, res);
+        return;
+      }
 
       if (req.method === "GET") {
         const html = injectBootstrap(this.html, {

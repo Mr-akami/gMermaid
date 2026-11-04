@@ -47,3 +47,11 @@ describe("SessionStore", () => {
     await expect(waiting).resolves.toMatchObject({ status: "confirmed", mermaid: "flowchart TB\n  B" });
   });
 });
+
+describe("SessionStore unbounded wait", () => {
+  it("still ends at the session's expiry", async () => {
+    const store = new SessionStore(40);
+    const session = store.create("flowchart", "flowchart TB\n  A");
+    await expect(store.wait(session.id)).resolves.toEqual({ status: "expired", sessionId: session.id });
+  });
+});

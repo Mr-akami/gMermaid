@@ -31,7 +31,7 @@ function resultContent(result: ReviewResult): string {
   if (result.status === "confirmed") {
     return `The user confirmed this ${result.kind} Mermaid diagram:\n\n\`\`\`mermaid\n${result.mermaid}\n\`\`\``;
   }
-  if (result.status === "expired") return `Mermaid review session ${result.sessionId} expired.`;
+  if (result.status === "expired") return `Mermaid review session ${result.sessionId} expired or the user closed the editor.`;
   return `Mermaid review ${result.sessionId} is still waiting for the user. Call get_mermaid_review again.`;
 }
 
@@ -49,7 +49,7 @@ export function createGMermaidServer(): GMermaidServer {
     {
       capabilities: { tools: {}, resources: {} },
       instructions:
-        "Use review_mermaid when a user should visually inspect or edit Mermaid. If it returns editing/pending, keep calling get_mermaid_review with waitMs up to 30000 until confirmed or expired. The confirmed mermaid field is the user's authoritative result.",
+        "Use review_mermaid when a user should visually inspect or edit Mermaid. If it returns editing/pending, call get_mermaid_review once without waitMs: it waits until the user confirms, closes the editor, or the session expires, so do not poll. The confirmed mermaid field is the user's authoritative result.",
     },
   );
 
@@ -111,7 +111,7 @@ export function createGMermaidServer(): GMermaidServer {
       }
 
       const browserUrl = await browser.open(session.id);
-      const waited = await sessions.wait(session.id, 30_000);
+      const waited = await sessions.wait(session.id);
       if (waited.status === "confirmed") {
         return { structuredContent: waited, content: [{ type: "text" as const, text: resultContent(waited) }] };
       }
@@ -157,13 +157,13 @@ export function createGMermaidServer(): GMermaidServer {
     {
       title: "Get Mermaid review result",
       description:
-        "Wait for and retrieve a Mermaid review. Repeat while status is pending. A confirmed result is the user's authoritative Mermaid diagram.",
-      inputSchema: { sessionId: z.string().uuid(), waitMs: z.number().int().min(0).max(30_000).optional() },
+        "Wait for and retrieve a Mermaid review. Without waitMs it waits until the user confirms or closes the editor (status expired); pass waitMs: 0 to just peek. A confirmed result is the user's authoritative Mermaid diagram.",
+      inputSchema: { sessionId: z.string().uuid(), waitMs: z.number().int().min(0).optional() },
       outputSchema: resultShape,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
       _meta: { ui: { visibility: ["model"] } },
     },
-    async ({ sessionId, waitMs = 0 }) => {
+    async ({ sessionId, waitMs }) => {
       const result = await sessions.wait(sessionId, waitMs);
       return { structuredContent: result, content: [{ type: "text" as const, text: resultContent(result) }] };
     },
