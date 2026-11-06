@@ -46,6 +46,8 @@ export type FlowchartAction =
   // paint a node, subgraph or edge; `[]` / `""` clears. Edges take `style`
   // only: mermaid spells their paint as `linkStyle <index>`.
   | { type: "setStyle"; id: NodeId | SubgraphId | EdgeId; classes?: readonly string[]; style?: string }
+  // move a node into a subgraph, or out to the top level (null)
+  | { type: "setNodeParent"; id: NodeId; parent: SubgraphId | null }
   // upsert a `classDef`; `style: ""` removes it
   | { type: "defineClass"; name: string; style: string };
 
@@ -249,6 +251,14 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
       const style = action.style || undefined;
       if (style === edge.style) return ir;
       return { ...ir, edges: ir.edges.map((e) => (e.id === id ? omitUndefined({ ...edge, style }) : e)) };
+    }
+
+    case "setNodeParent": {
+      const node = ir.nodes.find((n) => n.id === action.id);
+      const parent = action.parent ?? undefined;
+      if (!node || node.parent === parent) return ir;
+      if (parent !== undefined && !ir.subgraphs.some((s) => s.id === parent)) return ir;
+      return { ...ir, nodes: ir.nodes.map((n) => (n.id === action.id ? omitUndefined({ ...n, parent }) : n)) };
     }
 
     case "defineClass": {

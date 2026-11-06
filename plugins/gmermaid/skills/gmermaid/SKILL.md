@@ -71,7 +71,8 @@ flowchart LR
 Flowchart keeps `classDef`, `class`, `:::`, `style` and `linkStyle <n>`;
 other kinds drop them. Node positions come from auto layout and are not
 saved: change structure (subgraph membership, edge order, `direction`) to
-move things.
+move things. In the editor the user does the same with **Move mode**: drag a
+node onto a subgraph to put it there, or onto bare canvas to take it out.
 
 ## Notes
 
