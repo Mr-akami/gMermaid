@@ -273,6 +273,14 @@ flowchart LR
     ]);
   });
 
+  it("a subgraph adopts a node referenced at the top level before it, like mermaid", () => {
+    const result = parseFlowchart("flowchart LR\n  x --> b\n  subgraph s1\n    b\n  end\n  subgraph s2\n    b\n  end\n");
+    expect(result.ok && result.ir.nodes.map((n) => [n.id, n.parent])).toEqual([
+      ["x", undefined],
+      ["b", "s1"],
+    ]);
+  });
+
   it("warns on paint that names nothing", () => {
     const result = parseFlowchart("flowchart LR\n  A --> B\n  style Z fill:#f00\n  linkStyle 3 stroke:red\n");
     expect(result.ok && result.warnings.map((w) => w.line)).toEqual([3, 4]);
@@ -283,10 +291,10 @@ flowchart LR
   日本["日本語"] --> ユーザ
   a.b --> svc.api
   subgraph 領域["x"]
-    ユーザ --> a.b
+    領域内
   end
 `);
-    expect(ir.nodes.map((n) => n.id)).toEqual(["日本", "ユーザ", "a.b", "svc.api"]);
+    expect(ir.nodes.map((n) => n.id)).toEqual(["日本", "ユーザ", "a.b", "svc.api", "領域内"]);
     expect(ir.subgraphs.map((s) => s.id)).toEqual(["領域"]);
   });
 

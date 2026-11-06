@@ -24,6 +24,11 @@ export interface FlowchartViewProps {
   readonly onBackgroundClick?: () => void;
   /** Marquee and context-menu gestures (see SelectionGestures). */
   readonly select?: SelectionGestures | undefined;
+  /** What dragging a node does: draw an edge (default) or move it into the
+   * subgraph it is dropped on. */
+  readonly dragMode?: "connect" | "move";
+  readonly onMoveDrag?: (id: string, x: number, y: number) => void;
+  readonly onMoveDrop?: (id: string, x: number, y: number) => void;
   /** Dragging from a node = draw a new edge to the drop target. */
   readonly onConnectDrag?: (fromId: string, x: number, y: number) => void;
   readonly onConnectDrop?: (fromId: string, x: number, y: number) => void;
@@ -44,6 +49,9 @@ export function FlowchartView({
   select,
   onConnectDrag,
   onConnectDrop,
+  dragMode = "connect",
+  onMoveDrag,
+  onMoveDrop,
   connectLine,
   onGestureCancel,
 }: FlowchartViewProps) {
@@ -52,12 +60,12 @@ export function FlowchartView({
     padding: PADDING,
     viewport,
     onViewportChange,
-    dragKinds: ["connect"],
+    dragKinds: [dragMode],
     onElementClick,
     onBackgroundClick,
     selection: select,
-    onDrag: (_kind, id, x, y) => onConnectDrag?.(id, x, y),
-    onDrop: (_kind, id, x, y) => onConnectDrop?.(id, x, y),
+    onDrag: (kind, id, x, y) => (kind === "move" ? onMoveDrag?.(id, x, y) : onConnectDrag?.(id, x, y)),
+    onDrop: (kind, id, x, y) => (kind === "move" ? onMoveDrop?.(id, x, y) : onConnectDrop?.(id, x, y)),
     onGestureCancel,
   });
 
@@ -95,7 +103,7 @@ export function FlowchartView({
           <EdgeView key={edge.id} edge={edge} selected={sel.has(edge.id)} />
         ))}
         {layout.nodes.map((node) => (
-          <NodeView key={node.id} node={node} selected={sel.has(node.id)} />
+          <NodeView key={node.id} node={node} selected={sel.has(node.id)} dragMode={dragMode} />
         ))}
         {connectLine !== undefined && (
           <line x1={connectLine.x1} y1={connectLine.y1} x2={connectLine.x2} y2={connectLine.y2} stroke="var(--gm-selected, #1a73e8)" strokeWidth={1.5} strokeDasharray="6 4" markerEnd="url(#gm-arrow)" style={{ pointerEvents: "none" }} />
@@ -148,7 +156,7 @@ function docPath(x: number, y: number, w: number, h: number): string {
   return `M ${x} ${y} H ${x + w} V ${y + h - wave} q ${-w / 4} ${wave * 1.6} ${-w / 2} 0 q ${-w / 4} ${-wave * 1.6} ${-w / 2} 0 Z`;
 }
 
-function NodeView({ node, selected }: { node: NodeBox; selected: boolean }) {
+function NodeView({ node, selected, dragMode }: { node: NodeBox; selected: boolean; dragMode: string }) {
   const { x, y, w, h } = node.rect;
   const p = node.paint;
   const stroke = selected ? "var(--gm-selected, #1a73e8)" : (p?.stroke ?? "var(--gm-stroke, #333)");
@@ -397,7 +405,7 @@ function NodeView({ node, selected }: { node: NodeBox; selected: boolean }) {
   }
 
   return (
-    <g data-element-id={node.id} data-drag="connect" style={{ cursor: "pointer" }}>
+    <g data-element-id={node.id} data-drag={dragMode} style={{ cursor: "pointer" }}>
       {shape}
       {!NO_LABEL.has(node.shape) && (
       <text

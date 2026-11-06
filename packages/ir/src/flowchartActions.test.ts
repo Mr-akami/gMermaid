@@ -206,3 +206,15 @@ describe("paint actions", () => {
     expect(applyFlowchartAction(one, { type: "defineClass", name: "added", style: "" }).classDefs).toBeUndefined();
   });
 });
+
+describe("setNodeParent", () => {
+  const s = "sub-1" as SubgraphId;
+  const withSub: FlowchartIR = { ...base, subgraphs: [{ id: s, label: "S" }] };
+  it("moves a node in and out; unknown parent or no change keeps identity", () => {
+    const moved = applyFlowchartAction(withSub, { type: "setNodeParent", id: a, parent: s });
+    expect(moved.nodes[0]!.parent).toBe(s);
+    expect(applyFlowchartAction(moved, { type: "setNodeParent", id: a, parent: s })).toBe(moved);
+    expect(applyFlowchartAction(withSub, { type: "setNodeParent", id: a, parent: "nope" as SubgraphId })).toBe(withSub);
+    expect(applyFlowchartAction(moved, { type: "setNodeParent", id: a, parent: null }).nodes[0]).toEqual(base.nodes[0]);
+  });
+});

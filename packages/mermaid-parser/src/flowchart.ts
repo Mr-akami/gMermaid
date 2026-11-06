@@ -356,10 +356,16 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       });
       if (explicit) bareOnly.delete(id);
       else bareOnly.add(id);
-    } else if (explicit) {
+    } else {
+      // mermaid: the first subgraph that mentions a node adopts it, even when
+      // the node was referenced at the top level before
+      const parent = existing.parent ?? currentParent();
       // a later decl with an explicit label/shape wins over a bare reference
-      nodes.set(id, { ...existing, label: ref.label ?? existing.label, shape: ref.shape ?? existing.shape });
-      bareOnly.delete(id);
+      const label = explicit ? (ref.label ?? existing.label) : existing.label;
+      const shape = explicit ? (ref.shape ?? existing.shape) : existing.shape;
+      if (explicit) bareOnly.delete(id);
+      if (parent !== existing.parent || label !== existing.label || shape !== existing.shape)
+        nodes.set(id, { ...existing, label, shape, ...(parent !== undefined ? { parent } : {}) });
     }
   };
 

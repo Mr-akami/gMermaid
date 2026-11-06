@@ -21,6 +21,7 @@ import { measurer } from "./measurer";
 import { loadInitial, openMmd, saveMmd, useAutosave, useLoadWarnings } from "./persistence";
 import { CodePane } from "./CodePane";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { Icon } from "./icons";
 import { PropertyWindow } from "./PropertyWindow";
 import { SelectionOverlay } from "./SelectionUI";
 import { DeleteButton, DirectionSelect, EditorToolbar } from "./EditorToolbar";
@@ -63,6 +64,8 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
   const load = useLoadWarnings(initial.warnings);
   const h = useDiagramHistory(() => initial.ir, applyFlowchartAction);
   const [view, setView] = useState<ViewState>({});
+  // a mode, not a selection: it survives every setView reset
+  const [moveMode, setMoveMode] = useState(false);
   // drag-to-connect rubber band: view-transient (ADR 0001)
   const [connectLine, setConnectLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | undefined>(undefined);
   const ir = h.ir;
@@ -147,6 +150,18 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
     setView({ selectedId: edgeId });
   }
 
+  /** Drop a node into the innermost subgraph under the pointer; on bare
+   * canvas it leaves every subgraph. */
+  function handleMoveDrop(id: string, x: number, y: number) {
+    setConnectLine(undefined);
+    const node = ir.nodes.find((n) => n.id === id);
+    if (!node) return;
+    const inRect = (r: { x: number; y: number; w: number; h: number }) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    const target = layout.subgraphs.filter((s) => inRect(s.rect)).toSorted((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0];
+    h.dispatch({ type: "setNodeParent", id: node.id, parent: target?.id ?? null });
+    setView({ selectedId: id });
+  }
+
   // reducer rejections must be visible, not silent no-ops (L2)
   const [rejectHint, setRejectHint] = useState<string | undefined>(undefined);
 
@@ -215,9 +230,6 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
     onDelete: deleteSelected,
     onPaste: (next) => h.pushIR(next),
     notify: setRejectHint,
-    // a flowchart node's only "move" is being adopted by a subgraph as it is
-    // CREATED; there is no reparent action to offer, so this kind shows no
-    // Move entry rather than a dead one
     onEscape: () => {
       setRejectHint(undefined);
       setView({});
@@ -251,8 +263,20 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
             <DeleteButton onClick={() => deleteSelected(shell.selection.ids)} />
           </>
         }
+        modes={
+          <button
+            className="btn"
+            aria-pressed={moveMode}
+            title="Drag a node onto a subgraph to move it in"
+            onClick={() => setMoveMode(!moveMode)}
+          >
+            <Icon name="move" />
+            Move mode
+          </button>
+        }
         prompt={view.connectFrom !== undefined ? "click a target node to connect…" : undefined}
         notice={rejectHint}
+        tip={moveMode ? "drag a node onto a subgraph to move it in (background = top level)" : undefined}
       />
       <div className="canvas" ref={shell.canvasRef}>
         <ErrorBoundary>
@@ -270,6 +294,9 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
             select={shell.gestures}
             onConnectDrag={handleConnectDrag}
             onConnectDrop={handleConnectDrop}
+            dragMode={moveMode ? "move" : "connect"}
+            onMoveDrag={handleConnectDrag}
+            onMoveDrop={handleMoveDrop}
             connectLine={connectLine}
             onGestureCancel={() => setConnectLine(undefined)}
           />

@@ -180,3 +180,25 @@ test("paint: classDef/style render, and the Mark select writes a class", async (
   await editor.getByLabel("Mark").selectOption("");
   await expectCode(editor).not.toContain("class b added");
 });
+
+test("move mode drags a node into a subgraph and back out", async ({ page }) => {
+  const editor = await openEditor(page, "Flowchart");
+  await setCode(editor, "flowchart LR\n  x[Loose] --> b\n  subgraph after[After]\n    b[Inside]\n  end\n");
+  await editor.getByRole("button", { name: "Move mode" }).click();
+  await expect(editor.getByText("drag a node onto a subgraph")).toBeVisible();
+
+  const drag = async (id: string, to: { x: number; y: number }) => {
+    const from = (await element(editor, id).locator("rect").first().boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 12 });
+    await page.mouse.up();
+  };
+  const inside = (await element(editor, "b").locator("rect").first().boundingBox())!;
+  await drag("x", { x: inside.x + inside.width / 2, y: inside.y + inside.height / 2 });
+  await expectCode(editor).toMatch(/subgraph after\["After"\]\n\s+x\["Loose"\]/);
+
+  const canvas = (await editor.locator(".canvas").boundingBox())!;
+  await drag("x", { x: canvas.x + canvas.width - 20, y: canvas.y + canvas.height - 20 });
+  await expectCode(editor).toMatch(/^flowchart LR\n {2}x\["Loose"\]/);
+});
