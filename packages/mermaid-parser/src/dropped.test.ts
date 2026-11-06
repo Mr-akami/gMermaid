@@ -42,6 +42,8 @@ const STATEMENT: Record<string, string> = {
  * two exceptions to the shared set, and both are deliberate. */
 const KEEPS: Partial<Record<DiagramKind, readonly string[]>> = {
   class: ["class"],
+  // flowchart paint is modelled: it marks what a change added or removed
+  flowchart: ["class", "classDef", "linkStyle", "style"],
   mindmap: ["class"],
   // a quadrant chart has no `style` / `class` / `click` / … statement: only
   // `classDef` and the accessibility pair. The rest is point-name prose
@@ -73,11 +75,11 @@ describe("shared drop policy", () => {
   });
 
   it("reports the ORIGINAL source line of each dropped statement", () => {
-    const result = parseDiagram("flowchart", "---\ntitle: t\n---\n%% c\nflowchart TD\n  A --> B\n  classDef zz fill:#f00\n");
+    const result = parseDiagram("flowchart", "---\ntitle: t\n---\n%% c\nflowchart TD\n  A --> B\n  click A cb \"tip\"\n");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.warnings).toEqual([
-      { line: 7, message: "`classDef` is not represented in the editor and will be lost on save" },
+      { line: 7, message: "`click` is not represented in the editor and will be lost on save" },
     ]);
   });
 

@@ -164,3 +164,19 @@ test("a subgraph's direction is editable from the property window", async ({ pag
   await expectCode(editor).not.toContain("direction LR");
 });
 
+
+test("paint: classDef/style render, and the Mark select writes a class", async ({ page }) => {
+  const editor = await openEditor(page, "Flowchart");
+  await setCode(editor, "flowchart LR\n  a[Old] --> b[New]\n  classDef removed fill:#fee2e2,stroke:#dc2626\n  class a removed\n  style b fill:#00ff00\n");
+  await expect(element(editor, "a").locator("rect").first()).toHaveAttribute("fill", "#fee2e2");
+  await expect(element(editor, "b").locator("rect").first()).toHaveAttribute("fill", "#00ff00");
+  await expect(editor.locator(".code-warnings")).toHaveCount(0);
+
+  await element(editor, "b").click();
+  await editor.getByLabel("Mark").selectOption("added");
+  await expectCode(editor).toContain("class b added");
+  await expectCode(editor).toContain("classDef added fill:#dcfce7");
+
+  await editor.getByLabel("Mark").selectOption("");
+  await expectCode(editor).not.toContain("class b added");
+});

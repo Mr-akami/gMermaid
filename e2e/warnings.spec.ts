@@ -6,12 +6,11 @@ import { element, expectCode, openEditor, setCode, switchEditor } from "./helper
 
 test("a dropped styling statement is reported and the diagram still renders", async ({ page }) => {
   const editor = await openEditor(page, "Flowchart");
-  await setCode(editor, 'flowchart TB\n  a[One] --> b[Two]\n  classDef hot fill:#f00\n  style a fill:#0f0\n  click a "https://example.com"\n');
+  await setCode(editor, 'flowchart TB\n  a[One] --> b[Two]\n  accTitle: Title\n  click a "https://example.com"\n');
 
   const warnings = editor.locator(".code-warnings");
   await expect(warnings).toBeVisible();
-  await expect(warnings).toContainText("line 3: `classDef` is not represented in the editor and will be lost on save");
-  await expect(warnings).toContainText("`style`");
+  await expect(warnings).toContainText("line 3: `accTitle` is not represented in the editor and will be lost on save");
   await expect(warnings).toContainText("`click`");
 
   // informational only: the diagram committed, so it renders and the code
@@ -20,12 +19,12 @@ test("a dropped styling statement is reported and the diagram still renders", as
   await expect(element(editor, "a")).toBeVisible();
   await expect(element(editor, "b")).toBeVisible();
   await expectCode(editor).toContain("a[One] --> b[Two]");
-  await expectCode(editor).not.toContain("classDef");
+  await expectCode(editor).not.toContain("click");
 
   // one page load for both: the second case starts from fresh code
   await test.step("editing again clears the warning", async () => {
     const editor = await switchEditor(page, "Flowchart");
-    await setCode(editor, "flowchart TB\n  a[One] --> b[Two]\n  classDef hot fill:#f00\n");
+    await setCode(editor, "flowchart TB\n  a[One] --> b[Two]\n  accTitle: Title\n");
     await expect(editor.locator(".code-warnings")).toBeVisible();
 
     await setCode(editor, "flowchart TB\n  a[One] --> b[Two]\n");

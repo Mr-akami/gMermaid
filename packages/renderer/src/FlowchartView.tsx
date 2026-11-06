@@ -112,15 +112,16 @@ export function FlowchartView({
 
 function SubgraphView({ s, selected }: { s: SubgraphBox; selected: boolean }) {
   const { x, y, w, h } = s.rect;
-  const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #888)";
+  const p = s.paint;
+  const stroke = selected ? "var(--gm-selected, #1a73e8)" : (p?.stroke ?? "var(--gm-stroke, #888)");
   return (
     <g>
       {/* translucent body: visible but never clickable (like sequence fragments) */}
-      <rect x={x} y={y} width={w} height={h} rx={6} fill="var(--gm-frag-fill, rgba(120,140,180,0.06))" style={{ pointerEvents: "none" }} />
+      <rect x={x} y={y} width={w} height={h} rx={6} fill={p?.fill ?? "var(--gm-frag-fill, rgba(120,140,180,0.06))"} style={{ pointerEvents: "none" }} />
       {/* border + title are the subgraph's only hit targets; dragging the
        * title draws an edge from the subgraph as a whole */}
       <g data-element-id={s.id} style={{ cursor: "pointer" }}>
-        <rect x={x} y={y} width={w} height={h} rx={6} fill="none" stroke={stroke} strokeWidth={selected ? 2 : 1.2} pointerEvents="stroke" />
+        <rect x={x} y={y} width={w} height={h} rx={6} fill="none" stroke={stroke} strokeWidth={selected ? 2 : (p?.strokeWidth ?? 1.2)} strokeDasharray={p?.strokeDasharray} pointerEvents="stroke" />
         <text
           data-drag="connect"
           x={x + 8}
@@ -128,7 +129,7 @@ function SubgraphView({ s, selected }: { s: SubgraphBox; selected: boolean }) {
           fontSize={12}
           fontWeight={600}
           fontFamily="sans-serif"
-          fill="var(--gm-text, #444)"
+          fill={p?.color ?? "var(--gm-text, #444)"}
           style={{ userSelect: "none" }}
         >
           {s.label}
@@ -149,11 +150,13 @@ function docPath(x: number, y: number, w: number, h: number): string {
 
 function NodeView({ node, selected }: { node: NodeBox; selected: boolean }) {
   const { x, y, w, h } = node.rect;
-  const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
+  const p = node.paint;
+  const stroke = selected ? "var(--gm-selected, #1a73e8)" : (p?.stroke ?? "var(--gm-stroke, #333)");
   const common = {
-    fill: "var(--gm-node-fill, #fff)",
+    fill: p?.fill ?? "var(--gm-node-fill, #fff)",
     stroke,
-    strokeWidth: selected ? 2.5 : 1.5,
+    strokeWidth: selected ? 2.5 : (p?.strokeWidth ?? 1.5),
+    strokeDasharray: p?.strokeDasharray,
   } as const;
 
   const slant = Math.min(14, w / 4); // parallelogram/trapezoid slope
@@ -404,7 +407,7 @@ function NodeView({ node, selected }: { node: NodeBox; selected: boolean }) {
         dominantBaseline="central"
         fontSize={14}
         fontFamily="sans-serif"
-        fill="var(--gm-text, #111)"
+        fill={p?.color ?? "var(--gm-text, #111)"}
         style={{ pointerEvents: "none", userSelect: "none" }}
       >
         {node.label}
@@ -423,7 +426,8 @@ const MARKER: Record<string, string | undefined> = {
 
 function EdgeView({ edge, selected }: { edge: EdgePath; selected: boolean }) {
   const d = edgePath(edge.points);
-  const stroke = selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)";
+  const p = edge.paint;
+  const stroke = selected ? "var(--gm-selected, #1a73e8)" : (p?.stroke ?? "var(--gm-stroke, #333)");
   // invisible links shape the layout but draw (almost) nothing — a faint
   // dotted trace appears only while selected so the edge stays editable
   const invisible = edge.line === "invisible";
@@ -438,8 +442,8 @@ function EdgeView({ edge, selected }: { edge: EdgePath; selected: boolean }) {
         d={d}
         fill="none"
         stroke={invisible && !selected ? "transparent" : stroke}
-        strokeWidth={width}
-        strokeDasharray={dash}
+        strokeWidth={selected ? width : (p?.strokeWidth ?? width)}
+        strokeDasharray={p?.strokeDasharray ?? dash}
         markerStart={invisible ? undefined : MARKER[edge.headStart]}
         markerEnd={invisible ? undefined : MARKER[edge.headEnd]}
       />
@@ -450,7 +454,7 @@ function EdgeView({ edge, selected }: { edge: EdgePath; selected: boolean }) {
           textAnchor="middle"
           fontSize={12}
           fontFamily="sans-serif"
-          fill="var(--gm-text, #111)"
+          fill={p?.color ?? "var(--gm-text, #111)"}
           style={{ paintOrder: "stroke", stroke: "var(--gm-bg, #fff)", strokeWidth: 4, userSelect: "none" }}
         >
           {edge.label}

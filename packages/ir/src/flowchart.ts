@@ -117,6 +117,10 @@ export interface FlowchartNode {
   readonly shape: FlowchartNodeShape;
   /** Subgraph membership; absent = top level. */
   readonly parent?: SubgraphId;
+  /** `class A cls` / `A:::cls`, in the order applied. */
+  readonly classes?: readonly string[];
+  /** `style A fill:#f00,stroke:#333`, the text after the id. */
+  readonly style?: string;
 }
 
 /** A `subgraph … end` block. Nesting via parent. */
@@ -127,6 +131,8 @@ export interface FlowchartSubgraph {
   /** `direction X` inside the block. The layout honors it: a subgraph gets a
    * dagre graph of its own, so its rankdir is its own too. */
   readonly direction?: FlowchartDirection;
+  readonly classes?: readonly string[];
+  readonly style?: string;
 }
 
 export type FlowchartLineStyle = "solid" | "dotted" | "thick" | "invisible";
@@ -147,6 +153,14 @@ export interface FlowchartEdge {
   readonly headEnd: FlowchartEdgeHead;
   /** Rank span (`-->` = 1, `--->` = 2, …). Absent = 1. */
   readonly length?: number;
+  /** `linkStyle <index> stroke:#f00`, the text after the index. */
+  readonly style?: string;
+}
+
+/** `classDef name fill:#f00,stroke:#333`. */
+export interface FlowchartClassDef {
+  readonly name: string;
+  readonly style: string;
 }
 
 export type FlowchartDirection = "TB" | "LR" | "BT" | "RL";
@@ -157,8 +171,72 @@ export interface FlowchartIR {
   readonly nodes: readonly FlowchartNode[];
   readonly edges: readonly FlowchartEdge[];
   readonly subgraphs: readonly FlowchartSubgraph[];
+  /** Absent = none. */
+  readonly classDefs?: readonly FlowchartClassDef[];
 }
 
 export function emptyFlowchart(direction: FlowchartDirection = "TB"): FlowchartIR {
   return { kind: "flowchart", direction, nodes: [], edges: [], subgraphs: [] };
 }
+
+/** Resolved paint for one element. Mermaid's CSS-ish `key:value` list,
+ * narrowed to what an SVG shape can show. */
+export interface FlowchartPaint {
+  readonly fill?: string;
+  readonly stroke?: string;
+  readonly strokeWidth?: string;
+  readonly strokeDasharray?: string;
+  /** Text colour. */
+  readonly color?: string;
+}
+
+const PAINT_KEYS: Record<string, keyof FlowchartPaint> = {
+  fill: "fill",
+  stroke: "stroke",
+  "stroke-width": "strokeWidth",
+  "stroke-dasharray": "strokeDasharray",
+  color: "color",
+};
+
+/** `fill:#f00,stroke-width:2px` → paint; unknown keys are ignored. */
+export function parseFlowchartStyle(style: string): FlowchartPaint {
+  const out: Record<string, string> = {};
+  for (const part of style.split(",")) {
+    const at = part.indexOf(":");
+    if (at < 0) continue;
+    const key = PAINT_KEYS[part.slice(0, at).trim()];
+    const value = part.slice(at + 1).trim().replace(/\s*!important$/, "");
+    if (key !== undefined && value !== "") out[key] = value;
+  }
+  return out;
+}
+
+/** Mermaid's cascade: `classDef default`, then each class in order, then the
+ * element's own `style`. Undefined when nothing applies. */
+export function flowchartPaint(
+  ir: FlowchartIR,
+  el: { readonly classes?: readonly string[]; readonly style?: string },
+  isEdge = false,
+): FlowchartPaint | undefined {
+  const defs = new Map((ir.classDefs ?? []).map((d) => [d.name, d.style]));
+  const names = [...(isEdge ? [] : ["default"]), ...(el.classes ?? [])];
+  const styles = [...names.map((n) => defs.get(n)), el.style].filter((s): s is string => s !== undefined);
+  if (styles.length === 0) return undefined;
+  return Object.assign({}, ...styles.map(parseFlowchartStyle)) as FlowchartPaint;
+}
+
+/** The classDefs a diagram uses to show what a change did. The names are
+ * what the property window's "Mark" select writes and the skill teaches. */
+export const FLOWCHART_DIFF_MARKS = {
+  added: "fill:#dcfce7,stroke:#16a34a,color:#14532d",
+  removed: "fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-dasharray:5 3",
+  changed: "fill:#fef9c3,stroke:#ca8a04,color:#713f12",
+} as const;
+export type FlowchartDiffMark = keyof typeof FLOWCHART_DIFF_MARKS;
+
+/** Edges have no classes in our codegen, so a mark is spelled inline. */
+export const FLOWCHART_DIFF_EDGE_STYLES: Record<FlowchartDiffMark, string> = {
+  added: "stroke:#16a34a,stroke-width:2px",
+  removed: "stroke:#dc2626,stroke-dasharray:5 3",
+  changed: "stroke:#ca8a04,stroke-width:2px",
+};

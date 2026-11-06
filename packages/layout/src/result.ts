@@ -1,4 +1,4 @@
-import type { EdgeId, FlowchartEdgeHead, FlowchartLineStyle, FlowchartNodeShape, NodeId, SubgraphId } from "@gmermaid/ir";
+import type { EdgeId, FlowchartEdgeHead, FlowchartLineStyle, FlowchartNodeShape, FlowchartPaint, NodeId, SubgraphId } from "@gmermaid/ir";
 
 // LayoutResult is pure data in diagram space. It carries ids only — never IR
 // object references — so the renderer cannot reach into the IR. Must survive
@@ -20,6 +20,8 @@ export interface NodeBox {
   readonly rect: Rect;
   readonly label: string;
   readonly shape: FlowchartNodeShape;
+  /** classDef/style paint; absent = theme colours. */
+  readonly paint?: FlowchartPaint;
 }
 
 export interface EdgePath {
@@ -30,6 +32,7 @@ export interface EdgePath {
   readonly line: FlowchartLineStyle;
   readonly headStart: FlowchartEdgeHead;
   readonly headEnd: FlowchartEdgeHead;
+  readonly paint?: FlowchartPaint;
 }
 
 export interface SubgraphBox {
@@ -38,6 +41,7 @@ export interface SubgraphBox {
   readonly label: string;
   /** Nesting depth (0 = top level) — outer frames draw first. */
   readonly depth: number;
+  readonly paint?: FlowchartPaint;
 }
 
 export interface FlowchartLayout {

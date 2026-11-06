@@ -32,7 +32,7 @@ describe("validate", () => {
   });
 
   it("reports statements the editor would drop as warnings, not errors", () => {
-    const { lines, failed } = check("a.mmd", "flowchart TB\n  A --> B\n  classDef hot fill:#f00\n");
+    const { lines, failed } = check("a.mmd", "flowchart TB\n  A --> B\n  click A cb \"tip\"\n");
     expect(failed).toBe(false);
     expect(lines[0]).toMatch(/^a\.mmd:3: warning: /);
     expect(lines[1]).toBe("a.mmd:1: ok (flowchart)");

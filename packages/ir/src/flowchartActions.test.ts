@@ -183,3 +183,26 @@ describe("retargetEdge", () => {
     expect(edgeRetargetRejection(rich, e1, { from: b, to: sg })).toBeUndefined();
   });
 });
+
+describe("paint actions", () => {
+  it("setStyle sets and clears a node's classes and style; no-op keeps identity", () => {
+    const painted = applyFlowchartAction(base, { type: "setStyle", id: a, classes: ["added"], style: "stroke-dasharray:5 3" });
+    expect(painted.nodes.find((n) => n.id === a)).toMatchObject({ classes: ["added"], style: "stroke-dasharray:5 3" });
+    expect(applyFlowchartAction(painted, { type: "setStyle", id: a, classes: ["added"] })).toBe(painted);
+    const cleared = applyFlowchartAction(painted, { type: "setStyle", id: a, classes: [], style: "" });
+    expect(cleared.nodes.find((n) => n.id === a)).toEqual(base.nodes.find((n) => n.id === a));
+  });
+
+  it("an edge keeps its style through updateEdge", () => {
+    const painted = applyFlowchartAction(base, { type: "setStyle", id: e1, style: "stroke:red" });
+    const relabeled = applyFlowchartAction(painted, { type: "updateEdge", id: e1, label: "x" });
+    expect(relabeled.edges[0]!.style).toBe("stroke:red");
+  });
+
+  it("defineClass upserts and removes", () => {
+    const one = applyFlowchartAction(base, { type: "defineClass", name: "added", style: "fill:#0f0" });
+    expect(one.classDefs).toEqual([{ name: "added", style: "fill:#0f0" }]);
+    expect(applyFlowchartAction(one, { type: "defineClass", name: "added", style: "fill:#0f0" })).toBe(one);
+    expect(applyFlowchartAction(one, { type: "defineClass", name: "added", style: "" }).classDefs).toBeUndefined();
+  });
+});

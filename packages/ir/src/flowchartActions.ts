@@ -42,7 +42,12 @@ export type FlowchartAction =
   // direction null = remove the per-subgraph override
   | { type: "updateSubgraph"; id: SubgraphId; label?: string; direction?: FlowchartDirection | null }
   // dissolve: members are promoted to the removed subgraph's parent
-  | { type: "removeSubgraph"; id: SubgraphId };
+  | { type: "removeSubgraph"; id: SubgraphId }
+  // paint a node, subgraph or edge; `[]` / `""` clears. Edges take `style`
+  // only: mermaid spells their paint as `linkStyle <index>`.
+  | { type: "setStyle"; id: NodeId | SubgraphId | EdgeId; classes?: readonly string[]; style?: string }
+  // upsert a `classDef`; `style: ""` removes it
+  | { type: "defineClass"; name: string; style: string };
 
 /**
  * Force an edge into a shape mermaid can actually spell.
@@ -177,7 +182,7 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
       // when the pair has to be coerced; naming both falls back to the end
       const edited = action.headStart !== undefined && action.headEnd === undefined ? "headStart" : "headEnd";
       const next = normalizeFlowchartEdge(
-        omitUndefined({ id: edge.id, from: edge.from, to: edge.to, line, headStart, headEnd, label, length }),
+        omitUndefined({ id: edge.id, from: edge.from, to: edge.to, line, headStart, headEnd, label, length, style: edge.style }),
         edited,
       );
       if (
@@ -222,5 +227,42 @@ export function applyFlowchartAction(ir: FlowchartIR, action: FlowchartAction): 
         edges: ir.edges.filter((e) => (e.from as string) !== (action.id as string) && (e.to as string) !== (action.id as string)),
       };
     }
+
+    case "setStyle": {
+      const patch = <T extends { readonly classes?: readonly string[]; readonly style?: string }>(el: T): T => {
+        const classes = action.classes === undefined ? el.classes : action.classes.length > 0 ? action.classes : undefined;
+        const style = action.style === undefined ? el.style : action.style || undefined;
+        if (sameList(classes, el.classes) && style === el.style) return el;
+        return omitUndefined({ ...el, classes, style }) as T;
+      };
+      const id = action.id as string;
+      if (ir.nodes.some((n) => n.id === id)) {
+        const nodes = ir.nodes.map((n) => (n.id === id ? patch(n) : n));
+        return nodes.every((n, i) => n === ir.nodes[i]) ? ir : { ...ir, nodes };
+      }
+      if (ir.subgraphs.some((s) => s.id === id)) {
+        const subgraphs = ir.subgraphs.map((s) => (s.id === id ? patch(s) : s));
+        return subgraphs.every((s, i) => s === ir.subgraphs[i]) ? ir : { ...ir, subgraphs };
+      }
+      const edge = ir.edges.find((e) => e.id === id);
+      if (edge === undefined || action.style === undefined) return ir;
+      const style = action.style || undefined;
+      if (style === edge.style) return ir;
+      return { ...ir, edges: ir.edges.map((e) => (e.id === id ? omitUndefined({ ...edge, style }) : e)) };
+    }
+
+    case "defineClass": {
+      const defs = ir.classDefs ?? [];
+      const style = action.style.trim();
+      const at = defs.findIndex((d) => d.name === action.name);
+      if (style === "") return at < 0 ? ir : omitUndefined({ ...ir, classDefs: defs.length > 1 ? defs.filter((_, i) => i !== at) : undefined });
+      if (at >= 0 && defs[at]!.style === style) return ir;
+      const def = { name: action.name, style };
+      return { ...ir, classDefs: at < 0 ? [...defs, def] : defs.map((d, i) => (i === at ? def : d)) };
+    }
   }
+}
+
+function sameList(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
+  return (a ?? []).length === (b ?? []).length && (a ?? []).every((x, i) => x === b![i]);
 }
