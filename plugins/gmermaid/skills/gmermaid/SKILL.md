@@ -21,8 +21,8 @@ Run it as `gmermaid` if installed, otherwise `npx -y @mr-akami/gmermaid`.
    `timeline`, `gantt`, `mindmap`, `usecase-beta`, `erDiagram`, `quadrantChart`, `gitGraph`, `architecture-beta`.
 2. **Validate**: `gmermaid validate docs/design/<topic>.mmd`. Fix every
    `error` line (it names the line). A `warning` means the editor will drop
-   that statement when the user edits (styling such as `classDef`/`style`) —
-   prefer to leave such statements out.
+   that statement when the user edits (e.g. `click`, or styling in any kind
+   but `flowchart`) — prefer to leave such statements out.
 3. **Show it**: `gmermaid open docs/design/<topic>.mmd --title "<what this is>"`.
    It returns at once. Tell the user in one or two lines what to look at and
    that they can edit it and press **Send to agent** when done.
@@ -47,6 +47,31 @@ Run it as `gmermaid` if installed, otherwise `npx -y @mr-akami/gmermaid`.
 
 The user may also ask for diagram changes in chat while the editor is open:
 just edit the file — do not reopen it. `gmermaid status` lists open files.
+
+## Explaining a change (PR before/after)
+
+Use a `flowchart` with `subgraph before` / `subgraph after` (or one graph) and
+mark what the change did with these class names. The editor's **Mark** select
+writes the same ones, so the user's edits and yours agree:
+
+```mermaid
+flowchart LR
+  subgraph before["Before"]
+    A1[parser] --> D1[drops colors]:::removed
+  end
+  subgraph after["After"]
+    A2[parser] --> K2[keeps colors]:::added
+    K2 --> R2[renderer]:::changed
+  end
+  classDef added fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef removed fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-dasharray:5 3
+  classDef changed fill:#fef9c3,stroke:#ca8a04,color:#713f12
+```
+
+Flowchart keeps `classDef`, `class`, `:::`, `style` and `linkStyle <n>`;
+other kinds drop them. Node positions come from auto layout and are not
+saved: change structure (subgraph membership, edge order, `direction`) to
+move things.
 
 ## Notes
 

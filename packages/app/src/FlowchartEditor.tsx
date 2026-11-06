@@ -4,6 +4,9 @@ import {
   edgeRetargetRejection,
   emptyFlowchart,
   newId,
+  FLOWCHART_DIFF_EDGE_STYLES,
+  FLOWCHART_DIFF_MARKS,
+  type FlowchartDiffMark,
   type EdgeId,
   type FlowchartEndpoint,
   type FlowchartIR,
@@ -171,6 +174,21 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
     if (reason === undefined) h.dispatch({ type: "retargetEdge", id: selectedEdge.id, ...ends });
   }
 
+  /** A node or subgraph takes the mark as a class (its classDef is added
+   * on first use); an edge, which mermaid can only paint by index, inline. */
+  function setMark(mark: FlowchartDiffMark | null) {
+    if (!selected) return;
+    const txn = `mark:${selected.id}:${mark}`;
+    if (selectedEdge) {
+      h.dispatch({ type: "setStyle", id: selectedEdge.id, style: mark === null ? "" : FLOWCHART_DIFF_EDGE_STYLES[mark] }, txn);
+    } else {
+      const others = (selected as { classes?: readonly string[] }).classes?.filter((c) => !(c in FLOWCHART_DIFF_MARKS)) ?? [];
+      if (mark !== null && !ir.classDefs?.some((d) => d.name === mark))
+        h.dispatch({ type: "defineClass", name: mark, style: FLOWCHART_DIFF_MARKS[mark] }, txn);
+      h.dispatch({ type: "setStyle", id: selected.id, classes: mark === null ? others : [...others, mark] }, txn);
+    }
+  }
+
   function removeById(id: string, txn: string) {
     if (ir.nodes.some((n) => n.id === id)) h.dispatch({ type: "removeNode", id: id as NodeId }, txn);
     else if (ir.edges.some((e) => e.id === id)) h.dispatch({ type: "removeEdge", id: id as EdgeId }, txn);
@@ -286,6 +304,8 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
             onChangeSubgraphDirection={(direction) =>
               selectedSubgraph && h.dispatch({ type: "updateSubgraph", id: selectedSubgraph.id, direction })
             }
+            onSetMark={setMark}
+            onChangeStyle={(style) => selected && h.dispatch({ type: "setStyle", id: selected.id, style }, `style:${selected.id}`)}
             onDelete={() => deleteSelected(shell.selection.ids)}
             onEditStart={() => {}}
             onEditEnd={h.endEdit}

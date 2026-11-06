@@ -7,6 +7,7 @@ import type {
   FlowchartNodeShape,
   SubgraphId,
 } from "@gmermaid/ir";
+import { flowchartPaint } from "@gmermaid/ir";
 import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { EdgePath, FlowchartLayout, NodeBox, Point, Rect, SubgraphBox } from "./result";
@@ -332,11 +333,16 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
   const root = layoutContainer(undefined, ir.direction);
   const rectOf = (id: string): Rect => root.rects.get(id)!;
 
+  const paintOf = (el: { classes?: readonly string[]; style?: string }, isEdge = false) => {
+    const paint = flowchartPaint(ir, el, isEdge);
+    return paint !== undefined ? { paint } : {};
+  };
   const nodes: NodeBox[] = ir.nodes.map((node) => ({
     id: node.id,
     label: node.label,
     shape: node.shape,
     rect: rectOf(node.id),
+    ...paintOf(node),
   }));
 
   const depth = (s: { parent?: SubgraphId }): number => {
@@ -353,10 +359,11 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
     label: s.label,
     rect: rectOf(s.id),
     depth: depth(s),
+    ...paintOf(s),
   }));
 
   const edges: EdgePath[] = ir.edges.map((edge) => {
-    const head = { id: edge.id, line: edge.line, headStart: edge.headStart, headEnd: edge.headEnd };
+    const head = { id: edge.id, line: edge.line, headStart: edge.headStart, headEnd: edge.headEnd, ...paintOf(edge, true) };
     const points = pointsFor(edge.id, edge.from as string, edge.to as string);
     return {
       ...head,

@@ -3,7 +3,8 @@
 ## 用語集
 
 - **IR (Intermediate Representation / 中間モデル)** — 図種ごとに独立した型（FlowchartIR / ClassIR / SequenceIR）。共有するのは「id を持つ要素」「選択・履歴」等の横断機構のみ。図の唯一のマスターデータ。GUI 操作もコード編集もすべて IR への更新として適用される。Mermaid コードとレンダリング済み SVG はどちらも IR から導出されるビュー。
-- **手動座標の唯一の例外: 象限図 (quadrantChart)** — 点の `x`/`y`（0..1）は見た目ではなく**データそのもの**なので IR が保持し、GUI は点のドラッグ（またはプロパティの数値入力）で IR の座標を直接書き換える。レイアウトエンジンは座標を決めず、プロット領域への線形写像（`quadrantToPlot` / `plotToQuadrant`）だけを担う。ドラッグ中は ViewState（一時表示）で、離した時に `movePoint` 1回 = undo 1ステップ。点のスタイル（`radius` / `color` / `stroke-*` / `:::class` / `classDef`）は他の図種と同じく許容して捨て、ParseWarning を出す。
+- **手動座標の唯一の例外: 象限図 (quadrantChart)** — 点の `x`/`y`（0..1）は見た目ではなく**データそのもの**なので IR が保持し、GUI は点のドラッグ（またはプロパティの数値入力）で IR の座標を直接書き換える。レイアウトエンジンは座標を決めず、プロット領域への線形写像（`quadrantToPlot` / `plotToQuadrant`）だけを担う。ドラッグ中は ViewState（一時表示）で、離した時に `movePoint` 1回 = undo 1ステップ。点のスタイル（`radius` / `color` / `stroke-*` / `:::class` / `classDef`）はフローチャート以外の図種と同じく許容して捨て、ParseWarning を出す。
+- **ペイント (Paint)** — フローチャートだけが色を IR に持つ: `classDefs`、ノード/サブグラフの `classes`・`style`、エッジの `style`（Mermaid では `linkStyle <index>`）。値は Mermaid の `key:value` 文字列のまま保持し、レイアウトが `flowchartPaint` で解決して renderer へ渡す。**差分マーク (Diff Mark)** — PR の Before/After を示す既定の classDef `added` / `removed` / `changed`（`FLOWCHART_DIFF_MARKS`）。
 - **Mermaid コード** — IR からエクスポート/インポートされるテキスト形式。マスターではない。IR で表現できてもMermaid 構文にない情報（座標など）は含まれない。
 - **自動レイアウト (Auto Layout)** — ノード・フラグメント等の座標は常にレイアウトエンジンが計算する。手動座標は保持しない（例外は象限図、下記）。位置の変更は IR の構造変更（順序・所属の変更）→ 再レイアウトとして表現される。
 - **レイアウトエンジン (Layout Engine)** — IR から座標付きレイアウトを計算する独立パッケージ。

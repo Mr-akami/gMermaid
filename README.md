@@ -13,7 +13,7 @@ mermaid.js itself in the test suite.
 
 | Diagram | Header | Notable support |
 | --- | --- | --- |
-| Flowchart | `flowchart` / `graph` | 37 node shapes incl. `@{ shape: … }`, line style and both arrow heads, edge length, subgraphs with direction |
+| Flowchart | `flowchart` / `graph` | 37 node shapes incl. `@{ shape: … }`, line style and both arrow heads, edge length, subgraphs with direction, colors (`classDef`, `class`, `:::`, `style`, `linkStyle`) |
 | Sequence | `sequenceDiagram` | activations, `box`, `rect`, `create`/`destroy`, 8 participant types, autonumber, notes |
 | Class | `classDiagram` | reversed, two-way and lollipop relations, generics, `*`/`$` classifiers, annotations, notes, namespaces |
 | State | `stateDiagram-v2` | composites, concurrency regions, choice/fork/join, self-transitions, block notes, **editable as an XState v5 machine** |
@@ -43,11 +43,13 @@ than dropped, and what the XState projection itself cannot say (notes, layout
 direction, a concurrency region holding several states) is reported under the
 pane.
 
-Styling and interaction syntax (`classDef`, `style`, `:::`, `click`, `%%`
-comments) is accepted on import and dropped: it carries no meaning in the
-editor, so it does not survive a round trip. Every kind drops the same set,
-and each dropped statement is listed under the code pane so nothing goes
-missing quietly.
+Flowcharts keep their colors (`classDef`, `class`, `:::`, `style`,
+`linkStyle`), and a node, subgraph or edge can be marked Added / Removed /
+Changed from the property window, which is how a PR's before/after reads at a
+glance. Every other kind accepts styling and interaction syntax (`classDef`,
+`style`, `:::`, `click`, `%%` comments) on import and drops it, and each
+dropped statement is listed under the code pane so nothing goes missing
+quietly.
 
 Everything ships as one npm package: [`@mr-akami/gmermaid`](https://www.npmjs.com/package/@mr-akami/gmermaid).
 

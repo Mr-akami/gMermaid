@@ -128,5 +128,15 @@ export function flowchartToMermaid(ir: FlowchartIR): string {
         : "";
     lines.push(`  ${edge.from} ${arrow}${label} ${edge.to}`);
   }
+
+  for (const def of ir.classDefs ?? []) lines.push(`  classDef ${def.name} ${def.style}`);
+  for (const el of [...ir.subgraphs, ...ir.nodes]) {
+    for (const c of el.classes ?? []) lines.push(`  class ${el.id} ${c}`);
+    if (el.style !== undefined) lines.push(`  style ${el.id} ${el.style}`);
+  }
+  // linkStyle counts edges in emit order, which is IR order
+  ir.edges.forEach((edge, i) => {
+    if (edge.style !== undefined) lines.push(`  linkStyle ${i} ${edge.style}`);
+  });
   return lines.join("\n") + "\n";
 }

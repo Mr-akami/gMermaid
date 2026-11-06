@@ -226,18 +226,14 @@ flowchart LR
     expect(ir.nodes.find((n) => n.id === "C")!.label).toBe("x; y");
   });
 
-  it("drops style / classDef / class / linkStyle / click / accTitle / accDescr and `:::class`", () => {
+  it("drops click / accTitle / accDescr", () => {
     const ir = roundTripLenient(`flowchart LR
   accTitle: Access title
   accDescr {
     multi line
     description
   }
-  A:::hot --> B["Bee"]:::cold
-  style A fill:#f9f,stroke:#333
-  classDef hot fill:#f00
-  class B cold
-  linkStyle 0 stroke:red
+  A --> B["Bee"]
   click A callback "tip"
 `);
     expect(ir.nodes.map((n) => [n.id, n.label])).toEqual([
@@ -245,6 +241,41 @@ flowchart LR
       ["B", "Bee"],
     ]);
     expect(ir.edges).toHaveLength(1);
+  });
+
+  it("keeps classDef / class / ::: / style / linkStyle through a round trip", () => {
+    const src = `flowchart LR
+  C
+  subgraph after["After"]
+    A:::hot --> B["Bee"]:::cold
+  end
+  B --> C
+  style A fill:#f9f,stroke:#333
+  style after fill:#efe
+  classDef hot fill:#f00
+  classDef cold,frozen stroke:#00f,stroke-dasharray:5 3
+  class B,C frozen
+  linkStyle 1 stroke:red
+`;
+    const first = parseFlowchart(src);
+    expect(first.ok && first.warnings).toEqual([]);
+    const ir = roundTripLenient(src);
+    const node = (id: string) => ir.nodes.find((n) => n.id === id)!;
+    expect(node("A")).toMatchObject({ classes: ["hot"], style: "fill:#f9f,stroke:#333" });
+    expect(node("B").classes).toEqual(["cold", "frozen"]);
+    expect(node("C").classes).toEqual(["frozen"]);
+    expect(ir.subgraphs[0]!.style).toBe("fill:#efe");
+    expect(ir.edges.map((e) => e.style)).toEqual([undefined, "stroke:red"]);
+    expect(ir.classDefs).toEqual([
+      { name: "hot", style: "fill:#f00" },
+      { name: "cold", style: "stroke:#00f,stroke-dasharray:5 3" },
+      { name: "frozen", style: "stroke:#00f,stroke-dasharray:5 3" },
+    ]);
+  });
+
+  it("warns on paint that names nothing", () => {
+    const result = parseFlowchart("flowchart LR\n  A --> B\n  style Z fill:#f00\n  linkStyle 3 stroke:red\n");
+    expect(result.ok && result.warnings.map((w) => w.line)).toEqual([3, 4]);
   });
 
   it("accepts non-ASCII ids and `.` inside ids", () => {

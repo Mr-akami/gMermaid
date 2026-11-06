@@ -20,10 +20,12 @@ import { dropList, importedIds, prepareLines, unescapeLabel, unquote, type Parse
 // variants (unquoted labels, bare node ids, `graph` keyword, `;` separators,
 // bare `flowchart` header = TB). Dialect the IR cannot hold is DISCARDED by
 // design, same as `%%` comments: frontmatter, `%%{init}%%` directives, the
-// shared styling/accessibility statements (STYLING_STATEMENTS) and
-// `:::className` suffixes on nodes. Each drop is reported as a warning.
+// remaining styling/accessibility statements (`click`, `accTitle`, …). Each
+// drop is reported as a warning. Paint (`classDef`, `class`, `:::`, `style`,
+// `linkStyle`) is kept: it is how a diagram marks what a change added or
+// removed.
 
-const DROPPED = dropList();
+const DROPPED = dropList({ keep: ["class", "classDef", "style", "linkStyle"] });
 
 // Words mermaid's flowchart grammar claims before it reads an id, verified
 // against mermaid.js itself. A hand-typed id from this list is rejected
@@ -58,6 +60,7 @@ interface NodeRef {
   readonly id: string;
   readonly label?: string;
   readonly shape?: FlowchartNodeShape;
+  readonly classes?: readonly string[];
 }
 
 /** Split `shape: x, label: "a, b"` on commas outside quotes. */
@@ -99,6 +102,14 @@ function parseAttrs(id: string, body: string): NodeRef | string {
 /** Parse `id`, `id["label"]`, `id(label)`, `id@{ shape: doc }`, … Returns
  * null when the term is not a node at all, a message when it is malformed. */
 function parseNodeTerm(term: string): NodeRef | string | null {
+  // `A["x"]:::added` — the suffix goes after the shape
+  const suffix = term.trim().match(/^([\s\S]*?)((?::::[\p{L}\p{N}_-]+)+)$/u);
+  const ref = parseBareTerm(suffix ? suffix[1]! : term);
+  if (!suffix || ref === null || typeof ref === "string") return ref;
+  return { ...ref, classes: suffix[2]!.split(":::").filter((c) => c !== "") };
+}
+
+function parseBareTerm(term: string): NodeRef | string | null {
   const t = term.trim();
   const m = t.match(new RegExp(`^(${ID})([\\s\\S]*)$`, "u"));
   if (!m) return null;
@@ -303,7 +314,7 @@ function parseEdgeLine(line: string): { groups: NodeRef[][]; links: Link[] } | s
 export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   const errors: ParseError[] = [];
   const warnings: ParseWarning[] = [];
-  const lines = prepareLines(code, { drop: DROPPED, splitSemicolons: true, stripClassSuffix: true, warnings });
+  const lines = prepareLines(code, { drop: DROPPED, splitSemicolons: true, warnings });
   // Flowchart node and subgraph ids are spelled verbatim in the text, so
   // every id that comes in from it passes the import gate.
   const ids = importedIds(FLOWCHART_RESERVED_IDS);
@@ -322,11 +333,17 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   const currentParent = (): SubgraphId | undefined => stack[stack.length - 1]?.id;
   // ids only ever seen as bare edge endpoints: may turn out to be subgraphs
   const bareOnly = new Set<string>();
+  // paint statements may name an element before it is declared, so they
+  // apply once everything is known
+  const classDefs = new Map<string, string>();
+  const paints: { line: number; id: string; classes?: string[]; style?: string }[] = [];
+  const linkStyles: { line: number; index: string; style: string }[] = [];
 
   const declare = (ref: NodeRef, lineNo: number): void => {
     const id = ids.take(ref.id, lineNo);
     const explicit = ref.label !== undefined || ref.shape !== undefined;
     const existing = nodes.get(id);
+    if (ref.classes !== undefined) paints.push({ line: lineNo, id, classes: [...ref.classes] });
     if (!existing) {
       if (subgraphs.has(id)) return; // an edge endpoint naming a subgraph
       nodeOrder.push(id);
@@ -418,6 +435,27 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       continue;
     }
 
+    const classDef = line.match(/^classDef\s+(\S+)\s+(.+)$/);
+    if (classDef) {
+      for (const name of classDef[1]!.split(",")) classDefs.set(name, classDef[2]!.trim());
+      continue;
+    }
+    const cls = line.match(/^class\s+(\S+)\s+(\S+)$/);
+    if (cls) {
+      for (const id of cls[1]!.split(",")) paints.push({ line: lineNo, id, classes: cls[2]!.split(",") });
+      continue;
+    }
+    const style = line.match(new RegExp(`^style\\s+(${ID})\\s+(.+)$`, "u"));
+    if (style) {
+      paints.push({ line: lineNo, id: style[1]!, style: style[2]!.trim() });
+      continue;
+    }
+    const linkStyle = line.match(/^linkStyle\s+(\S+)\s+(.+)$/);
+    if (linkStyle) {
+      for (const index of linkStyle[1]!.split(",")) linkStyles.push({ line: lineNo, index, style: linkStyle[2]!.trim() });
+      continue;
+    }
+
     // edge line: <terms> <link>[|label|] <terms> [<link> <terms> …]
     const parsed = parseEdgeLine(line);
     if (typeof parsed === "string") {
@@ -471,7 +509,7 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       errors.push({ line: lineNo, message: ref });
       continue;
     }
-    if (ref && (ref.label !== undefined || ref.shape !== undefined || ID_RE.test(line))) {
+    if (ref && (ref.label !== undefined || ref.shape !== undefined || ref.classes !== undefined || ID_RE.test(line))) {
       declare(ref, lineNo);
       continue;
     }
@@ -484,6 +522,29 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
   for (const open of stack) errors.push({ line: open.openedAt, message: `unclosed subgraph: ${open.id}` });
   if (errors.length > 0) return { ok: false, errors };
   warnings.push(...ids.warnings());
+
+  for (const p of paints) {
+    const target = nodes.get(p.id) ?? subgraphs.get(p.id);
+    if (target === undefined) {
+      warnings.push({ line: p.line, message: `\`${p.id}\` is not a node or subgraph; its style is dropped` });
+      continue;
+    }
+    const classes = p.classes !== undefined ? [...(target.classes ?? []), ...p.classes] : target.classes;
+    const style = p.style !== undefined ? [target.style, p.style].filter(Boolean).join(",") : target.style;
+    const next = { ...target, ...(classes !== undefined ? { classes } : {}), ...(style !== undefined ? { style } : {}) };
+    if (nodes.has(p.id)) nodes.set(p.id, next as FlowchartNode);
+    else subgraphs.set(p.id, next as FlowchartSubgraph);
+  }
+  // `linkStyle <n>` counts edges in source order — the order they are kept in
+  const edgeStyles: (string | undefined)[] = edges.map((e) => e.style);
+  for (const ls of linkStyles) {
+    const targets = ls.index === "default" ? edges.map((_, i) => i) : [Number(ls.index)];
+    if (targets.some((i) => !Number.isInteger(i) || edges[i] === undefined)) {
+      warnings.push({ line: ls.line, message: `\`linkStyle ${ls.index}\` names no edge; dropped` });
+      continue;
+    }
+    for (const i of targets) edgeStyles[i] = [edgeStyles[i], ls.style].filter(Boolean).join(",");
+  }
   warnings.sort((a, b) => a.line - b.line);
 
   return {
@@ -493,8 +554,9 @@ export function parseFlowchart(code: string): ParseResult<FlowchartIR> {
       kind: "flowchart",
       direction,
       nodes: nodeOrder.map((id) => nodes.get(id)!),
-      edges,
+      edges: edges.map((e, i) => (edgeStyles[i] !== undefined ? { ...e, style: edgeStyles[i] } : e)),
       subgraphs: subgraphOrder.map((id) => subgraphs.get(id)!),
+      ...(classDefs.size > 0 ? { classDefs: [...classDefs].map(([name, style]) => ({ name, style })) } : {}),
     },
   };
 }

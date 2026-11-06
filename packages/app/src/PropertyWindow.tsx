@@ -1,5 +1,8 @@
 import {
+  FLOWCHART_DIFF_EDGE_STYLES,
+  FLOWCHART_DIFF_MARKS,
   FLOWCHART_SHAPES,
+  type FlowchartDiffMark,
   type FlowchartDirection,
   type FlowchartEdge,
   type FlowchartEdgeHead,
@@ -60,6 +63,10 @@ export interface PropertyWindowProps {
   readonly onChangeEdgeLength: (length: number) => void;
   readonly onChangeSubgraphLabel: (label: string) => void;
   readonly onChangeSubgraphDirection: (direction: FlowchartDirection | null) => void;
+  /** null = unmark. */
+  readonly onSetMark: (mark: FlowchartDiffMark | null) => void;
+  /** Raw mermaid `style` text (`fill:#f00,stroke:#333`); "" clears. */
+  readonly onChangeStyle: (style: string) => void;
   readonly onDelete: () => void;
   readonly onEditStart: () => void;
   readonly onEditEnd: () => void;
@@ -71,6 +78,46 @@ function isNode(el: PropertyWindowProps["element"]): el is FlowchartNode {
 
 function isSubgraph(el: PropertyWindowProps["element"]): el is FlowchartSubgraph {
   return !("shape" in el) && !("line" in el);
+}
+
+const MARKS = Object.keys(FLOWCHART_DIFF_MARKS) as FlowchartDiffMark[];
+
+function markOf(el: PropertyWindowProps["element"]): FlowchartDiffMark | "" {
+  if ("line" in el) return MARKS.find((m) => el.style === FLOWCHART_DIFF_EDGE_STYLES[m]) ?? "";
+  return MARKS.find((m) => el.classes?.includes(m)) ?? "";
+}
+
+/** Before/after paint: a diff mark, or any mermaid style by hand. */
+function PaintFields(props: PropertyWindowProps) {
+  const { element } = props;
+  return (
+    <>
+      <label>
+        Mark
+        <select
+          aria-label="Mark"
+          value={markOf(element)}
+          onChange={(e) => props.onSetMark(e.target.value === "" ? null : (e.target.value as FlowchartDiffMark))}
+        >
+          <option value="">(none)</option>
+          <option value="added">Added</option>
+          <option value="removed">Removed</option>
+          <option value="changed">Changed</option>
+        </select>
+      </label>
+      <label>
+        Style
+        <input
+          aria-label="Style"
+          placeholder="fill:#eef,stroke:#33f"
+          value={element.style ?? ""}
+          onFocus={props.onEditStart}
+          onBlur={props.onEditEnd}
+          onChange={(e) => props.onChangeStyle(e.target.value)}
+        />
+      </label>
+    </>
+  );
 }
 
 export function PropertyWindow(props: PropertyWindowProps) {
@@ -105,6 +152,7 @@ export function PropertyWindow(props: PropertyWindowProps) {
             <option value="RL">Right→Left</option>
           </select>
         </label>
+        <PaintFields {...props} />
         <button className="danger" onClick={onDelete}>
           Dissolve subgraph
         </button>
@@ -144,6 +192,7 @@ export function PropertyWindow(props: PropertyWindowProps) {
               ))}
             </select>
           </label>
+          <PaintFields {...props} />
         </>
       ) : (
         <>
@@ -234,6 +283,7 @@ export function PropertyWindow(props: PropertyWindowProps) {
                 ? "始点マーカーを選ぶと、終点も同じ形に揃います(mermaid は <--> / o--o / x--x のみ)"
                 : "両端は同じ形に揃います。片方を変えるともう一方も追従します"}
           </div>
+          <PaintFields {...props} />
         </>
       )}
       <button className="danger" onClick={onDelete}>
