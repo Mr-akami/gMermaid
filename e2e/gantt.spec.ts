@@ -88,3 +88,26 @@ test("a task name mermaid would read as a statement is refused with a reason", a
   await expect(editor.getByText("task name cannot be empty")).toBeVisible();
   await expectCode(editor).toContain("A task");
 });
+
+test("the date axis stays pinned at the canvas top while scrolled down", async ({ page }) => {
+  const editor = await openEditor(page, "Gantt");
+  const tasks = Array.from({ length: 40 }, (_, i) => `  task ${i} :t${i}, 2024-01-${String((i % 28) + 1).padStart(2, "0")}, 3d`).join("\n");
+  await setCode(editor, `gantt\n  dateFormat YYYY-MM-DD\n  section Work\n${tasks}\n`);
+  const pinned = editor.locator("svg [data-gm-pinned-axis]");
+  await expect(pinned).toHaveCount(0);
+
+  const canvas = (await editor.locator(".canvas").boundingBox())!;
+  const x = canvas.x + canvas.width - 12;
+  await page.mouse.move(x, canvas.y + canvas.height - 20);
+  await page.mouse.down();
+  await page.mouse.move(x, canvas.y + 40, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(pinned).toHaveCount(1);
+  const label = pinned.locator("text").first();
+  await expect(label).toBeVisible();
+  const box = (await label.boundingBox())!;
+  expect(box.y - canvas.y, "dates just under the canvas top").toBeLessThan(24);
+  expect(box.y, "not above the canvas").toBeGreaterThanOrEqual(canvas.y);
+  await page.screenshot({ path: "test-results/pinned-axis.png" });
+});
