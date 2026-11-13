@@ -1,5 +1,13 @@
 # Changelog
 
+## [v2026.1113.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1104.0...v2026.1113.0) - 2026-11-13
+
+### Other changes
+- feat(flowchart): keep colors; Added/Removed/Changed mark for PR diagrams by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/73
+- feat(flowchart): Move mode moves a node into/out of a subgraph by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/75
+- Release for v2026.1106.0 by @github-actions[bot] in https://github.com/Mr-akami/gMermaid/pull/74
+- feat(sequence, gantt): pin headers at canvas top when scrolled down by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/76
+
 ## [v2026.1106.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1104.0...v2026.1106.0) - 2026-11-06
 
 ### Other changes
