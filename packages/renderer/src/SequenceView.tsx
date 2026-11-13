@@ -122,6 +122,45 @@ function HeadShape({ l, stroke, selected }: { l: LifelineColumn; stroke: string;
   }
 }
 
+function LifelineHead({ l, selected }: { l: LifelineColumn; selected: boolean }) {
+  return (
+    <>
+      <HeadShape l={l} stroke={selected ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)"} selected={selected} />
+      <TextLines
+        text={l.name}
+        x={l.x}
+        // centre the whole block, not just its first line
+        y={l.headRect.y + l.headRect.h / 2 - ((l.name.split("\n").length - 1) * 14) / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={13}
+        fontFamily="sans-serif"
+        fill="var(--gm-text, #111)"
+        style={{ pointerEvents: "none", userSelect: "none" }}
+      />
+    </>
+  );
+}
+
+const PIN_GAP = 6;
+
+export interface PinnedHead {
+  readonly l: LifelineColumn;
+  /** Diagram-space shift from the head's laid-out position. */
+  readonly dy: number;
+}
+
+/** Heads scrolled above the canvas top, shifted to stay pinned there. A head
+ * never slides past the end of its own spine (`destroy`), and a `create`d
+ * head pins only once its own row has scrolled by. */
+export function pinnedHeads(lifelines: readonly LifelineColumn[], viewport: Viewport): PinnedHead[] {
+  const top = -viewport.y / viewport.scale + PIN_GAP;
+  return lifelines.flatMap((l) => {
+    const y = Math.min(top, l.spineBottom - l.headRect.h);
+    return y > l.headRect.y ? [{ l, dy: y - l.headRect.y }] : [];
+  });
+}
+
 export function SequenceView({
   layout,
   viewState,
@@ -172,6 +211,8 @@ export function SequenceView({
     },
     onGestureCancel,
   });
+
+  const pinned = pinnedHeads(layout.lifelines, g.viewport);
 
   return (
     <svg
@@ -233,23 +274,7 @@ export function SequenceView({
           {/* wide grip on the spine: drag = draw a new message */}
           <line x1={l.x} y1={l.spineTop} x2={l.x} y2={l.spineBottom} stroke="transparent" strokeWidth={14} data-drag="spine" style={{ cursor: "crosshair" }} />
           <line x1={l.x} y1={l.spineTop} x2={l.x} y2={l.spineBottom} stroke="var(--gm-stroke, #999)" strokeDasharray="4 4" style={{ pointerEvents: "none" }} />
-          <HeadShape
-            l={l}
-            stroke={sel.has(l.id) ? "var(--gm-selected, #1a73e8)" : "var(--gm-stroke, #333)"}
-            selected={sel.has(l.id)}
-          />
-          <TextLines
-            text={l.name}
-            x={l.x}
-            // centre the whole block, not just its first line
-            y={l.headRect.y + l.headRect.h / 2 - ((l.name.split("\n").length - 1) * 14) / 2}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize={13}
-            fontFamily="sans-serif"
-            fill="var(--gm-text, #111)"
-            style={{ pointerEvents: "none", userSelect: "none" }}
-          />
+          <LifelineHead l={l} selected={sel.has(l.id)} />
           {l.destroyed === true && (
             <path
               d={`M ${l.x - 7} ${l.spineBottom - 7} l 14 14 M ${l.x + 7} ${l.spineBottom - 7} l -14 14`}
@@ -317,6 +342,25 @@ export function SequenceView({
         />
       )}
       </g>
+      {/* outside data-gm-root so export never bakes in a scroll position */}
+      {pinned.length > 0 && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-pinned-heads="">
+          <rect
+            x={0}
+            y={-g.viewport.y / g.viewport.scale}
+            width={layout.size.w}
+            height={Math.max(...pinned.map((p) => p.l.headRect.h)) + 2 * PIN_GAP}
+            fill="var(--gm-bg, #fff)"
+            opacity={0.85}
+            style={{ pointerEvents: "none" }}
+          />
+          {pinned.map(({ l, dy }) => (
+            <g key={l.id} data-element-id={l.id} data-kind={l.kind} transform={`translate(0 ${dy})`} style={{ cursor: "pointer" }}>
+              <LifelineHead l={l} selected={sel.has(l.id)} />
+            </g>
+          ))}
+        </g>
+      )}
       {g.band !== undefined && (
         <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
           <MarqueeRect band={g.band} />

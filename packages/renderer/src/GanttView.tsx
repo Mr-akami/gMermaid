@@ -39,6 +39,50 @@ function fillOf(bar: GanttBar): string {
   return BAR_FILL.plain;
 }
 
+/** Date labels sit above the axis line; this band holds both. */
+const AXIS_HEADER_H = 22;
+
+/** Diagram-space shift that keeps the date axis at the canvas top once it has
+ * scrolled above it; undefined while it is on screen or the rows are gone. */
+export function pinnedAxisDy(layout: GanttLayout, viewport: Viewport): number | undefined {
+  const headerTop = layout.axisY - AXIS_HEADER_H;
+  const y = Math.min(-viewport.y / viewport.scale, layout.rowsBottom - AXIS_HEADER_H);
+  return y > headerTop ? y - headerTop : undefined;
+}
+
+function AxisHeader({ layout }: { layout: GanttLayout }) {
+  return (
+    <g style={{ pointerEvents: "none" }}>
+      {/* a crowded axis keeps the gridline and drops the date */}
+      {layout.ticks.map(
+        (t) =>
+          t.label !== undefined && (
+            <text
+              key={`${t.x}-${t.label}`}
+              x={t.x}
+              y={layout.axisY - 8}
+              textAnchor="middle"
+              fontSize={11}
+              fontFamily="sans-serif"
+              fill="var(--gm-muted, #667)"
+              style={{ userSelect: "none" }}
+            >
+              {t.label}
+            </text>
+          ),
+      )}
+      <line
+        x1={layout.chartX}
+        y1={layout.axisY}
+        x2={layout.chartX + layout.chartW}
+        y2={layout.axisY}
+        stroke="var(--gm-stroke, #333)"
+        strokeWidth={1}
+      />
+    </g>
+  );
+}
+
 export function GanttView({
   layout,
   viewState,
@@ -60,6 +104,7 @@ export function GanttView({
   });
 
   const chartRight = layout.chartX + layout.chartW;
+  const pinnedDy = pinnedAxisDy(layout, g.viewport);
 
   return (
     <svg
@@ -94,42 +139,19 @@ export function GanttView({
           <SectionBandView key={s.id} s={s} selected={sel.has(s.id)} />
         ))}
 
-        {/* axis: gridlines run down the rows, labels sit above the line */}
         {layout.ticks.map((t) => (
-          <g key={`${t.x}-${t.label}`} style={{ pointerEvents: "none" }}>
-            <line
-              x1={t.x}
-              y1={layout.axisY}
-              x2={t.x}
-              y2={layout.rowsBottom}
-              stroke="var(--gm-grid, #d7dce3)"
-              strokeWidth={1}
-            />
-            {/* a crowded axis keeps the gridline and drops the date */}
-            {t.label !== undefined && (
-              <text
-                x={t.x}
-                y={layout.axisY - 8}
-                textAnchor="middle"
-                fontSize={11}
-                fontFamily="sans-serif"
-                fill="var(--gm-muted, #667)"
-                style={{ userSelect: "none" }}
-              >
-                {t.label}
-              </text>
-            )}
-          </g>
+          <line
+            key={`${t.x}-${t.label}`}
+            x1={t.x}
+            y1={layout.axisY}
+            x2={t.x}
+            y2={layout.rowsBottom}
+            stroke="var(--gm-grid, #d7dce3)"
+            strokeWidth={1}
+            style={{ pointerEvents: "none" }}
+          />
         ))}
-        <line
-          x1={layout.chartX}
-          y1={layout.axisY}
-          x2={chartRight}
-          y2={layout.axisY}
-          stroke="var(--gm-stroke, #333)"
-          strokeWidth={1}
-          style={{ pointerEvents: "none" }}
-        />
+        <AxisHeader layout={layout} />
 
         {layout.bars.map((b) => (
           <BarView key={b.id} b={b} selected={sel.has(b.id)} />
@@ -152,6 +174,23 @@ export function GanttView({
           />
         )}
       </g>
+      {/* outside data-gm-root so export never bakes in a scroll position */}
+      {pinnedDy !== undefined && (
+        <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`} data-gm-pinned-axis="">
+          <g transform={`translate(0 ${pinnedDy})`}>
+            <rect
+              x={0}
+              y={layout.axisY - AXIS_HEADER_H}
+              width={layout.size.w}
+              height={AXIS_HEADER_H}
+              fill="var(--gm-bg, #fff)"
+              opacity={0.85}
+              style={{ pointerEvents: "none" }}
+            />
+            <AxisHeader layout={layout} />
+          </g>
+        </g>
+      )}
       {g.band !== undefined && (
         <g transform={`translate(${g.viewport.x} ${g.viewport.y}) scale(${g.viewport.scale})`}>
           <MarqueeRect band={g.band} />
