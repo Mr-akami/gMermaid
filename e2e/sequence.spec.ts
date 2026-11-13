@@ -171,3 +171,29 @@ test("a message names its lifelines and is re-pointed without leaving its fragme
   await editor.getByRole("button", { name: "⇄ Swap ends" }).click();
   await expectCode(editor).toMatch(/alt ok\n\s+C->>A: fetch\n\s+else ng/);
 });
+
+test("participant heads stay pinned at the canvas top while scrolled down, and still select", async ({ page }) => {
+  const editor = await openEditor(page, "Sequence");
+  const rows = Array.from({ length: 30 }, (_, i) => `  a->>b: step ${i}`).join("\n");
+  await setCode(editor, `sequenceDiagram\n  participant a as Alice\n  participant b as Bob\n${rows}\n`);
+  const pinned = editor.locator("svg [data-gm-pinned-heads]");
+  await expect(pinned).toHaveCount(0);
+
+  const canvas = (await editor.locator(".canvas").boundingBox())!;
+  const x = canvas.x + canvas.width - 12;
+  await page.mouse.move(x, canvas.y + canvas.height - 20);
+  await page.mouse.down();
+  await page.mouse.move(x, canvas.y + 40, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(pinned).toHaveCount(1);
+  const head = pinned.locator('[data-element-id="b"]');
+  await expect(head).toContainText("Bob");
+  const box = (await head.boundingBox())!;
+  expect(box.y - canvas.y, "pinned just under the canvas top").toBeLessThan(20);
+  expect(box.y, "not above the canvas").toBeGreaterThanOrEqual(canvas.y);
+  await page.screenshot({ path: "test-results/pinned-heads.png" });
+
+  await head.locator("rect").first().click();
+  await expect(editor.getByRole("heading", { name: "Lifeline" })).toBeVisible();
+});
