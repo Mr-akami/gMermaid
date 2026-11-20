@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2026.1120.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1106.0...v2026.1120.0) - 2026-11-20
+
+### Other changes
+- fix(state): keep edges and labels inside composites, and name final states in XState by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/78
+- fix(editor, state): refit on resize, labels off other edges, jsdom storage on Node 25+ by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/80
+
 ## [v2026.1113.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1104.0...v2026.1113.0) - 2026-11-13
 
 ### Other changes
