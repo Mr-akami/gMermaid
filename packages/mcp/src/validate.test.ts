@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractBlocks, formatReports, hasErrors, validateBlock } from "./validate";
+import { extractBlocks, formatReports, hasErrors, validateBlock, withMermaidJs } from "./validate";
 
 function check(source: string, text: string) {
   const reports = extractBlocks(source, text).map(validateBlock);
@@ -41,4 +41,36 @@ describe("validate", () => {
   it("says so when a Markdown file holds no diagram", () => {
     expect(check("doc.md", "# nothing\n").lines).toEqual(["doc.md: warning: no mermaid diagram found"]);
   });
+});
+
+describe("validate with Mermaid.js", () => {
+  const block = { text: "flowchart TB\n  A --> B\n", startLine: 1 };
+
+  it("reports what Mermaid.js rejects in the text as written, at its line", async () => {
+    const report = await withMermaidJs(block, validateBlock(block), async () => ({ line: 2, message: "nope" }));
+    expect(formatReports("a.mmd", [report])).toEqual(["a.mmd:2: error: Mermaid.js rejects this: nope"]);
+  });
+
+  it("reports when only the editor's rewrite is rejected — the editor would block Send", async () => {
+    const judge = async (text: string) => (text === block.text ? undefined : { message: "rewrite broke" });
+    const report = await withMermaidJs(block, validateBlock(block), judge);
+    expect(hasErrors([report])).toBe(true);
+    expect(formatReports("a.mmd", [report])[0]).toMatch(/editor's rewrite .* rejected by Mermaid\.js.*rewrite broke/);
+  });
+
+  it("warns, and still passes, when Mermaid.js cannot run", async () => {
+    const report = await withMermaidJs(block, validateBlock(block), async () => {
+      throw new Error("no DOM");
+    });
+    expect(formatReports("a.mmd", [report])).toEqual(["a.mmd:1: warning: Mermaid.js check skipped: no DOM", "a.mmd:1: ok (flowchart)"]);
+  });
+
+  it("the real Mermaid.js catches a text gMermaid's own parser accepts", async () => {
+    const { mermaidRejects } = await import("./mermaidCheck");
+    const bad = { text: "stateDiagram-v2\n  state idle\n  state constructing {\n    state x\n  }\n", startLine: 1 };
+    const first = validateBlock(bad);
+    expect(hasErrors([first])).toBe(false);
+    const report = await withMermaidJs(bad, first, mermaidRejects);
+    expect(formatReports("a.mmd", [report])[0]).toMatch(/^a\.mmd:1: error: Mermaid\.js rejects this: .*single word/);
+  }, 30_000);
 });

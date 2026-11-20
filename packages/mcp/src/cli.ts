@@ -9,7 +9,7 @@ import { runClose, runOpen, runServe, runStatus, runWait } from "./fileCommands"
 import { installSkill, type SkillTarget } from "./installSkill";
 import { createGMermaidServer } from "./server";
 import { StandaloneEditorServer } from "./standalone";
-import { extractBlocks, formatReports, hasErrors, validateBlock } from "./validate";
+import { extractBlocks, formatReports, hasErrors, validateBlock, withMermaidJs } from "./validate";
 
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -100,7 +100,8 @@ async function runValidate(files: readonly string[]): Promise<number> {
       failed = true;
       continue;
     }
-    const reports = extractBlocks(file, text).map(validateBlock);
+    const { mermaidRejects } = await import("./mermaidCheck");
+    const reports = await Promise.all(extractBlocks(file, text).map((b) => withMermaidJs(b, validateBlock(b), mermaidRejects)));
     for (const line of formatReports(file, reports)) console.log(line);
     failed ||= hasErrors(reports);
   }

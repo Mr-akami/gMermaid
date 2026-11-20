@@ -1,4 +1,6 @@
 import { DIAGRAM_KINDS, detectDiagramKind, parseDiagram, type DiagramKind } from "@gmermaid/mermaid-parser";
+import { canonicalMermaid } from "./diagram";
+import type { MermaidRejection } from "./mermaidCheck";
 
 // `gmermaid validate`: the parser the editor opens files with, run where an
 // agent can call it after writing a diagram. A diagram that passes here opens
@@ -65,6 +67,37 @@ export function validateBlock(block: MermaidBlock): BlockReport {
     ? parsed.warnings.map((w) => ({ line: at(w.line), severity: "warning" as const, message: w.message }))
     : parsed.errors.map((e) => ({ line: at(e.line), severity: "error" as const, message: e.message }));
   return { startLine: block.startLine, kind, findings };
+}
+
+/** mermaid.js's verdict on one text; the seam tests replace. */
+export type MermaidJudge = (text: string) => Promise<MermaidRejection | undefined>;
+
+/** Add mermaid.js's verdicts to a report gMermaid's parser already passed:
+ * on the text as written, and on the text the editor writes back for it
+ * (which is what the editor checks once the diagram is opened). A judge that
+ * cannot run at all leaves a warning, never a pass dressed up as checked. */
+export async function withMermaidJs(block: MermaidBlock, report: BlockReport, judge: MermaidJudge): Promise<BlockReport> {
+  if (report.kind === undefined || report.findings.some((f) => f.severity === "error")) return report;
+  const findings = [...report.findings];
+  try {
+    const asWritten = await judge(block.text);
+    if (asWritten !== undefined) {
+      findings.push({ line: block.startLine + (asWritten.line ?? 1) - 1, severity: "error", message: `Mermaid.js rejects this: ${asWritten.message}` });
+    } else {
+      const rewrite = canonicalMermaid(block.text);
+      const rejected = rewrite === undefined || rewrite === block.text ? undefined : await judge(rewrite);
+      if (rejected !== undefined) {
+        findings.push({
+          line: block.startLine,
+          severity: "error",
+          message: `the editor's rewrite of this diagram is rejected by Mermaid.js, so the editor would block sending it back (a gMermaid bug — please report it): ${rejected.message}`,
+        });
+      }
+    }
+  } catch (cause) {
+    findings.push({ line: block.startLine, severity: "warning", message: `Mermaid.js check skipped: ${cause instanceof Error ? cause.message : String(cause)}` });
+  }
+  return { ...report, findings };
 }
 
 /** One line per finding, compiler style (`file:line: severity: message`), and
