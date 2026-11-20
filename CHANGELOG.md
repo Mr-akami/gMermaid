@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2026.1120.1](https://github.com/Mr-akami/gMermaid/compare/v2026.1120.0...v2026.1120.1) - 2026-11-20
+
+### Other changes
+- feat(cli): validate also asks Mermaid.js, on the text and on the editor's rewrite by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/81
+- feat(cli): from-xstate draws a machine written as code, read-only by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/82
+
 ## [v2026.1120.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1106.0...v2026.1120.0) - 2026-11-20
 
 ### Other changes
