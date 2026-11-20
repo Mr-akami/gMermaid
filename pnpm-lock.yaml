@@ -117,6 +117,12 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
         version: 1.30.0(zod@3.25.76)
+      jsdom:
+        specifier: ^30.0.1
+        version: 30.0.1
+      mermaid:
+        specifier: ^12.0.0
+        version: 12.0.0
       open:
         specifier: ^10.2.0
         version: 10.2.0

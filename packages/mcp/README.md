@@ -87,7 +87,7 @@ another local MCP client for the `npx` distribution.
 | ------------------- | ----------------------------------- |
 | `gmermaid`          | Open the local editor in a browser  |
 | `gmermaid editor`   | Same as above, stated explicitly    |
-| `gmermaid validate <file\|->…` | Check `.mmd` files or the mermaid blocks of a `.md`; exit 1 on errors |
+| `gmermaid validate <file\|->…` | Check `.mmd` files or the mermaid blocks of a `.md` with gMermaid's parser and Mermaid.js (as the editor does); exit 1 on errors |
 | `gmermaid open <file> [--title T] [--no-browser]` | Share a file with the user in the editor; returns at once |
 | `gmermaid wait <file> [--timeout SEC] [--json]` | Wait for the user to send the file back |
 | `gmermaid close <file>` / `gmermaid status` | Stop sharing a file / list shared files |

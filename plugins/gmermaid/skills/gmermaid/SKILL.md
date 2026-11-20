@@ -20,7 +20,9 @@ Run it as `gmermaid` if installed, otherwise `npx -y @mr-akami/gmermaid`.
    `classDiagram`, `stateDiagram-v2`, `requirementDiagram`, `journey`,
    `timeline`, `gantt`, `mindmap`, `usecase-beta`, `erDiagram`, `quadrantChart`, `gitGraph`, `architecture-beta`.
 2. **Validate**: `gmermaid validate docs/design/<topic>.mmd`. Fix every
-   `error` line (it names the line). A `warning` means the editor will drop
+   `error` line (it names the line). It checks with gMermaid's parser AND
+   the real Mermaid.js, the same two the editor uses before it lets the user
+   send the diagram back. A `warning` means the editor will drop
    that statement when the user edits (e.g. `click`, or styling in any kind
    but `flowchart`) — prefer to leave such statements out.
 3. **Show it**: `gmermaid open docs/design/<topic>.mmd --title "<what this is>"`.
