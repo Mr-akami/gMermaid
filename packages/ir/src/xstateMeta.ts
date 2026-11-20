@@ -42,8 +42,9 @@ export interface StateNodeXState {
   readonly description?: string;
   /** `output` of a final state. */
   readonly output?: XValue;
-  /** `type: "final"` on a node mermaid draws as an ordinary box, because the
-   * region's one `[*]` end was already spoken for. */
+  /** `type: "final"` on a box that has transitions of its own. A plain named
+   * final state needs no flag: it is a box whose only way out is a bare arrow
+   * to its region's `[*]`, and the projection reads that shape as final. */
   readonly final?: true;
   /** `type: "history"`; mermaid has no history pseudo-state, so the canvas
    * shows an ordinary box. */

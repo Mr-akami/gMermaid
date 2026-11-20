@@ -44,6 +44,28 @@ describe("mermaid → XState", () => {
     expect(out.warnings).toEqual([]);
   });
 
+  it("a box whose only exit is a bare arrow to [*] is a named final state", () => {
+    const out = stateToXState(
+      ofMermaid(`stateDiagram-v2
+  [*] --> Idle
+  Idle --> Busy : START
+  state Busy {
+    [*] --> working
+    working --> saved : OK
+    working --> cancelled : CANCEL
+    saved --> [*]
+    cancelled --> [*]
+  }
+`),
+    );
+    accepted(out.code);
+    expect(out.code).toMatch(/saved: \{\n\s*type: "final",\n\s*\}/);
+    expect(out.code).toMatch(/cancelled: \{\n\s*type: "final",\n\s*\}/);
+    expect(out.code).not.toContain("always");
+    expect(out.code).not.toMatch(/\bfinal:/);
+    expect(out.warnings).toEqual([]);
+  });
+
   it("an unlabelled arrow is an eventless `always` transition", () => {
     const out = stateToXState(ofMermaid(`stateDiagram-v2\n  [*] --> A\n  A --> B\n`));
     expect(out.code).toContain("always");
@@ -95,7 +117,8 @@ describe("XState → mermaid", () => {
     expect(mermaid).toContain("[*] --> idle");
     expect(mermaid).toContain("idle --> work : GO");
     expect(mermaid).toContain("--");
-    expect(mermaid).toContain("work --> [*] : STOP");
+    expect(mermaid).toContain("work --> done : STOP");
+    expect(mermaid).toContain("done --> [*]");
     // the mermaid text re-reads into the same shape, minus the XState detail
     const back = ofMermaid(mermaid);
     expect(back.states.map((s) => s.id).toSorted()).toEqual(ir.states.map((s) => s.id).toSorted());

@@ -312,3 +312,118 @@ describe("nested composites", () => {
     expect(JSON.parse(JSON.stringify(r))).toEqual(r);
   });
 });
+
+describe("a composite holds its own transitions", () => {
+  // the shape of a real machine: one hub that every step can bail out to,
+  // plus a back edge — dagre routes those wide around the members
+  const steps: [string, string, string][] = [
+    ["preparing", "drawing", "prepare done"],
+    ["preparing", "cancelled", "prepare error"],
+    ["preparing", "cancelled", "CANCEL"],
+    ["preparing", "cancelled", "SUSPENDED"],
+    ["drawing", "configuring", "DRAWN"],
+    ["drawing", "cancelled", "draw error"],
+    ["configuring", "saving", "SUBMIT"],
+    ["configuring", "discarding", "configure error"],
+    ["saving", "saved", "save done"],
+    ["saving", "configuring", "save error"],
+    ["discarding", "cancelled", "discard done"],
+  ];
+  const inner = ["preparing", "drawing", "cancelled", "configuring", "saving", "discarding", "saved"];
+  const machine: StateIR = {
+    kind: "state",
+    notes: [],
+    states: [
+      { id: S("idle"), label: "idle", role: "normal" },
+      { id: S("c"), label: "the construction run of one actor", role: "normal" },
+      { id: S("state_start_c"), label: "", role: "start", parent: S("c") },
+      ...inner.map((id) => ({ id: S(id), label: id, role: "normal" as const, parent: S("c") })),
+      { id: S("state_end_c"), label: "", role: "end", parent: S("c") },
+    ],
+    transitions: [
+      { id: "go" as TransitionId, from: S("idle"), to: S("c"), label: "CONSTRUCTION_REQUESTED" },
+      { id: "init" as TransitionId, from: S("state_start_c"), to: S("preparing") },
+      ...steps.map(([from, to, label], i) => ({ id: `s${i}` as TransitionId, from: S(from), to: S(to), label })),
+      { id: "f1" as TransitionId, from: S("saved"), to: S("state_end_c") },
+      { id: "f2" as TransitionId, from: S("cancelled"), to: S("state_end_c") },
+    ],
+  };
+  const measure = fixedWidthMeasurer(7);
+  const r = layoutStateDiagram(machine, measure);
+  const frame = r.states.find((s) => s.id === "c")!.rect;
+  const within = (x: number, y: number) =>
+    x >= frame.x - 0.5 && x <= frame.x + frame.w + 0.5 && y >= frame.y - 0.5 && y <= frame.y + frame.h + 0.5;
+  const innerEdges = r.transitions.filter((t) => t.id.startsWith("s"));
+
+  it("every inner route and label lies inside the frame", () => {
+    for (const t of innerEdges) {
+      for (const p of t.points) expect(within(p.x, p.y), `${t.id} point ${p.x},${p.y}`).toBe(true);
+      const m = measure.measure(t.label!, { fontSize: 12, fontFamily: "sans-serif" });
+      const { x, y } = t.labelPos!;
+      expect(within(x - m.w / 2, y) && within(x + m.w / 2, y), `${t.id} label`).toBe(true);
+    }
+  });
+
+  it("the frame is wide enough for its title", () => {
+    const small: StateIR = {
+      kind: "state",
+      notes: [],
+      states: [
+        { id: S("root"), label: "root machine (one actor)", role: "normal" },
+        { id: S("a"), label: "a", role: "normal", parent: S("root") },
+      ],
+      transitions: [],
+    };
+    const box = layoutStateDiagram(small, measure).states.find((s) => s.id === "root")!.rect;
+    const title = measure.measure("root machine (one actor)", { fontSize: 12, fontFamily: "sans-serif", bold: true });
+    expect(box.w).toBeGreaterThanOrEqual(title.w + 20);
+  });
+
+  /** Dense points along the uniform B-spline the renderer draws (`edgePath`). */
+  const drawn = (pts: readonly { x: number; y: number }[]) => {
+    if (pts.length < 3) return Array.from({ length: 65 }, (_, i) => ({ x: pts[0]!.x + ((pts[1]!.x - pts[0]!.x) * i) / 64, y: pts[0]!.y + ((pts[1]!.y - pts[0]!.y) * i) / 64 }));
+    const out: { x: number; y: number }[] = [];
+    let cur = { x: (5 * pts[0]!.x + pts[1]!.x) / 6, y: (5 * pts[0]!.y + pts[1]!.y) / 6 };
+    const segs: { x: number; y: number }[][] = [];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      const c = pts[i + 1];
+      const end = c === undefined ? b : { x: (a.x + 4 * b.x + c.x) / 6, y: (a.y + 4 * b.y + c.y) / 6 };
+      segs.push([{ x: (2 * a.x + b.x) / 3, y: (2 * a.y + b.y) / 3 }, { x: (a.x + 2 * b.x) / 3, y: (a.y + 2 * b.y) / 3 }, end]);
+    }
+    for (const [c1, c2, e] of segs) {
+      for (let j = 0; j <= 64; j++) {
+        const t = j / 64;
+        const m = 1 - t;
+        out.push({
+          x: m * m * m * cur.x + 3 * m * m * t * c1!.x + 3 * m * t * t * c2!.x + t * t * t * e!.x,
+          y: m * m * m * cur.y + 3 * m * m * t * c1!.y + 3 * m * t * t * c2!.y + t * t * t * e!.y,
+        });
+      }
+      cur = e!;
+    }
+    return out;
+  };
+
+  it("each label sits on the curve that is drawn for its edge", () => {
+    for (const t of innerEdges) {
+      const d = Math.min(...drawn(t.points).map((q) => Math.hypot(q.x - t.labelPos!.x, q.y - t.labelPos!.y)));
+      expect(d, `${t.id} label ${t.label}`).toBeLessThan(2);
+    }
+  });
+
+  it("no two labels overlap, and none covers a box", () => {
+    const rectOf = (t: (typeof innerEdges)[number]) => {
+      const m = measure.measure(t.label!, { fontSize: 12, fontFamily: "sans-serif" });
+      return { x: t.labelPos!.x - m.w / 2, y: t.labelPos!.y - m.h * 0.8, w: m.w, h: m.h };
+    };
+    const hit = (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
+      a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const boxes = r.states.filter((s) => !s.composite).map((s) => s.rect);
+    innerEdges.forEach((t, i) => {
+      for (const u of innerEdges.slice(i + 1)) expect(hit(rectOf(t), rectOf(u)), `${t.label} / ${u.label}`).toBe(false);
+      for (const b of boxes) expect(hit(rectOf(t), b), `${t.label} on a box`).toBe(false);
+    });
+  });
+});

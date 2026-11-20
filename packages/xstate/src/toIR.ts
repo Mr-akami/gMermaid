@@ -120,6 +120,7 @@ export function parseXStateMachine(code: string): ParseResult<StateIR> {
   const transitions: StateTransition[] = [];
   const usedIds = new Set<string>();
   const byXid = new Map<string, Walked>();
+  const namedFinals: { id: StateId; parent: StateId | undefined; region: number }[] = [];
 
   function mintId(preferred: string, fallback?: string): StateId {
     for (const c of fallback === undefined ? [preferred] : [preferred, fallback]) {
@@ -192,10 +193,15 @@ export function parseXStateMachine(code: string): ParseResult<StateIR> {
     const isParallel = type === "parallel";
     const parentId = parent.irId;
 
-    // `type: "final"` is mermaid's `[*]` end — but a region has only one, so
-    // a second final state has to be an ordinary box carrying a flag.
+    // `type: "final"` keyed `final` is mermaid's unnamed `[*]` end. Any other
+    // final state is a NAMED one: a box with a bare arrow to its region's
+    // `[*]` (wired after pass 2), which is how mermaid spells it and what
+    // `fromIR` folds back into `type: "final"`. A final that also has
+    // transitions of its own cannot take that arrow, and carries a flag.
     const endTaken = states.some((s) => s.role === "end" && s.parent === parentId && (s.region ?? 0) === region);
-    const asEnd = type === "final" && !endTaken;
+    const asEnd = type === "final" && key === "final" && !endTaken;
+    const ownsTransitions = node.always !== undefined || node.after !== undefined || node.on !== undefined;
+    const namedFinal = type === "final" && !asEnd && !ownsTransitions;
     const role: StateNode["role"] = asEnd ? "end" : "normal";
     const irId = asEnd
       ? pseudoId("end", parentId, region)
@@ -214,7 +220,7 @@ export function parseXStateMachine(code: string): ParseResult<StateIR> {
       meta: node.meta,
       description: role === "end" ? description : undefined,
       output: node.output,
-      final: type === "final" && !asEnd ? (true as const) : undefined,
+      final: type === "final" && !asEnd && !namedFinal ? (true as const) : undefined,
       history: type === "history" ? ((str(node.history) as "shallow" | "deep" | undefined) ?? "shallow") : undefined,
       historyTarget: type === "history" ? str(node.target) : undefined,
       parallel: isParallel && childKeys.length < 2 ? (true as const) : undefined,
@@ -231,6 +237,7 @@ export function parseXStateMachine(code: string): ParseResult<StateIR> {
       }) as StateNode,
     );
 
+    if (namedFinal) namedFinals.push({ id: irId, parent: parentId, region });
     const walked: Walked = { key, node, path, irId, children: [], byKey: new Map(), parent };
     if (xid !== undefined) byXid.set(xid, walked);
     walkChildren(walked, isParallel, childKeys);
@@ -415,6 +422,15 @@ export function parseXStateMachine(code: string): ParseResult<StateIR> {
   }
 
   emitTransitions(root);
+  for (const f of namedFinals) {
+    let end = states.find((s) => s.role === "end" && s.parent === f.parent && (s.region ?? 0) === f.region)?.id;
+    if (end === undefined) {
+      end = pseudoId("end", f.parent, f.region);
+      states.push(omitUndefined({ id: end, label: "", role: "end" as const, parent: f.parent, region: f.region > 0 ? f.region : undefined }) as StateNode);
+    }
+    transSeq += 1;
+    transitions.push({ id: `transition-${transSeq}` as TransitionId, from: f.id, to: end });
+  }
 
   const machine = omitUndefined({
     id: str(config.id),

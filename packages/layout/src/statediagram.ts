@@ -4,10 +4,15 @@ import { edgeLabelSize } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { Point, Rect } from "./result";
 import { bboxOf, placeNote, placeSelfLoopLabel, selfLoopPoints } from "./compound";
-import { collisionIndex, labelAnchor, labelRect, pathHitsRect } from "./collision";
+import { collisionIndex, inflate, labelAnchor, labelRect, pathHitsRect, rectsOverlap } from "./collision";
 
 const LABEL_STYLE = { fontSize: 14, fontFamily: "sans-serif" } as const;
 const NOTE_STYLE = { fontSize: 12, fontFamily: "sans-serif" } as const;
+/** A composite's title, as the renderer draws it: 12px bold, inset 10px. */
+const TITLE_STYLE = { fontSize: 12, fontFamily: "sans-serif", bold: true } as const;
+const TITLE_INSET = 10;
+/** Clear space kept around an edge label, so two labels never touch. */
+const LABEL_GAP = 3;
 const PAD_X = 16;
 const PAD_Y = 10;
 const MIN_W = 60;
@@ -175,6 +180,91 @@ function nestedConnector(frame: Rect, inner: Rect, outward: boolean, obstacles: 
     }
   }
   return outward ? straight : straight.toReversed();
+}
+
+/**
+ * Points along the curve the renderer draws for `points` (the same d3-style
+ * uniform B-spline as `edgePath`), in order from start to end.
+ */
+function splineSamples(points: readonly Point[], perSegment = 8): Point[] {
+  const p = points;
+  if (p.length < 3) {
+    if (p.length < 2) return [...p];
+    const out: Point[] = [];
+    for (let i = 0; i <= perSegment; i++) {
+      const t = i / perSegment;
+      out.push({ x: p[0]!.x + (p[1]!.x - p[0]!.x) * t, y: p[0]!.y + (p[1]!.y - p[0]!.y) * t });
+    }
+    return out;
+  }
+  const lerp = (u: Point, v: Point, t: number): Point => ({ x: u.x + (v.x - u.x) * t, y: u.y + (v.y - u.y) * t });
+  const cubic = (s0: Point, c1: Point, c2: Point, e: Point, t: number): Point => {
+    const m = 1 - t;
+    return {
+      x: m * m * m * s0.x + 3 * m * m * t * c1.x + 3 * m * t * t * c2.x + t * t * t * e.x,
+      y: m * m * m * s0.y + 3 * m * m * t * c1.y + 3 * m * t * t * c2.y + t * t * t * e.y,
+    };
+  };
+  const out: Point[] = [p[0]!];
+  let cur: Point = { x: (5 * p[0]!.x + p[1]!.x) / 6, y: (5 * p[0]!.y + p[1]!.y) / 6 };
+  for (let i = 1; i < perSegment; i++) out.push(lerp(p[0]!, cur, i / perSegment));
+  const beziers: [Point, Point, Point][] = [];
+  for (let i = 1; i < p.length - 1; i++) {
+    const a = p[i - 1]!;
+    const b = p[i]!;
+    const c = p[i + 1]!;
+    beziers.push([
+      { x: (2 * a.x + b.x) / 3, y: (2 * a.y + b.y) / 3 },
+      { x: (a.x + 2 * b.x) / 3, y: (a.y + 2 * b.y) / 3 },
+      { x: (a.x + 4 * b.x + c.x) / 6, y: (a.y + 4 * b.y + c.y) / 6 },
+    ]);
+  }
+  const prev = p[p.length - 2]!;
+  const last = p[p.length - 1]!;
+  beziers.push([
+    { x: (2 * prev.x + last.x) / 3, y: (2 * prev.y + last.y) / 3 },
+    { x: (prev.x + 2 * last.x) / 3, y: (prev.y + 2 * last.y) / 3 },
+    last,
+  ]);
+  for (const [c1, c2, e] of beziers) {
+    for (let i = 0; i < perSegment; i++) out.push(cubic(cur, c1, c2, e, i / perSegment));
+    cur = e;
+  }
+  out.push(last);
+  return out;
+}
+
+/**
+ * Where an edge label goes: on the curve the renderer actually draws, and
+ * clear of every box and every other label.
+ *
+ * Dagre reserves the label's slot on a dummy point of the polyline, but the
+ * renderer draws the polyline as a B-spline, which only reaches 2/3 of the
+ * way toward an interior point: on a sharp detour the label is left hanging
+ * far off the line it names (and reads as another edge's). So the label
+ * starts at the spline's point nearest that slot and, when it would cover a
+ * box or another label there, slides along its own curve to the nearest free
+ * spot. Only when the whole curve is taken does it keep dagre's slot, which
+ * dagre kept clear (and which `blocked` never hands to anyone else). The
+ * route itself is never bent toward the label — that makes the spline
+ * overshoot and hook back.
+ */
+function placeEdgeLabel(points: readonly Point[], slot: Point, size: { w: number; h: number }, blocked: (r: Rect) => boolean): Point {
+  const samples = splineSamples(points);
+  if (samples.length === 0) return slot;
+  let k = 0;
+  for (let i = 1; i < samples.length; i++) {
+    if (Math.hypot(samples[i]!.x - slot.x, samples[i]!.y - slot.y) < Math.hypot(samples[k]!.x - slot.x, samples[k]!.y - slot.y)) k = i;
+  }
+  // nearest first, alternating either way along the curve; the two ends sit
+  // on the boxes the edge joins, so they are skipped
+  for (let d = 0; d < samples.length; d++) {
+    for (const i of d === 0 ? [k] : [k - d, k + d]) {
+      if (i <= 0 || i >= samples.length - 1) continue;
+      if (!blocked(labelRect(samples[i]!, size))) return samples[i]!;
+    }
+  }
+  return slot;
 }
 
 export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLayout {
@@ -360,13 +450,43 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
       paths.set(e.id, { points, ...(e.label !== undefined ? { labelPos } : {}) });
     }
 
+    // Labels onto their drawn curves (see `placeEdgeLabel`). Every dagre slot
+    // not yet given up stays reserved, so the fallback is always free.
+    const labelled = edges.filter((e) => e.label !== undefined && paths.get(e.id)?.labelPos !== undefined);
+    const sizeOf = new Map(labelled.map((e) => [e.id, measure.measure(e.label!, NOTE_STYLE)]));
+    const reserved = new Map(labelled.map((e) => [e.id, inflate(labelRect(paths.get(e.id)!.labelPos!, sizeOf.get(e.id)!), LABEL_GAP)]));
+    const nodeRects = kids.map((k) => local.get(k.id)!);
+    const placedLabels: Rect[] = [];
+    for (const e of labelled) {
+      const p = paths.get(e.id)!;
+      reserved.delete(e.id);
+      const blocked = (r: Rect): boolean => {
+        const pad = inflate(r, LABEL_GAP);
+        return nodeRects.some((n) => rectsOverlap(pad, n)) || placedLabels.some((l) => rectsOverlap(pad, l)) || [...reserved.values()].some((l) => rectsOverlap(pad, l));
+      };
+      const at = placeEdgeLabel(p.points, p.labelPos!, sizeOf.get(e.id)!, blocked);
+      placedLabels.push(inflate(labelRect(at, sizeOf.get(e.id)!), LABEL_GAP));
+      paths.set(e.id, { ...p, labelPos: at });
+    }
+
     // The frame wraps its DIRECT children — a composite child by its finished
     // box, not by the leaves inside it — so every level insets by its own
     // padding and its title band stays clear.
+    // Its routes and their labels too: dagre bends an edge wide around the
+    // members (and a label hangs off it), and a frame that ignored them let
+    // an inner transition run outside the box it belongs to.
     const graph = g.graph();
     const boxes = kids.map((k) => local.get(k.id)!);
-    const inner = boxes.length > 0 ? bboxOf(boxes) : { x: 0, y: 0, w: 0, h: 0 };
+    for (const e of edges) {
+      const p = paths.get(e.id)!;
+      for (const q of p.points) boxes.push({ x: q.x, y: q.y, w: 0, h: 0 });
+      if (e.label !== undefined && p.labelPos !== undefined) boxes.push(labelRect(p.labelPos, measure.measure(e.label, NOTE_STYLE)));
+    }
+    const fitted = boxes.length > 0 ? bboxOf(boxes) : { x: 0, y: 0, w: 0, h: 0 };
     const framed = container !== undefined;
+    // ...and its own title, which is drawn on the frame's top border
+    const titleW = framed ? measure.measure(byId.get(container)!.label, TITLE_STYLE).w + TITLE_INSET * 2 - COMP_PAD * 2 : 0;
+    const inner = fitted.w >= titleW ? fitted : { ...fitted, x: fitted.x - (titleW - fitted.w) / 2, w: titleW };
     const offX = framed ? COMP_PAD - inner.x : 0;
     const offY = framed ? COMP_TITLE_H - inner.y : 0;
     const w = framed

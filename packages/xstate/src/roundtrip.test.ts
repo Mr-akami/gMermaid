@@ -132,20 +132,38 @@ describe("XState v5 round trip", () => {
     expect(idle.xstate?.exit).toEqual(["flush"]);
   });
 
-  it("type: final becomes the region's [*], a second final stays a box", () => {
+  it("a final keyed `final` is the region's [*]; a named final is a box with a bare arrow to it", () => {
+    const ir = expectRoundTrip(`
+      createMachine({
+        initial: "work",
+        states: {
+          work: { on: { DONE: "done", CANCEL: "cancelled", ABORT: "final" } },
+          done: { type: "final", output: { ok: true } },
+          cancelled: { type: "final" },
+          final: { type: "final" },
+        },
+      })
+    `);
+    const end = ir.states.find((s) => s.role === "end")!;
+    expect(ir.states.filter((s) => s.role === "end")).toHaveLength(1);
+    for (const id of ["done", "cancelled"]) {
+      expect(ir.states.find((s) => s.id === (id as never))?.role).toBe("normal");
+      expect(ir.transitions.some((t) => t.from === (id as never) && t.to === end.id && t.label === undefined)).toBe(true);
+    }
+  });
+
+  it("named finals alone need no [*] in the machine text", () => {
     const ir = expectRoundTrip(`
       createMachine({
         initial: "work",
         states: {
           work: { on: { DONE: "done", CANCEL: "cancelled" } },
-          done: { type: "final", output: { ok: true } },
+          done: { type: "final" },
           cancelled: { type: "final" },
         },
       })
     `);
-    const done = ir.states.find((s) => s.xstate?.key === "done")!;
-    expect(done.role).toBe("end");
-    expect(ir.states.find((s) => s.id === ("cancelled" as never))?.xstate?.final).toBe(true);
+    expect(stateToXState(ir).code).not.toMatch(/\bfinal:/);
   });
 
   it("type: parallel becomes concurrency regions", () => {
