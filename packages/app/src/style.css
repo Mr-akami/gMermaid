@@ -144,13 +144,64 @@ kbd {
 .kind-tabs {
   flex: 1;
   min-width: 0;
+  position: relative;
   display: flex;
   gap: 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  /* the strip scrolls; fade the cut edges so a hidden tab is visible as hidden */
-  mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
 }
+/* an invisible copy of the whole strip, measured to decide what folds into
+   "More"; bold, so the active tab's heavier weight still fits */
+.kind-tabs-ruler {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: 2px;
+  /* zero-sized and clipped, so it never widens the page; offsetWidth still
+     reports each tab's laid-out width */
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+.kind-tabs-ruler .kind-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--control-h);
+  padding: 0 10px;
+  border: 1px solid transparent;
+  font: 600 13px/1 var(--font);
+  white-space: nowrap;
+}
+.kind-more { gap: 4px; }
+.kind-more[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+.kind-more-wrap { position: relative; flex: none; }
+.kind-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 160px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-pop);
+}
+.kind-menu button {
+  justify-content: flex-start;
+  border: 0;
+  background: none;
+  padding: 0 10px;
+  font-weight: 400;
+  border-radius: 4px;
+}
+.kind-menu button:hover:not(:disabled),
+.kind-menu button:focus-visible { background: var(--accent-soft); color: var(--accent-ink); outline: none; }
 .kind-tab {
   flex: none;
   border-color: transparent;
@@ -184,11 +235,24 @@ kbd {
   .appbar { gap: 10px; }
   .appbar-actions .btn-label { display: none; }
   .appbar-actions .btn:has(.btn-label) { width: var(--control-h); padding: 0; }
-  .kind-tab { padding: 0 8px; }
+  .kind-tab, .kind-tabs-ruler .kind-tab { padding: 0 8px; }
+}
+/* SVG and PNG share one icon: when space is short they keep their words, not the icon */
+@media (max-width: 1199px) {
+  .appbar-actions .btn.keep-label { width: auto; padding: 0 8px; }
+  .appbar-actions .btn.keep-label .btn-label { display: inline; }
+  .appbar-actions .btn.keep-label .icon { display: none; }
 }
 @media (max-width: 1100px) {
   .brand { display: none; }
   .appbar { padding-left: 8px; }
+}
+
+/* a phone: the kind tabs take a row of their own under the actions */
+@media (max-width: 640px) {
+  .appbar { flex-wrap: wrap; height: auto; padding: 6px 8px; row-gap: 6px; }
+  .kind-tabs { order: 2; flex-basis: 100%; }
+  .appbar-actions { margin-left: auto; }
 }
 
 /* ── editor grid ────────────────────────────────────────────────────────
@@ -258,6 +322,11 @@ kbd {
   border-left: 1px solid var(--line-soft);
 }
 .toolbar > .tools-view { margin-left: auto; border-left: none !important; }
+/* when the strip would wrap, the view tools drop their words first (their
+   pressed state and tooltip still say what they are) rather than taking a
+   row of their own; EditorToolbar sets data-compact only when it wraps */
+.toolbar[data-compact] .tools-view .btn-label { display: none; }
+.toolbar[data-compact] .tools-view .btn:has(.btn-label) { width: var(--control-h); padding: 0; }
 .toolbar > .tools-add { flex: 0 1 auto; flex-wrap: wrap; row-gap: 6px; }
 /* buttons that belong together sit flush, like one segmented control */
 .btn-cluster { display: inline-flex; }

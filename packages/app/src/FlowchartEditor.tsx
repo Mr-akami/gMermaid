@@ -32,8 +32,10 @@ import type { EditorRuntimeProps } from "./editorRuntime";
 
 function initialIR(): FlowchartIR {
   let ir = emptyFlowchart("TB");
-  const a = newId("node");
-  const b = newId("node");
+  // readable ids: the sample's text is the first Mermaid a user sees
+  // (`end` is a flowchart keyword, so the second node is `finish`)
+  const a = "start" as NodeId;
+  const b = "finish" as NodeId;
   ir = applyFlowchartAction(ir, { type: "addNode", node: { id: a, label: "Start", shape: "rounded" } });
   ir = applyFlowchartAction(ir, { type: "addNode", node: { id: b, label: "End", shape: "rounded" } });
   ir = applyFlowchartAction(ir, { type: "addEdge", id: newId("edge"), from: a, to: b });
@@ -266,12 +268,13 @@ export function FlowchartEditor({ loadRequest, initialCode, mode = "standalone",
         modes={
           <button
             className="btn"
+            aria-label="Move mode"
             aria-pressed={moveMode}
             title="Drag a node onto a subgraph to move it in"
             onClick={() => setMoveMode(!moveMode)}
           >
             <Icon name="move" />
-            Move mode
+            <span className="btn-label">Move mode</span>
           </button>
         }
         prompt={view.connectFrom !== undefined ? "click a target node to connect…" : undefined}

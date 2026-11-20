@@ -39,6 +39,11 @@ export interface CodePaneProps<T> {
   readonly codeWarnings?: readonly string[] | undefined;
 }
 
+// The editable text needs a name for screen readers; CodeMirror's content
+// element has none of its own. Module-level so the extension array is stable.
+const MERMAID_LABEL = [EditorView.contentAttributes.of({ "aria-label": "Mermaid code" })];
+const XSTATE_LABEL = [EditorView.contentAttributes.of({ "aria-label": "XState machine code" })];
+
 // While focused the pane always shows its own draft (never reformatted
 // under the user's cursor); valid drafts commit to the IR on every change,
 // invalid ones only show errors. A draft left behind on blur (still broken)
@@ -186,6 +191,7 @@ export function CodePane<T>({
       )}
       <CodeMirror
         value={active?.text ?? code}
+        extensions={mermaidText === false ? XSTATE_LABEL : MERMAID_LABEL}
         height="100%"
         style={{ flex: 1, overflow: "auto" }}
         onChange={handleChange}

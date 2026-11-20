@@ -454,12 +454,13 @@ export function StateEditor({ loadRequest, initialCode, mode = "standalone", onC
         modes={
           <button
             className="btn"
+            aria-label="Move mode"
             aria-pressed={view.moveMode === true}
             title="Drag a state onto a composite frame to move it in"
             onClick={() => setView({ ...view, moveMode: view.moveMode !== true })}
           >
             <Icon name="move" />
-            Move mode
+            <span className="btn-label">Move mode</span>
           </button>
         }
         selectionActions={

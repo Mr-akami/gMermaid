@@ -2,6 +2,15 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 export type Kind = "Flowchart" | "Sequence" | "Class" | "State" | "Requirement" | "Journey" | "Timeline" | "Gantt" | "Mindmap" | "Usecase" | "ER" | "Quadrant" | "Git graph" | "Architecture";
 
+/** Switch the app to a diagram kind: its tab when it is on the strip, else
+ * through the "More" menu the strip folds the rest into. */
+export async function pickKind(page: Page, kind: Kind): Promise<void> {
+  const tab = page.getByRole("navigation", { name: "Diagram kind" }).getByRole("button", { name: kind, exact: true });
+  if (await tab.isVisible()) return tab.click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: kind, exact: true }).click();
+}
+
 /** Open the app fresh (no autosave) and switch to a diagram tab. */
 export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
   if (page.url() === "about:blank") {
@@ -11,7 +20,7 @@ export async function openEditor(page: Page, kind: Kind): Promise<Locator> {
     await page.evaluate(() => localStorage.clear());
     await page.reload();
   }
-  await page.getByRole("button", { name: kind, exact: true }).click();
+  await pickKind(page, kind);
   const editor = page.locator(".editor:not(.hidden)");
   await expect(editor).toBeVisible();
   return editor;
@@ -103,7 +112,7 @@ export async function openStoredEditor(page: Page, kind: Kind, code: string): Pr
     [`gmermaid:doc:${kind.toLowerCase()}`, code] as const,
   );
   await page.reload();
-  await page.getByRole("button", { name: kind, exact: true }).click();
+  await pickKind(page, kind);
   const editor = page.locator(".editor:not(.hidden)");
   await expect(editor).toBeVisible();
   return editor;
@@ -157,7 +166,7 @@ export function mermaidVerdict(editor: Locator, verdict: "ok" | "rejected"): Loc
 /** Switch to a diagram tab WITHOUT reloading: for a test that goes on to a
  * second case in the same page. The case is expected to set its own code. */
 export async function switchEditor(page: Page, kind: Kind): Promise<Locator> {
-  await page.getByRole("button", { name: kind, exact: true }).click();
+  await pickKind(page, kind);
   const editor = page.locator(".editor:not(.hidden)");
   await expect(editor).toBeVisible();
   return editor;
