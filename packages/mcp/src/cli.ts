@@ -1,10 +1,11 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { packageVersion } from "./metadata";
+import { drawMachine } from "./fromXState";
 import { runClose, runOpen, runServe, runStatus, runWait } from "./fileCommands";
 import { installSkill, type SkillTarget } from "./installSkill";
 import { createGMermaidServer } from "./server";
@@ -21,6 +22,12 @@ Usage:
   gmermaid editor              Open the local Mermaid editor
   gmermaid validate <file|->…  Check Mermaid files (.mmd, or the mermaid
                                blocks of a .md); exit 1 on any error
+
+  gmermaid from-xstate <file> [--machine NAME] [-o OUT.mmd]
+                               Draw an XState machine written as code
+                               (TypeScript, function transitions) as a
+                               stateDiagram. Read-only: a picture of the
+                               code, never written back
 
 Share a diagram file with the user (for agents):
   gmermaid open <file> [--title T] [--no-browser]
@@ -122,6 +129,23 @@ try {
     await runMcp();
   } else if (command === "validate") {
     process.exitCode = await runValidate(rest);
+  } else if (command === "from-xstate") {
+    const { values, positionals } = parseArgs({
+      args: rest,
+      allowPositionals: true,
+      options: { machine: { type: "string" }, out: { type: "string", short: "o" } },
+    });
+    const [file, ...extra] = positionals;
+    if (file === undefined || extra.length > 0) throw new UsageError("from-xstate: give exactly one file");
+    const drawn = drawMachine(file, readFileSync(file, "utf8"), values.machine);
+    if (!drawn.ok) {
+      console.error(drawn.message);
+      process.exitCode = 1;
+    } else {
+      for (const n of drawn.notes) console.error(n);
+      if (values.out === undefined) process.stdout.write(drawn.mermaid);
+      else writeFileSync(values.out, drawn.mermaid);
+    }
   } else if (command === "open") {
     const { values, positionals } = parseArgs({
       args: rest,

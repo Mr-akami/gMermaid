@@ -84,3 +84,6 @@ node onto a subgraph to put it there, or onto bare canvas to take it out.
   rename consistently in every edge that uses them.
 - `gmermaid validate` also checks every ```mermaid block in a `.md` file and
   reads stdin with `-`; use it whenever you write Mermaid anywhere.
+- To show an XState machine that exists as code, don't redraw it by hand:
+  `gmermaid from-xstate <machine.ts> -o docs/design/<topic>.mmd` draws it
+  (read-only picture of the code), then `open` that file as usual.

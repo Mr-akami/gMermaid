@@ -75,3 +75,20 @@ describe("mermaid.js accepts the diagram an XState machine becomes", () => {
     })`);
   });
 });
+
+describe("mermaid.js accepts the picture of a machine written as code", () => {
+  it("function transitions, invoke done/error arrows and ƒ guards", async () => {
+    const { sketchXStateSource } = await import("./sketch");
+    const r = sketchXStateSource(`setup({}).createMachine({
+      initial: "a",
+      states: {
+        a: { invoke: { src: "load", onDone: { target: "b" }, onError: ({ event }) => ({ target: "c" }) }, on: { GO: (x) => (x ? { target: "b" } : { target: "c" }), NOOP: () => ({}) } },
+        b: { type: "final" },
+        c: {},
+      },
+    })`);
+    if (!r.ok) throw new Error(JSON.stringify(r.errors));
+    const code = stateToMermaid(r.machines[0]!.ir);
+    await expect(mermaid.parse(code), code).resolves.toBeTruthy();
+  });
+});

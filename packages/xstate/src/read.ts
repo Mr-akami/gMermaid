@@ -126,7 +126,7 @@ function literal(node: AnyNode, path: string, lines: Record<string, number>): XV
       return refuse(
         node,
         path,
-        "an inline function is not supported — name it in `setup({ actions, guards, delays })` and reference it by name",
+        "an inline function is not supported — name it in `setup({ actions, guards, delays })` and reference it by name (or draw the machine read-only with `gmermaid from-xstate <file>`)",
       );
     case "CallExpression":
       return refuse(
