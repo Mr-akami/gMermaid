@@ -2,7 +2,7 @@
 // toolbar used to borrow unicode glyphs (⤢ ▭ ⇱), which render in whatever
 // font the OS picks and never line up with each other.
 
-type IconName = "open" | "save" | "files" | "undo" | "redo" | "fit" | "marquee" | "move" | "trash" | "close" | "sidebar" | "image";
+type IconName = "open" | "save" | "files" | "undo" | "redo" | "fit" | "marquee" | "move" | "trash" | "close" | "sidebar" | "image" | "chevron";
 
 const PATHS: Record<IconName, string> = {
   open: "M2.5 4.5v8h11v-6h-6l-1.5-2z",
@@ -17,6 +17,7 @@ const PATHS: Record<IconName, string> = {
   close: "M4 4l8 8M12 4l-8 8",
   sidebar: "M2.5 3h11v10h-11zM10 3v10",
   image: "M2.5 3h11v10h-11zM2.5 11l3.5-3.5 3 3 2-2 2.5 2.5M10.5 6h.01",
+  chevron: "M4.5 6.5 8 10l3.5-3.5",
 };
 
 export function Icon({ name }: { readonly name: IconName }) {

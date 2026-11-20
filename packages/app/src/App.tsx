@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DIAGRAMS, type DiagramKind, type LoadRequest } from "./diagrams";
 import { AppBarContext } from "./EditorToolbar";
 import { FilesPanel } from "./FilesPanel";
+import { KindTabs } from "./KindTabs";
 import { Icon } from "./icons";
 import { DOC_PREFIX } from "./persistence";
 import { exportPng, exportSvg } from "./exportDiagram";
@@ -26,27 +27,15 @@ export function App() {
     <div className="app">
       <header className="appbar">
         <span className="brand">gMermaid</span>
-        <nav className="kind-tabs" aria-label="Diagram kind">
-          {DIAGRAMS.map((d) => (
-            <button
-              key={d.kind}
-              className="kind-tab"
-              aria-current={kind === d.kind ? "page" : undefined}
-              ref={kind === d.kind ? (el) => el?.scrollIntoView({ inline: "nearest", block: "nearest" }) : undefined}
-              onClick={() => setKind(d.kind)}
-            >
-              {d.label}
-            </button>
-          ))}
-        </nav>
+        <KindTabs kind={kind} onSelect={setKind} />
         <div className="appbar-actions">
           <div className="tool-group" ref={setFileSlot} />
           <div className="tool-group">
-            <button className="btn" onClick={() => exportSvg(kind)} aria-label="Export SVG" title="Download the diagram as SVG">
+            <button className="btn keep-label" onClick={() => exportSvg(kind)} aria-label="Export SVG" title="Download the diagram as SVG">
               <Icon name="image" />
               <span className="btn-label">SVG</span>
             </button>
-            <button className="btn" onClick={() => void exportPng(kind)} aria-label="Export PNG" title="Download the diagram as PNG (2x)">
+            <button className="btn keep-label" onClick={() => void exportPng(kind)} aria-label="Export PNG" title="Download the diagram as PNG (2x)">
               <Icon name="image" />
               <span className="btn-label">PNG</span>
             </button>

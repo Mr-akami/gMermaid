@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 import type { EditorShell } from "./useEditorShell";
@@ -76,11 +76,29 @@ export function EditorToolbar({ shell, history, file, tools, settings, modes, se
   );
 
   const showSelection = shell.selection.count > 0 && selectionActions !== undefined;
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  // Compact the view tools only when the strip actually wraps: whether it
+  // does depends on each editor's own tools, not on one breakpoint.
+  useLayoutEffect(() => {
+    const strip = stripRef.current;
+    if (strip === null) return;
+    const check = () => {
+      delete strip.dataset.compact;
+      const first = strip.firstElementChild as HTMLElement | null;
+      const view = strip.querySelector<HTMLElement>(".tools-view");
+      if (first !== null && view !== null && view.offsetTop > first.offsetTop + 4) strip.dataset.compact = "";
+    };
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(check);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  });
   return (
     <>
       {slots?.active === true && slots.file !== null && fileButtons && createPortal(fileButtons, slots.file)}
       {slots?.active === true && slots.history !== null && createPortal(historyButtons, slots.history)}
-      <div className="toolbar" role="toolbar" aria-label="Diagram tools">
+      <div className="toolbar" role="toolbar" aria-label="Diagram tools" ref={stripRef}>
         {slots === null && (
           <div className="tool-group">
             {fileButtons}
@@ -93,12 +111,13 @@ export function EditorToolbar({ shell, history, file, tools, settings, modes, se
           {modes}
           <button
             className="btn"
+            aria-label="Select"
             aria-pressed={shell.marqueeMode}
-            title="ドラッグで範囲選択（Shift+ドラッグでも同じ）"
+            title="Drag to select an area (Shift+drag does the same)"
             onClick={shell.toggleMarqueeMode}
           >
             <Icon name="marquee" />
-            Select
+            <span className="btn-label">Select</span>
           </button>
           <button className="btn icon-only" aria-label="Fit view" title="Fit the whole diagram in the canvas" onClick={shell.fitView}>
             <Icon name="fit" />
