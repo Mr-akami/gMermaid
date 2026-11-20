@@ -141,6 +141,10 @@ export function useEditorShell<IR extends DiagramIR>(opts: EditorShellOptions<IR
   // start framed: the first layout is a diagram the user did not place
   const pending = useRef(true);
   const [, bump] = useState(0);
+  /** The camera the last automatic fit chose; see the resize effect below. */
+  const autoFramed = useRef<Viewport | undefined>(undefined);
+  const viewportNow = useRef(viewport);
+  viewportNow.current = viewport;
 
   // No dependency list on purpose: a pending fit has to wait for a canvas
   // with a real size, and an editor in a hidden tab has none until the tab
@@ -154,8 +158,31 @@ export function useEditorShell<IR extends DiagramIR>(opts: EditorShellOptions<IR
     const box = drawnExtent(node);
     pending.current = false;
     // an empty diagram has nothing to frame: the plain default will do
-    setViewport(box === undefined ? { scale: 1, x: PADDING, y: PADDING } : frame(box, rect));
+    const framed = box === undefined ? { scale: 1, x: PADDING, y: PADDING } : frame(box, rect);
+    autoFramed.current = framed;
+    setViewport(framed);
   });
+
+  // The frame was computed for the canvas size at that moment. While the
+  // camera is still the one we chose (the user has not panned or zoomed), a
+  // resized canvas gets a fresh frame — a diagram opened in a small window
+  // would otherwise stay shrunk after the window grows. Once the user moves
+  // the camera, it is theirs and a resize leaves it alone.
+  useEffect(() => {
+    const node = canvasRef.current;
+    if (node === null || typeof ResizeObserver === "undefined") return;
+    let last = { w: node.clientWidth, h: node.clientHeight };
+    const observer = new ResizeObserver(() => {
+      const now = { w: node.clientWidth, h: node.clientHeight };
+      if (now.w === last.w && now.h === last.h) return;
+      last = now;
+      if (autoFramed.current === undefined || viewportNow.current !== autoFramed.current) return;
+      pending.current = true;
+      bump((n) => n + 1);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   // latest-ref: the handlers are fresh closures every render, the listener
   // is registered once

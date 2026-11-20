@@ -94,3 +94,23 @@ test("Fit brings a diagram panned off screen back", async ({ page }) => {
   await editor.getByLabel("Fit view").click();
   expect(await clipped(editor)).toEqual([]);
 });
+
+test("a diagram framed in a small window is framed again when the window grows", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  const editor = await openStoredEditor(page, "Flowchart", WIDE);
+  await expectInsideCanvas(editor, "N16");
+  const small = (await element(editor, "N0").boundingBox())!.width;
+
+  await page.setViewportSize({ width: 1800, height: 1100 });
+  // the frame follows the bigger canvas: the diagram is drawn larger and still fits
+  await expect.poll(async () => (await element(editor, "N0").boundingBox())!.width).toBeGreaterThan(small * 1.2);
+  expect(await clipped(editor)).toEqual([]);
+
+  // once the user moves the camera, a resize leaves it alone
+  await panAway(page, editor);
+  const moved = await clipped(editor);
+  expect(moved).not.toEqual([]);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.waitForTimeout(200);
+  expect(await clipped(editor)).not.toEqual([]);
+});

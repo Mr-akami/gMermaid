@@ -244,14 +244,11 @@ function splineSamples(points: readonly Point[], perSegment = 8): Point[] {
  * far off the line it names (and reads as another edge's). So the label
  * starts at the spline's point nearest that slot and, when it would cover a
  * box or another label there, slides along its own curve to the nearest free
- * spot. Only when the whole curve is taken does it keep dagre's slot, which
- * dagre kept clear (and which `blocked` never hands to anyone else). The
- * route itself is never bent toward the label — that makes the spline
- * overshoot and hook back.
+ * spot; `undefined` when the whole curve is taken. The route itself is never
+ * bent toward the label — that makes the spline overshoot and hook back.
  */
-function placeEdgeLabel(points: readonly Point[], slot: Point, size: { w: number; h: number }, blocked: (r: Rect) => boolean): Point {
-  const samples = splineSamples(points);
-  if (samples.length === 0) return slot;
+function placeEdgeLabel(samples: readonly Point[], slot: Point, size: { w: number; h: number }, blocked: (r: Rect) => boolean): Point | undefined {
+  if (samples.length === 0) return undefined;
   let k = 0;
   for (let i = 1; i < samples.length; i++) {
     if (Math.hypot(samples[i]!.x - slot.x, samples[i]!.y - slot.y) < Math.hypot(samples[k]!.x - slot.x, samples[k]!.y - slot.y)) k = i;
@@ -264,7 +261,7 @@ function placeEdgeLabel(points: readonly Point[], slot: Point, size: { w: number
       if (!blocked(labelRect(samples[i]!, size))) return samples[i]!;
     }
   }
-  return slot;
+  return undefined;
 }
 
 export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLayout {
@@ -451,22 +448,46 @@ export function layoutStateDiagram(ir: StateIR, measure: TextMeasurer): StateLay
     }
 
     // Labels onto their drawn curves (see `placeEdgeLabel`). Every dagre slot
-    // not yet given up stays reserved, so the fallback is always free.
+    // not yet given up stays reserved, so falling back to it is always free.
     const labelled = edges.filter((e) => e.label !== undefined && paths.get(e.id)?.labelPos !== undefined);
     const sizeOf = new Map(labelled.map((e) => [e.id, measure.measure(e.label!, NOTE_STYLE)]));
-    const reserved = new Map(labelled.map((e) => [e.id, inflate(labelRect(paths.get(e.id)!.labelPos!, sizeOf.get(e.id)!), LABEL_GAP)]));
     const nodeRects = kids.map((k) => local.get(k.id)!);
-    const placedLabels: Rect[] = [];
+    const curves = new Map(edges.map((e) => [e.id, splineSamples(paths.get(e.id)!.points)]));
+    const taken = new Map(labelled.map((e) => [e.id, inflate(labelRect(paths.get(e.id)!.labelPos!, sizeOf.get(e.id)!), LABEL_GAP)]));
+    const blockedFor = (id: TransitionId) => (r: Rect): boolean => {
+      const pad = inflate(r, LABEL_GAP);
+      if (nodeRects.some((n) => rectsOverlap(pad, n))) return true;
+      for (const [other, l] of taken) if (other !== id && rectsOverlap(pad, l)) return true;
+      return false;
+    };
+    // every OTHER edge's drawn curve: a label on a crossing reads as
+    // belonging to whichever line runs through it
+    const crossesEdge = (id: TransitionId, r: Rect): boolean => {
+      for (const [other, curve] of curves) if (other !== id && pathHitsRect(curve, r)) return true;
+      return false;
+    };
+    const settle = (e: (typeof labelled)[number], at: Point): void => {
+      const p = paths.get(e.id)!;
+      taken.set(e.id, inflate(labelRect(at, sizeOf.get(e.id)!), LABEL_GAP));
+      paths.set(e.id, { ...p, labelPos: at });
+    };
+    // pass 1: the nearest free spot on the label's own curve
     for (const e of labelled) {
       const p = paths.get(e.id)!;
-      reserved.delete(e.id);
-      const blocked = (r: Rect): boolean => {
-        const pad = inflate(r, LABEL_GAP);
-        return nodeRects.some((n) => rectsOverlap(pad, n)) || placedLabels.some((l) => rectsOverlap(pad, l)) || [...reserved.values()].some((l) => rectsOverlap(pad, l));
-      };
-      const at = placeEdgeLabel(p.points, p.labelPos!, sizeOf.get(e.id)!, blocked);
-      placedLabels.push(inflate(labelRect(at, sizeOf.get(e.id)!), LABEL_GAP));
-      paths.set(e.id, { ...p, labelPos: at });
+      const at = placeEdgeLabel(curves.get(e.id)!, p.labelPos!, sizeOf.get(e.id)!, blockedFor(e.id));
+      if (at !== undefined) settle(e, at);
+    }
+    // pass 2: a label that landed on another edge moves along its curve to a
+    // spot that is ALSO off every other edge, if there is one. Done after
+    // everyone has a place, so a label wandering off to dodge a line can
+    // never take the spot another label needed.
+    for (const e of labelled) {
+      const p = paths.get(e.id)!;
+      const size = sizeOf.get(e.id)!;
+      if (!crossesEdge(e.id, labelRect(p.labelPos!, size))) continue;
+      const blocked = blockedFor(e.id);
+      const at = placeEdgeLabel(curves.get(e.id)!, p.labelPos!, size, (r) => blocked(r) || crossesEdge(e.id, r));
+      if (at !== undefined) settle(e, at);
     }
 
     // The frame wraps its DIRECT children — a composite child by its finished

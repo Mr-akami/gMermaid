@@ -320,14 +320,19 @@ describe("a composite holds its own transitions", () => {
     ["preparing", "drawing", "prepare done"],
     ["preparing", "cancelled", "prepare error"],
     ["preparing", "cancelled", "CANCEL"],
-    ["preparing", "cancelled", "SUSPENDED"],
+    ["preparing", "cancelled", "SUSPENDED from root"],
     ["drawing", "configuring", "DRAWN"],
     ["drawing", "cancelled", "draw error"],
+    ["drawing", "cancelled", "CANCEL"],
+    ["drawing", "cancelled", "SUSPENDED from root"],
     ["configuring", "saving", "SUBMIT"],
+    ["configuring", "discarding", "CANCEL"],
+    ["configuring", "discarding", "SUSPENDED from root"],
     ["configuring", "discarding", "configure error"],
     ["saving", "saved", "save done"],
     ["saving", "configuring", "save error"],
     ["discarding", "cancelled", "discard done"],
+    ["discarding", "cancelled", "discard error"],
   ];
   const inner = ["preparing", "drawing", "cancelled", "configuring", "saving", "discarding", "saved"];
   const machine: StateIR = {
@@ -382,8 +387,9 @@ describe("a composite holds its own transitions", () => {
   /** Dense points along the uniform B-spline the renderer draws (`edgePath`). */
   const drawn = (pts: readonly { x: number; y: number }[]) => {
     if (pts.length < 3) return Array.from({ length: 65 }, (_, i) => ({ x: pts[0]!.x + ((pts[1]!.x - pts[0]!.x) * i) / 64, y: pts[0]!.y + ((pts[1]!.y - pts[0]!.y) * i) / 64 }));
-    const out: { x: number; y: number }[] = [];
     let cur = { x: (5 * pts[0]!.x + pts[1]!.x) / 6, y: (5 * pts[0]!.y + pts[1]!.y) / 6 };
+    // the straight lead-in from the first point
+    const out = Array.from({ length: 17 }, (_, i) => ({ x: pts[0]!.x + ((cur.x - pts[0]!.x) * i) / 16, y: pts[0]!.y + ((cur.y - pts[0]!.y) * i) / 16 }));
     const segs: { x: number; y: number }[][] = [];
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1]!;
@@ -411,6 +417,20 @@ describe("a composite holds its own transitions", () => {
       const d = Math.min(...drawn(t.points).map((q) => Math.hypot(q.x - t.labelPos!.x, q.y - t.labelPos!.y)));
       expect(d, `${t.id} label ${t.label}`).toBeLessThan(2);
     }
+  });
+
+  it("a label keeps off other edges' drawn curves when its own curve has room", () => {
+    const onOther = innerEdges.filter((t) => {
+      const m = measure.measure(t.label!, { fontSize: 12, fontFamily: "sans-serif" });
+      const box = { x: t.labelPos!.x - m.w / 2, y: t.labelPos!.y - m.h * 0.8, w: m.w, h: m.h };
+      return r.transitions.some(
+        (u) => u.id !== t.id && drawn(u.points).some((q) => q.x > box.x && q.x < box.x + box.w && q.y > box.y && q.y < box.y + box.h),
+      );
+    });
+    // `save error` has room on its curve and must use it; `configure error`
+    // is wider than any gap between the lines crossing its short curve
+    expect(onOther.map((t) => t.label)).not.toContain("save error");
+    expect(onOther.length).toBeLessThanOrEqual(1);
   });
 
   it("no two labels overlap, and none covers a box", () => {
