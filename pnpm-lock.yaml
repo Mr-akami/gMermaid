@@ -142,6 +142,9 @@ importers:
       '@gmermaid/mermaid-parser':
         specifier: workspace:*
         version: link:../mermaid-parser
+      '@gmermaid/xstate':
+        specifier: workspace:*
+        version: link:../xstate
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -226,6 +229,9 @@ importers:
       '@gmermaid/mermaid-parser':
         specifier: workspace:*
         version: link:../mermaid-parser
+      '@sveltejs/acorn-typescript':
+        specifier: ^1.0.13
+        version: 1.0.13(acorn@8.18.0)
       acorn:
         specifier: ^8.18.0
         version: 8.18.0
@@ -1253,6 +1259,11 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@sveltejs/acorn-typescript@1.0.13':
+    resolution: {integrity: sha512-wgKggnhZVL9Bfx1OaKKTrYY9BFRk6C8UAkQNUcIv1+llzYrIqy+RZm5HPKzn0NpEBvTVhTqB4kQyllZywsRBRQ==}
+    peerDependencies:
+      acorn: ^8.9.0
 
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
@@ -3451,6 +3462,10 @@ snapshots:
     optional: true
 
   '@standard-schema/spec@1.1.0': {}
+
+  '@sveltejs/acorn-typescript@1.0.13(acorn@8.18.0)':
+    dependencies:
+      acorn: 8.18.0
 
   '@types/babel__core@7.20.5':
     dependencies:

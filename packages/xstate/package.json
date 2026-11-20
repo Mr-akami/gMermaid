@@ -9,6 +9,7 @@
   "dependencies": {
     "@gmermaid/ir": "workspace:*",
     "@gmermaid/mermaid-parser": "workspace:*",
+    "@sveltejs/acorn-typescript": "^1.0.13",
     "acorn": "^8.18.0"
   },
   "devDependencies": {

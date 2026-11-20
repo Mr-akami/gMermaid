@@ -43,6 +43,14 @@ than dropped, and what the XState projection itself cannot say (notes, layout
 direction, a concurrency region holding several states) is reported under the
 pane.
 
+A machine written as application code — TypeScript, transitions that are
+functions returning `{ target, … }`, actors made by `createAsyncLogic` — can be
+drawn read-only with `gmermaid from-xstate <file> [--machine NAME] [-o out.mmd]`.
+It reads the source without running it, draws the state tree, events, `after`
+and `always` transitions and each `invoke`'s `onDone` / `onError`, marks
+outcomes chosen by code with `ƒ`, and lists what it leaves out. The picture is
+never written back to the code.
+
 Flowcharts keep their colors (`classDef`, `class`, `:::`, `style`,
 `linkStyle`), and a node, subgraph or edge can be marked Added / Removed /
 Changed from the property window, which is how a PR's before/after reads at a

@@ -6,4 +6,5 @@ export const XSTATE_SUBSET = [
   "Inline functions, calls and identifier references are refused — name actions,",
   "guards, actors and delays in `setup({ … })` and reference them as strings.",
   "`context` and the `setup({ … })` argument are carried through verbatim, unread.",
+  "To draw a machine written with functions (read-only), run `gmermaid from-xstate <file>`.",
 ].join(" ");
