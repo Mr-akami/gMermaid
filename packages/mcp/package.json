@@ -1,6 +1,6 @@
 {
   "name": "@mr-akami/gmermaid",
-  "version": "2026.1120.1",
+  "version": "2026.1120.2",
   "description": "Local GUI editor and MCP review server for Mermaid diagrams",
   "license": "MIT",
   "keywords": ["mcp", "mermaid", "diagram", "editor", "llm"],
