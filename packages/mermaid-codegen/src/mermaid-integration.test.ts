@@ -435,6 +435,32 @@ describe("mermaid.js accepts generated state diagrams", () => {
     await expectMermaidAccepts(stateToMermaid(ir));
   });
 
+  it("parses a declared leaf followed by a nested composite", async () => {
+    // mermaid.js's lexer runs a bare `state idle` into the next line when that
+    // line opens a block — the shape an editor round trip of a nested machine produces
+    const ir: StateIR = {
+      kind: "state",
+      states: [
+        { id: S("root"), label: "root machine (one actor)", role: "normal" },
+        { id: S("state_start_root"), label: "", role: "start", parent: S("root") },
+        { id: S("idle"), label: "idle", role: "normal", parent: S("root") },
+        { id: S("constructing"), label: "constructing", role: "normal", parent: S("root") },
+        { id: S("preparing"), label: "preparing", role: "normal", parent: S("constructing") },
+        { id: S("lone"), label: "lone", role: "normal" },
+        { id: S("other"), label: "other", role: "normal" },
+        { id: S("inner"), label: "inner", role: "normal", parent: S("other") },
+      ],
+      transitions: [
+        { id: "t1" as TransitionId, from: S("state_start_root"), to: S("idle") },
+        { id: "t2" as TransitionId, from: S("idle"), to: S("constructing"), label: "GO" },
+      ],
+      notes: [],
+    };
+    const code = stateToMermaid(ir);
+    expect(code).toContain("    idle\n    state constructing {");
+    await expectMermaidAccepts(code);
+  });
+
   it("parses `--` regions with per-region [*], block direction, block notes and self-transitions", async () => {
     const ir: StateIR = {
       kind: "state",

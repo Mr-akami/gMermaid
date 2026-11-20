@@ -41,7 +41,8 @@ test("typing an XState machine drives the canvas and the mermaid text", async ({
   await expectCode(editor).toContain("idle --> loading : FETCH / log");
   await expectCode(editor).toContain("loading --> idle : after 2000ms");
   await expectCode(editor).toContain("loading --> loading : REJECT [canRetry]");
-  await expectCode(editor).toContain("loading --> [*] : RESOLVE");
+  await expectCode(editor).toContain("loading --> done : RESOLVE");
+  await expectCode(editor).toContain("done --> [*]");
 
   // one page load for both: the second case starts from fresh code
   await test.step("a machine the reader cannot accept says why, and leaves the diagram alone", async () => {

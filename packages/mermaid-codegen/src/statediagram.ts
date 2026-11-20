@@ -107,6 +107,14 @@ export function stateToMermaid(ir: StateIR): string {
 
   emitScope(undefined, "  ");
 
+  // mermaid.js's lexer reads a bare `state X` straight into a following
+  // `state Y {` line ("State name must be a single word"). The bare-id
+  // statement `X` declares the same thing, so that one line is spelled so.
+  for (let i = 0; i + 1 < lines.length; i++) {
+    const bare = lines[i]!.match(/^(\s*)state (\S+)$/);
+    if (bare && /^\s*state .*\{$/.test(lines[i + 1]!)) lines[i] = `${bare[1]}${bare[2]}`;
+  }
+
   for (const n of ir.notes) {
     if (!byId.has(n.target)) continue;
     const pos = n.position === "leftOf" ? "left of" : "right of";

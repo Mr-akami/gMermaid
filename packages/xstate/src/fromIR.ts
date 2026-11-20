@@ -96,14 +96,43 @@ export function stateToXState(ir: StateIR): XStateCode {
   const isComposite = (id: StateId): boolean => ir.states.some((s) => s.parent === id);
   const isParallel = (s: StateNode): boolean => regionCount(s.id) > 1 || s.xstate?.parallel === true;
 
+  // ---- final states -----------------------------------------------------
+  // A box whose ONLY way out is a bare arrow to its region's `[*]` is how
+  // mermaid spells a named final state; XState says `type: "final"`. The
+  // arrow is absorbed, and a `[*]` left with no other arrow in is not
+  // written at all (`toIR` reads a named final back as exactly this shape).
+  const finalBoxes = new Set<string>();
+  const absorbed = new Set<string>(); // transition ids
+  {
+    const out = new Map<string, StateTransition[]>();
+    for (const t of ir.transitions) out.set(t.from as string, [...(out.get(t.from as string) ?? []), t]);
+    for (const s of ir.states) {
+      if (s.role !== "normal" || isComposite(s.id) || s.xstate?.history !== undefined || s.xstate?.parallel === true) continue;
+      const list = out.get(s.id as string) ?? [];
+      if (list.length !== 1) continue;
+      const t = list[0]!;
+      const to = byId.get(t.to as string);
+      if (to?.role !== "end" || to.parent !== s.parent || regionOf(to) !== regionOf(s)) continue;
+      if ((t.label ?? "") !== "" || t.xstate !== undefined) continue;
+      finalBoxes.add(s.id as string);
+      absorbed.add(t.id as string);
+    }
+  }
+  const reachedEnds = new Set(ir.transitions.filter((t) => !absorbed.has(t.id as string)).map((t) => t.to as string));
+  /** A `[*]` end every arrow of which was absorbed, carrying nothing of its own. */
+  const omitted = (m: StateNode): boolean =>
+    m.role === "end" && !reachedEnds.has(m.id as string) && Object.keys(m.xstate ?? {}).every((k) => k === "key") &&
+    ir.transitions.some((t) => t.to === m.id);
+  /** The members a scope writes as `states` entries. */
+  const written = (members: readonly StateNode[]): StateNode[] => members.filter((m) => m.role !== "start" && !omitted(m));
+
   // ---- keys -------------------------------------------------------------
   // XState keys are only sibling-unique, so they are assigned per scope. A
   // `[*]` end has no name in mermaid at all and becomes `final`.
   const keys = new Map<string, string>();
   function assignKeys(members: readonly StateNode[]): void {
     const taken = new Set<string>();
-    for (const m of members) {
-      if (m.role === "start") continue;
+    for (const m of written(members)) {
       const want = m.xstate?.key ?? (m.role === "end" ? "final" : (m.id as string));
       let key = want;
       for (let n = 2; taken.has(key); n++) key = `${want}_${n}`;
@@ -124,7 +153,7 @@ export function stateToXState(ir: StateIR): XStateCode {
   const initialOf = new Map<string, StateId>(); // start-pseudo id → target
   for (const t of ir.transitions) {
     const from = byId.get(t.from as string);
-    if (from === undefined || byId.get(t.to as string) === undefined) continue;
+    if (from === undefined || byId.get(t.to as string) === undefined || absorbed.has(t.id as string)) continue;
     if (from.role === "start") {
       if (initialOf.has(t.from as string)) warnings.push(`\`${from.parent ?? "the machine"}\` has more than one initial transition; only the first is kept`);
       else initialOf.set(t.from as string, t.to);
@@ -219,7 +248,7 @@ export function stateToXState(ir: StateIR): XStateCode {
       if (target === undefined) warnings.push(`the \`[*]\` in \`${parent ?? "the machine"}\` points nowhere, so no \`initial\` was written`);
       else entries.push(["initial", val(keyOf(target))]);
     }
-    const real = members.filter((m) => m.role !== "start");
+    const real = written(members);
     if (real.length > 0) entries.push(["states", obj(real.map((m) => [keyOf(m.id), stateJs(m)] as const))]);
     return entries;
   }
@@ -231,7 +260,7 @@ export function stateToXState(ir: StateIR): XStateCode {
 
     const composite = isComposite(s.id);
     const parallel = composite ? isParallel(s) : s.xstate?.parallel === true;
-    if (s.role === "end" || xs?.final === true) entries.push(["type", val("final")]);
+    if (s.role === "end" || xs?.final === true || finalBoxes.has(s.id as string)) entries.push(["type", val("final")]);
     else if (xs?.history !== undefined) {
       entries.push(["type", val("history")], ["history", val(xs.history)]);
       if (xs.historyTarget !== undefined) entries.push(["target", val(xs.historyTarget)]);
@@ -265,7 +294,7 @@ export function stateToXState(ir: StateIR): XStateCode {
     const taken = new Set<string>();
     for (let r = 0; r < regionCount(s.id); r++) {
       const members = membersIn(s.id, r);
-      const real = members.filter((m) => m.role !== "start");
+      const real = written(members);
       const start = members.find((m) => m.role === "start");
       if (real.length === 1 && start === undefined) {
         const only = real[0]!;
