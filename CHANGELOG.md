@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2026.1126.0](https://github.com/Mr-akami/gMermaid/compare/v2026.1120.1...v2026.1126.0) - 2026-11-26
+
+### Other changes
+- polish(app): kind tabs fold into More, toolbar stays one row, clearer export buttons by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/85
+- chore: add PRODUCT.md and impeccable design-hook config by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/84
+- fix(flowchart): draw <br/> labels as multiple lines by @Mr-akami in https://github.com/Mr-akami/gMermaid/pull/92
+
 ## [v2026.1120.1](https://github.com/Mr-akami/gMermaid/compare/v2026.1120.0...v2026.1120.1) - 2026-11-20
 
 ### Other changes
