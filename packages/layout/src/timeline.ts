@@ -1,5 +1,5 @@
 import type { EventId, PeriodId, SectionId, TimelineIR } from "@gmermaid/ir";
-import type { TextMeasurer, TextStyle } from "./measurer";
+import { measureBlock, type TextMeasurer, type TextStyle } from "./measurer";
 import type { Point, Rect } from "./result";
 
 // Timelines are a plain left-to-right sequence, so this layout is arithmetic
@@ -57,14 +57,6 @@ export interface TimelineLayout {
   readonly sections: readonly TimelineSectionBand[];
   readonly periods: readonly TimelinePeriodBox[];
   readonly events: readonly TimelineEventBox[];
-}
-
-/** `<br>` became a newline on import: measure the widest line, stack the rest. */
-function measureBlock(measure: TextMeasurer, text: string, style: TextStyle): { w: number; h: number } {
-  const rows = text.split("\n");
-  let w = 0;
-  for (const row of rows) w = Math.max(w, measure.measure(row, style).w);
-  return { w, h: measure.measure("x", style).h * rows.length };
 }
 
 export function layoutTimeline(ir: TimelineIR, measure: TextMeasurer): TimelineLayout {

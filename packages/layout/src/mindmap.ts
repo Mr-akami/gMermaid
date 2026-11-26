@@ -1,5 +1,5 @@
 import { mindmapChildren, mindmapRoot, type MindmapIR, type MindmapNode, type MindmapNodeId, type MindmapShape } from "@gmermaid/ir";
-import type { TextMeasurer, TextStyle } from "./measurer";
+import { measureBlock, type TextMeasurer, type TextStyle } from "./measurer";
 import type { Point, Rect } from "./result";
 
 // Mindmaps are trees, so this layout is arithmetic only — no dagre. It is a
@@ -58,14 +58,6 @@ export interface MindmapLayout {
   readonly size: { readonly w: number; readonly h: number };
   readonly nodes: readonly MindmapNodeBox[];
   readonly branches: readonly MindmapBranch[];
-}
-
-/** Imported `<br/>` is a newline: measure the widest row, stack the rest. */
-function measureBlock(measure: TextMeasurer, text: string, style: TextStyle): { w: number; h: number } {
-  const rows = text.split("\n");
-  let w = 0;
-  for (const row of rows) w = Math.max(w, measure.measure(row, style).w);
-  return { w, h: measure.measure("x", style).h * rows.length };
 }
 
 export function layoutMindmap(ir: MindmapIR, measure: TextMeasurer): MindmapLayout {
