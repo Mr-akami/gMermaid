@@ -19,6 +19,14 @@ export function fixedWidthMeasurer(charWidth = 8): TextMeasurer {
   };
 }
 
+/** `<br/>` became a newline on import: measure the widest line, stack the rest. */
+export function measureBlock(measure: TextMeasurer, text: string, style: TextStyle): { w: number; h: number } {
+  const rows = text.split("\n");
+  let w = 0;
+  for (const row of rows) w = Math.max(w, measure.measure(row, style).w);
+  return { w, h: measure.measure("x", style).h * rows.length };
+}
+
 /** Breathing room when reserving dagre space for an edge label. */
 export const EDGE_LABEL_PAD = 4;
 
@@ -33,6 +41,6 @@ export function edgeLabelSize(
   style: TextStyle,
 ): { width: number; height: number; labelpos: "c" } | Record<string, never> {
   if (label === undefined || label === "") return {};
-  const m = measure.measure(label, style);
+  const m = measureBlock(measure, label, style);
   return { width: m.w + EDGE_LABEL_PAD * 2, height: m.h + EDGE_LABEL_PAD * 2, labelpos: "c" };
 }

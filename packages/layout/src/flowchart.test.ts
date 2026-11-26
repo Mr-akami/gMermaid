@@ -37,6 +37,15 @@ describe("layoutFlowchart", () => {
     expect(a.edges[1]!.label).toBe("yes");
   });
 
+  it("sizes a <br/> label by its widest line, one line tall per row", () => {
+    const one: FlowchartIR = { ...ir, nodes: [{ id: "node-1" as NodeId, label: "aaaa bbbb", shape: "rect" }], edges: [] };
+    const two: FlowchartIR = { ...ir, nodes: [{ id: "node-1" as NodeId, label: "aaaa\nbbbb", shape: "rect" }], edges: [] };
+    const a = layoutFlowchart(one, fixedWidthMeasurer()).nodes[0]!.rect;
+    const b = layoutFlowchart(two, fixedWidthMeasurer()).nodes[0]!.rect;
+    expect(b.w).toBeLessThan(a.w);
+    expect(b.h).toBeGreaterThan(a.h);
+  });
+
   it("matches the committed golden layout", () => {
     expect(layoutFlowchart(ir, fixedWidthMeasurer())).toMatchSnapshot();
   });

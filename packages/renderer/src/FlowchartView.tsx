@@ -147,6 +147,22 @@ function SubgraphView({ s, selected }: { s: SubgraphBox; selected: boolean }) {
   );
 }
 
+/** `<br/>` became a newline on import: one tspan per line, centred on `cy`. */
+function Lines({ text, x, cy, lineH }: { text: string; x: number; cy: number; lineH: number }) {
+  const rows = text.split("\n");
+  if (rows.length === 1) return <>{text}</>;
+  const top = cy - ((rows.length - 1) * lineH) / 2;
+  return (
+    <>
+      {rows.map((row, i) => (
+        <tspan key={i} x={x} y={top + i * lineH}>
+          {row}
+        </tspan>
+      ))}
+    </>
+  );
+}
+
 // marker-like shapes mermaid draws without text
 const NO_LABEL = new Set(["fork", "smCirc", "fCirc", "crossCirc"]);
 
@@ -418,7 +434,7 @@ function NodeView({ node, selected, dragMode }: { node: NodeBox; selected: boole
         fill={p?.color ?? "var(--gm-text, #111)"}
         style={{ pointerEvents: "none", userSelect: "none" }}
       >
-        {node.label}
+        <Lines text={node.label} x={x + w / 2} cy={y + h / 2} lineH={14 * 1.4} />
       </text>
       )}
     </g>
@@ -465,7 +481,7 @@ function EdgeView({ edge, selected }: { edge: EdgePath; selected: boolean }) {
           fill={p?.color ?? "var(--gm-text, #111)"}
           style={{ paintOrder: "stroke", stroke: "var(--gm-bg, #fff)", strokeWidth: 4, userSelect: "none" }}
         >
-          {edge.label}
+          <Lines text={edge.label} x={edge.labelPos.x} cy={edge.labelPos.y - 6} lineH={12 * 1.4} />
         </text>
       )}
     </g>

@@ -8,7 +8,7 @@ import type {
   SubgraphId,
 } from "@gmermaid/ir";
 import { flowchartPaint } from "@gmermaid/ir";
-import { edgeLabelSize } from "./measurer";
+import { edgeLabelSize, measureBlock } from "./measurer";
 import type { TextMeasurer } from "./measurer";
 import type { EdgePath, FlowchartLayout, NodeBox, Point, Rect, SubgraphBox } from "./result";
 import { bboxOf, borderCrossing } from "./compound";
@@ -178,7 +178,7 @@ export function layoutFlowchart(ir: FlowchartIR, measure: TextMeasurer): Flowcha
   }
 
   const nodeSize = (node: FlowchartNode): { width: number; height: number } => {
-    const m = measure.measure(node.label, LABEL_STYLE);
+    const m = measureBlock(measure, node.label, LABEL_STYLE);
     let w = m.w + NODE_PADDING_X * 2;
     let h = m.h + NODE_PADDING_Y * 2;
     if (node.shape === "diamond") {
